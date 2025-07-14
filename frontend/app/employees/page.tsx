@@ -1,6 +1,7 @@
+"use client";
+
 import { AppSidebar } from "@/components/app-sidebar"
 import { ChartAreaInteractive } from "@/components/chart-area-interactive"
-// import { DataTable } from "@/components/data-table"
 import { DataTableEmployees } from "@/components/data-table-employees"
 import { SiteHeader } from "@/components/site-header"
 import {
@@ -11,6 +12,7 @@ import {
 import { IconTrendingUp, IconTrendingDown } from "@tabler/icons-react";
 import { SectionCardList } from "@/components/SectionCardList";
 import data from "./data.json"
+import { useEffect } from "react"
 
 const cardData = [
   {
@@ -35,6 +37,27 @@ const cardData = [
   },
 ];
 
+useEffect(() => {
+  const fetchEmployeesData = async () => {
+    try {
+      const response = await fetch('http://localhost:8000/api/employees');
+      if (!response.ok) {
+        throw new Error('Network response was not ok');
+      }
+      const employees = await response.json();
+      if (employees && employees.length > 0) {
+        console.log("Employees data fetched successfully:", employees);
+      }else {
+        console.warn("No employees data found");
+      }
+    } catch (error) {
+      console.error("Failed to fetch employees data:", error);
+    }
+  }
+
+  fetchEmployeesData();
+}, []);
+
 export default function Page() {
   return (
     <SidebarProvider
@@ -44,8 +67,7 @@ export default function Page() {
           "--header-height": "calc(var(--spacing) * 12)",
         } as React.CSSProperties
       }
-    >
-      
+    >      
       <AppSidebar variant="inset" />
       <SidebarInset>
         <SiteHeader />
