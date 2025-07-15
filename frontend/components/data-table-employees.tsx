@@ -36,43 +36,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import {
-  closestCenter,
-  DndContext,
-  KeyboardSensor,
-  MouseSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-  type UniqueIdentifier,
-} from "@dnd-kit/core";
-import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
-import {
-  arrayMove,
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import {
-  IconChevronDown,
-  IconChevronLeft,
-  IconChevronRight,
-  IconChevronsLeft,
-  IconChevronsRight,
-  IconCircleCheckFilled,
-  IconDotsVertical,
-  IconGripVertical,
-  IconLayoutColumns,
-  IconLoader,
-  IconPlus,
-  IconTrendingUp,
-} from "@tabler/icons-react";
-import { Area, AreaChart, CartesianGrid, XAxis } from "recharts";
-import { toast } from "sonner";
-import { z } from "zod";
-
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -101,93 +64,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
-
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-const data: Payment[] = [
-  {
-    id: "m5gr84i9",
-    salary: 31600,
-    img: (
-      <img
-        src="/profile.jpg"
-        alt="Profile"
-        className="h-8 w-8 rounded-full object-cover"
-      />
-    ),
-    status: "active",
-    name: "Bruce Banner",
-    position: "Sales Executive",
-    department: "Sales",
-    email: "ken99@example.com",
-  },
-  {
-    id: "3u1reuv4",
-    salary: 242,
-    img: (
-      <img
-        src="/profile.jpg"
-        alt="Profile"
-        className="h-8 w-8 rounded-full object-cover"
-      />
-    ),
-    status: "active",
-    name: "Tony",
-    position: "Software Engineer",
-    department: "Engineering",
-    email: "Abe45@example.com",
-  },
-  {
-    id: "derv1ws0",
-    salary: 837,
-    img: (
-      <img
-        src="/profile.jpg"
-        alt="Profile"
-        className="h-8 w-8 rounded-full object-cover"
-      />
-    ),
-    status: "retired",
-    name: "Stark",
-    position: "Social Media Manager",
-    department: "Marketing",
-    email: "Monserrat44@example.com",
-  },
-  {
-    id: "5kma53ae",
-    salary: 874,
-    img: (
-      <img
-        src="/profile.jpg"
-        alt="Profile"
-        className="h-8 w-8 rounded-full object-cover"
-      />
-    ),
-    status: "active",
-    name: "Ken",
-    position: "Software Engineer",
-    department: "Engineering",
-    email: "Silas22@example.com",
-  },
-  {
-    id: "bhqecj4p",
-    salary: 721,
-    img: (
-      <img
-        src="/profile.jpg"
-        alt="Profile"
-        className="h-8 w-8 rounded-full object-cover"
-      />
-    ),
-    status: "on leave",
-    name: "John",
-    position: "Business Analyst",
-    department: "Business",
-    email: "carmella@example.com",
-  },
-];
-
-export type Payment = {
+export type Employee = {
   id: string;
   img: React.ReactNode;
   salary: number;
@@ -198,29 +77,7 @@ export type Payment = {
   email: string;
 };
 
-export const columns: ColumnDef<Payment>[] = [
-  // {
-  //   id: "select",
-  //   header: ({ table }) => (
-  //     <Checkbox
-  //       checked={
-  //         table.getIsAllPageRowsSelected() ||
-  //         (table.getIsSomePageRowsSelected() && "indeterminate")
-  //       }
-  //       onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-  //       aria-label="Select all"
-  //     />
-  //   ),
-  //   cell: ({ row }) => (
-  //     <Checkbox
-  //       checked={row.getIsSelected()}
-  //       onCheckedChange={(value) => row.toggleSelected(!!value)}
-  //       aria-label="Select row"
-  //     />
-  //   ),
-  //   enableSorting: false,
-  //   enableHiding: false,
-  // },
+export const columns: ColumnDef<Employee>[] = [
   {
     accessorKey: "img",
     header: ({ column }) => {
@@ -290,7 +147,7 @@ export const columns: ColumnDef<Payment>[] = [
     id: "actions",
     enableHiding: false,
     cell: ({ row }) => {
-      const payment = row.original;
+      const employee = row.original;
 
       return (
         <DropdownMenu>
@@ -301,13 +158,13 @@ export const columns: ColumnDef<Payment>[] = [
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <EmployeeDrawer employee={payment}>
+            <EmployeeDrawer employee={employee}>
               <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                 View employee
               </DropdownMenuItem>
             </EmployeeDrawer>
             <DropdownMenuItem>
-              <EmployeeDrawerEdit employee={payment}>
+              <EmployeeDrawerEdit employee={employee}>
                 <DropdownMenuItem onSelect={(e) => e.preventDefault()}>
                   Edit employee
                 </DropdownMenuItem>
@@ -325,16 +182,68 @@ export const columns: ColumnDef<Payment>[] = [
 ];
 
 export function DataTableEmployees() {
+  // State management for table functionality
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-    []
-  );
-  const [columnVisibility, setColumnVisibility] =
-    React.useState<VisibilityState>({});
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
 
+  // State management for employee data
+  const [employees, setEmployees] = React.useState<Employee[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // Fetch employees data
+  React.useEffect(() => {
+    const fetchEmployeesData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        
+        const response = await fetch('http://localhost:8000/api/v1/employees');
+        
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const responseData = await response.json();
+        console.log("Fetched employees:", responseData);
+        
+        // Extract the employees array from the data property
+        const employeesData = responseData.data || [];
+        
+        // Transform the data to match your Employee type
+        const transformedEmployees: Employee[] = employeesData.map((emp: any) => ({
+          id: emp.id.toString(),
+          img: <img src={emp.profileImage || "/profile.jpg"} alt="Profile" className="w-8 h-8 rounded-full" />,
+          salary: parseFloat(emp.salary),
+          status: "active" as const, // You might want to derive this from your data
+          name: `${emp.f_name} ${emp.l_name}`,
+          position: emp.position,
+          department: emp.department,
+          email: emp.email,
+        }));
+        
+        setEmployees(transformedEmployees);
+        
+        if (transformedEmployees.length > 0) {
+          console.log("Employees fetched successfully:", transformedEmployees);
+        } else {
+          console.warn("No employees found");
+        }
+      } catch (error) {
+        console.error("Failed to fetch employees:", error);
+        setError(error instanceof Error ? error.message : "Failed to fetch employees");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchEmployeesData();
+  }, []);
+
   const table = useReactTable({
-    data,
+    data: employees,
     columns,
     onSortingChange: setSorting,
     onColumnFiltersChange: setColumnFilters,
@@ -351,6 +260,41 @@ export function DataTableEmployees() {
       rowSelection,
     },
   });
+
+  // Loading state
+  if (loading) {
+    return (
+      <div className="m-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900 mx-auto"></div>
+            <p className="mt-2 text-sm text-gray-600">Loading employees...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="m-6">
+        <div className="flex items-center justify-center h-64">
+          <div className="text-center">
+            <p className="text-red-600 mb-2">Error loading employees:</p>
+            <p className="text-sm text-gray-600">{error}</p>
+            <Button 
+              onClick={() => window.location.reload()} 
+              variant="outline" 
+              className="mt-4"
+            >
+              Try Again
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="m-6">
@@ -477,7 +421,7 @@ function EmployeeDrawer({
   employee,
   children,
 }: {
-  employee: Payment;
+  employee: Employee;
   children?: React.ReactNode;
 }) {
   const isMobile = useIsMobile();
@@ -491,7 +435,7 @@ function EmployeeDrawer({
           </Button>
         )}
       </DrawerTrigger>
-      <DrawerContent>
+      <DrawerContent className="w-[400px] sm:w-[540px]">
         <DrawerHeader>
           <div className="relative">
             <img
@@ -540,7 +484,7 @@ function EmployeeDrawer({
   );
 }
 
-function EmployeeDrawerAdd({ employee }: { employee: Payment }) {
+function EmployeeDrawerAdd({ employee }: { employee: Employee }) {
   const isMobile = useIsMobile();
   return (
     <Drawer direction={isMobile ? "bottom" : "right"}>
@@ -602,7 +546,7 @@ function EmployeeDrawerEdit({
   employee,
   children,
 }: {
-  employee: Payment;
+  employee: Employee;
   children?: React.ReactNode;
 }) {
   const isMobile = useIsMobile();
@@ -623,9 +567,6 @@ function EmployeeDrawerEdit({
           <Input type="text" value={employee.name} />
         </DrawerHeader>
         <div className="p-4 space-y-2">
-          <div>
-            <strong>ID:</strong> {employee.id}
-          </div>
           <div>
             <Input type="text" value={employee.name} />
             <strong>Salary:</strong> {employee.salary}
