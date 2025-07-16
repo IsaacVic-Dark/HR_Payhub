@@ -13,7 +13,13 @@ import {
   useReactTable,
   VisibilityState,
 } from "@tanstack/react-table";
-import { ArrowUpDown, Plus, ChevronDown, MoreHorizontal } from "lucide-react";
+import {
+  Mail,
+  CheckCheck,
+  Plus,
+  ChevronDown,
+  MoreHorizontal,
+} from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -184,8 +190,11 @@ export const columns: ColumnDef<Employee>[] = [
 export function DataTableEmployees() {
   // State management for table functionality
   const [sorting, setSorting] = React.useState<SortingState>([]);
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
+    []
+  );
+  const [columnVisibility, setColumnVisibility] =
+    React.useState<VisibilityState>({});
   const [rowSelection, setRowSelection] = React.useState({});
 
   // State management for employee data
@@ -199,33 +208,41 @@ export function DataTableEmployees() {
       try {
         setLoading(true);
         setError(null);
-        
-        const response = await fetch('http://localhost:8000/api/v1/employees');
-        
+
+        const response = await fetch("http://localhost:8000/api/v1/employees");
+
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const responseData = await response.json();
         console.log("Fetched employees:", responseData);
-        
+
         // Extract the employees array from the data property
         const employeesData = responseData.data || [];
-        
+
         // Transform the data to match your Employee type
-        const transformedEmployees: Employee[] = employeesData.map((emp: any) => ({
-          id: emp.id.toString(),
-          img: <img src={emp.profileImage || "/profile.jpg"} alt="Profile" className="w-8 h-8 rounded-full" />,
-          salary: parseFloat(emp.salary),
-          status: "active" as const, // You might want to derive this from your data
-          name: `${emp.f_name} ${emp.l_name}`,
-          position: emp.position,
-          department: emp.department,
-          email: emp.email,
-        }));
-        
+        const transformedEmployees: Employee[] = employeesData.map(
+          (emp: any) => ({
+            id: emp.id.toString(),
+            img: (
+              <img
+                src={emp.profileImage || "/profile.jpg"}
+                alt="Profile"
+                className="w-8 h-8 rounded-full"
+              />
+            ),
+            salary: parseFloat(emp.salary),
+            status: "active" as const, // You might want to derive this from your data
+            name: `${emp.f_name} ${emp.l_name}`,
+            position: emp.position,
+            department: emp.department,
+            email: emp.email,
+          })
+        );
+
         setEmployees(transformedEmployees);
-        
+
         if (transformedEmployees.length > 0) {
           console.log("Employees fetched successfully:", transformedEmployees);
         } else {
@@ -233,7 +250,9 @@ export function DataTableEmployees() {
         }
       } catch (error) {
         console.error("Failed to fetch employees:", error);
-        setError(error instanceof Error ? error.message : "Failed to fetch employees");
+        setError(
+          error instanceof Error ? error.message : "Failed to fetch employees"
+        );
       } finally {
         setLoading(false);
       }
@@ -283,9 +302,9 @@ export function DataTableEmployees() {
           <div className="text-center">
             <p className="text-red-600 mb-2">Error loading employees:</p>
             <p className="text-sm text-gray-600">{error}</p>
-            <Button 
-              onClick={() => window.location.reload()} 
-              variant="outline" 
+            <Button
+              onClick={() => window.location.reload()}
+              variant="outline"
               className="mt-4"
             >
               Try Again
@@ -436,49 +455,269 @@ function EmployeeDrawer({
         )}
       </DrawerTrigger>
       <DrawerContent className="w-[400px] sm:w-[540px]">
-        <DrawerHeader>
-          <div className="relative">
-            <img
-              src="/profile.jpg"
-              alt="Employee Photo"
-              className="h-52 w-full object-cover rounded-xl"
-            />
+        <div className="bg-opacity-50 flex items-center justify-center">
+          <div className="bg-white">
+            <div className="flex items-center justify-between p-4 border-b border-gray-200">
+              <div className="flex items-center space-x-2">
+                <p className="text-sm font-small text-gray-500 bg-blue-100/50 p-2 rounded">
+                  EMPLOYEE DETAILS
+                </p>
+              </div>
+              <DrawerClose asChild>
+                <Button variant="ghost">
+                  <svg
+                    className="w-6 h-6"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      stroke-width="2"
+                      d="M6 18L18 6M6 6l12 12"
+                    ></path>
+                  </svg>
+                </Button>
+              </DrawerClose>
+              {/* <button className="text-gray-400 hover:text-gray-600">
+                
+              </button> */}
+            </div>
 
-            <div className="absolute top-4 right-4 text-right text-white">
-              <h2 className="text-2xl font-bold mb-1">{employee.name}</h2>
-              <p className="text-sm">{employee.position}</p>
-              <p className="text-xs">{employee.department}</p>
+            <div className="p-6">
+              <div className="flex items-start space-x-4 mb-8 bg-blue-100/50 p-4 rounded-lg">
+                <div className="relative">
+                  <img
+                    src="/profile.jpg"
+                    alt="No photo"
+                    className="w-16 h-16 object-cover rounded-full"
+                  />
+                  <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white"></div>
+                </div>
+
+                <div className="flex-1">
+                  <div className="flex items-center space-x-3 mb-2">
+                    <span className="text-sm text-gray-500">{employee.id}</span>
+                    <svg
+                      className="w-4 h-4 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      ></path>
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold text-gray-800 mb-1">
+                    {employee.name}
+                  </h3>
+                  <div className="flex items-center space-x-2 mb-2">
+                    <span className="text-sm text-gray-600">
+                      Product Designer (Remote)
+                    </span>
+                  </div>
+                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full border-2 border-white">
+                    <CheckCheck size={16} />
+                    Active
+                  </span>
+                </div>
+
+                <button className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md bg-gray-50">
+                  Email employee
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6 mb-8">
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      className="w-5 h-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                      ></path>
+                    </svg>
+                    <span className="text-sm text-gray-500">Department</span>
+                    <span className="text-sm font-medium text-gray-800">
+                      {employee.department}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      className="w-5 h-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2-2v2m8 0H8m8 0v2a2 2 0 01-2 2H10a2 2 0 01-2-2V6"
+                      ></path>
+                    </svg>
+                    <span className="text-sm text-gray-500">Employment</span>
+                    <span className="text-sm font-medium text-gray-800">
+                      Full Time
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="w-5 h-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                    </svg>
+
+                    <span className="text-sm text-gray-500">Email</span>
+                    <span className="text-sm font-medium text-gray-800">
+                      {employee.email}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-4">
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      className="w-5 h-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                      ></path>
+                    </svg>
+                    <span className="text-sm text-gray-500">Role</span>
+                    <span className="text-sm font-medium text-gray-800">
+                      {employee.position}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="w-5 h-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      viewBox="0 0 24 24"
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+                      <path d="M12 18V6" />
+                    </svg>
+
+                    <span className="text-sm text-gray-500">Salary</span>
+                    <span className="text-sm font-medium text-gray-800">
+                      {employee.salary}
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      className="w-5 h-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      ></path>
+                    </svg>
+                    <span className="text-sm text-gray-500">
+                      Avg. Work Hours
+                    </span>
+                    <span className="text-sm font-medium text-gray-800">
+                      9hrs 43 mins
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      className="w-5 h-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        stroke-width="2"
+                        d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                      ></path>
+                    </svg>
+                    <span className="text-sm text-gray-500">Avg. Overtime</span>
+                    <span className="text-sm font-medium text-gray-800">
+                      1hrs 30mins
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h4 className="text-lg font-semibold text-gray-800 mb-4">
+                  Attendance Summary
+                </h4>
+                <div className="grid grid-cols-4 gap-4 border rounded-lg">
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-500 mb-2">
+                      Year of Employment
+                    </p>
+                    <p className="text-lg font-semibold text-gray-800">2021</p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-500 mb-2">
+                      Total Present Days
+                    </p>
+                    <p className="text-lg font-semibold text-gray-800">
+                      1,298 days
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-500 mb-2">
+                      Total Absent Days
+                    </p>
+                    <p className="text-lg font-semibold text-gray-800">
+                      30 Days
+                    </p>
+                  </div>
+                  <div className="bg-gray-50 p-4 rounded-lg">
+                    <p className="text-sm text-gray-500 mb-2">
+                      Total Leave Days
+                    </p>
+                    <p className="text-lg font-semibold text-gray-800">
+                      423 Days
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
-          <DrawerDescription>
-            Details for employee <strong>{employee.name}</strong>
-          </DrawerDescription>
-        </DrawerHeader>
-        <div className="p-4 space-y-2">
-          <div>
-            <strong>ID:</strong> {employee.id}
-          </div>
-          <div>
-            <strong>Salary:</strong> {employee.salary}
-          </div>
-          <div>
-            <strong>Status:</strong> {employee.status}
-          </div>
-          <div>
-            <strong>Position:</strong> {employee.position}
-          </div>
-          <div>
-            <strong>Department:</strong> {employee.department}
-          </div>
-          <div>
-            <strong>Email:</strong> {employee.email}
-          </div>
         </div>
-        <DrawerFooter>
-          <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
-          </DrawerClose>
-        </DrawerFooter>
       </DrawerContent>
     </Drawer>
   );
