@@ -28,22 +28,32 @@ final class Router {
         return new static;
     }
 
-    public static function resource(string $uri, string $class) {
-        if (str_contains($class, '@')) {
-            static::get($uri, "{$class}@index");
-            static::post($uri, "{$class}@create");
-            static::get("$uri/{id}", "{$class}@show");
-            static::put("$uri/update/{id}", "{$class}@update");
-            static::delete("$uri/delete/{id}", "{$class}@delete");
-        } elseif (str_contains($class, '\\')) {
-            static::get($uri, [$class, 'index']);
-            static::post($uri, [$class, 'create']);
-            static::get("$uri/{id}", [$class, 'show']);
-            static::put("$uri/update/{id}", [$class, 'update']);
-            static::delete("$uri/delete/{id}", [$class, 'delete']);
-        } else {
-            trigger_error("Unrecognized route format {$uri} {$class}", E_USER_ERROR);
+  public static function resource(string $uri, string $controller) {
+        // Generate RESTful routes
+        $routes = [
+            ['GET', $uri, $controller . '@index'],
+            ['POST', $uri, $controller . '@store'],
+            ['GET', $uri . '/{id}', $controller . '@show'],
+            ['PUT', $uri . '/{id}', $controller . '@update'],
+            ['DELETE', $uri . '/{id}', $controller . '@destroy'],
+        ];
+
+        foreach ($routes as [$method, $routeUri, $controllerAction]) {
+            self::__callStatic($method, [$routeUri, $controllerAction]);
         }
+    }
+    public static function getRoutes(): array {
+        return static::$routes;
+    }
+
+    public static function clearRoutes(): void {
+        static::$routes = [
+            'GET' => [],
+            'POST' => [],
+            'PUT' => [],
+            'DELETE' => [],
+            'PATCH' => []
+        ];
     }
 
     public static function __callStatic(string $method, array $arguments) {
@@ -57,46 +67,66 @@ final class Router {
 
         $uri = self::$prefix ? self::$prefix . '/' . trim($uri, '/') : trim($uri, '/');
 
-        // Transform URI for regex matching
-        $uri = preg_replace('/{[^}]+}/', '(.+)', $uri);
+        // make sure it's not a greedy match, just want to stop at the next '/'
+        $uri = preg_replace('/{[^}]+}/', '([^/]+)', $uri);
+        // $uri = preg_replace('/{[^}]+}/', '(.+)', $uri);
 
         static::$routes[$httpMethod][$uri] = $controller;
     }
 
     public function direct(string $uri, string $requestType): mixed {
-        $params = [];
+       $params = [];
         $matchedRoute = null;
+        $matchedController = null;
 
-        // dd(static::$routes);
+        // Sort routes by specificity (most specific first)
+        $sortedRoutes = static::$routes[$requestType];
+        uksort($sortedRoutes, function($a, $b) {
+            // Count parameter placeholders - fewer parameters = more specific
+            $aParams = substr_count($a, '([^/]+)');
+            $bParams = substr_count($b, '([^/]+)');
+            
+            if ($aParams !== $bParams) {
+                return $aParams - $bParams;
+            }
+            
+            // If same number of params, longer route is more specific
+            return strlen($b) - strlen($a);
+        });
 
-        // regex routes
-        foreach (static::$routes[$requestType] as $route => $controller) {
-            if (preg_match("%^{$route}$%", $uri, $matches)) {
+        // Match against sorted routes
+        foreach ($sortedRoutes as $route => $controller) {
+            // Escape forward slashes for regex
+            $pattern = str_replace('/', '\/', $route);
+            
+            if (preg_match("/^{$pattern}$/", $uri, $matches)) {
                 $matchedRoute = $route;
+                $matchedController = $controller;
                 unset($matches[0]); // remove full match
                 $params = array_values($matches);
                 break;
             }
         }
 
+
         // no route matches
         if ($matchedRoute === null) {
             throw new \Exception("Route {$requestType} /{$uri} does not exist");
         }
 
-        $controller = static::$routes[$requestType][$matchedRoute];
+        $matchedController = static::$routes[$requestType][$matchedRoute];
 
-        if (is_callable($controller)) {
-            return $controller(...$params);
+        if (is_callable($matchedController)) {
+            return $matchedController(...$params);
         }
 
-        if (is_array($controller)) {
-            return $this->callAction($params, ...$controller);
+        if (is_array($matchedController)) {
+            return $this->callAction($params, ...$matchedController);
         }
 
         // Controller@method)
-        if (is_string($controller)) {
-            [$class, $method] = explode('@', $controller, 2);
+        if (is_string($matchedController)) {
+            [$class, $method] = explode('@', $matchedController, 2);
             if (empty($class) || empty($method)) {
                 throw new \Exception("Invalid controller format: {$controller}");
             }
@@ -104,6 +134,51 @@ final class Router {
         }
 
         throw new \Exception("Invalid controller type for route {$requestType} /{$uri}");
+    }
+
+     public function testDirect(string $uri, string $requestType): mixed {
+       $params = [];
+        $matchedRoute = null;
+        $matchedController = null;
+
+        // Sort routes by specificity (most specific first)
+        $sortedRoutes = static::$routes[$requestType];
+        uksort($sortedRoutes, function($a, $b) {
+            // Count parameter placeholders - fewer parameters = more specific
+            $aParams = substr_count($a, '([^/]+)');
+            $bParams = substr_count($b, '([^/]+)');
+            
+            if ($aParams !== $bParams) {
+                return $aParams - $bParams;
+            }
+            
+            // If same number of params, longer route is more specific
+            return strlen($b) - strlen($a);
+        });
+
+        // Match against sorted routes
+        foreach ($sortedRoutes as $route => $controller) {
+            // Escape forward slashes for regex
+            $pattern = str_replace('/', '\/', $route);
+            
+            if (preg_match("/^{$pattern}$/", $uri, $matches)) {
+                $matchedRoute = $route;
+                $matchedController = $controller;
+                unset($matches[0]); // remove full match
+                $params = array_values($matches);
+                break;
+            }
+        }
+
+        if ($matchedRoute) {
+            return [
+                'controller' => $matchedController,
+                'params' => $params,
+                'route' => $matchedRoute
+            ];
+        }
+
+        throw new \Exception("No route found for {$requestType} {$uri}");
     }
 
     protected function callAction(array $params, string $controller, string $action): mixed {

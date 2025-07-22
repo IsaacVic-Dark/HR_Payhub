@@ -75,6 +75,42 @@ foreach (glob(__DIR__ . '/*.php') as $file) {
 
 
 function customErrorHandler($severity, $message, $file, $line, $context = []) {
+    // Intercept 'Unknown database' error
+    if (stripos($message, 'Unknown database') !== false) {
+        if (php_sapi_name() === 'cli') {
+            fwrite(STDOUT, "Database does not exist. Run migrations to create it? [y/N]: ");
+            $input = strtolower(trim(fgets(STDIN)));
+            if ($input === 'y') {
+                system('php ' . escapeshellarg(__DIR__ . '/../database/run_migrations.php'));
+                // Try to reload (user should rerun script)
+                exit("Migration attempted. Please rerun your command.\n");
+            } else {
+                exit("Aborted. Database does not exist.\n");
+            }
+      } else {
+    // Web: show a styled notice and button to run migrations
+    echo '
+    <div style="max-width: 600px; margin: 100px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; font-family: Verdana, sans-serif; background-color: #f9f9f9; text-align: center;">
+        <h2 style="color: #b30000; margin-bottom: 10px;">Database Missing</h2>
+        <p style="margin-bottom: 20px; color: #333;">
+            The database required for this application does not currently exist.
+        </p>
+        <form method="post">
+            <button type="submit" name="run_migration" value="1"
+                style="background-color: #007BFF; color: white; border: none; padding: 10px 20px; font-size: 16px; border-radius: 5px; cursor: pointer;">
+                Run Migrations Now
+            </button>
+        </form>
+    </div>';
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_migration'])) {
+        include __DIR__ . '/../database/run_migrations.php';
+        echo '<script>setTimeout(function(){ location.reload(); }, 2000);</script>';
+    }
+    exit;
+}
+
+    }
     // Don't handle errors that are suppressed with @
     if (!(error_reporting() & $severity)) {
         return false;
