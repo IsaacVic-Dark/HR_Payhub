@@ -32,7 +32,7 @@ final class Router {
         // Generate RESTful routes
         $routes = [
             ['GET', $uri, $controller . '@index'],
-            ['POST', $uri, $controller . '@store'],
+            ['POST', $uri, $controller . '@create'],
             ['GET', $uri . '/{id}', $controller . '@show'],
             ['PUT', $uri . '/{id}', $controller . '@update'],
             ['DELETE', $uri . '/{id}', $controller . '@destroy'],

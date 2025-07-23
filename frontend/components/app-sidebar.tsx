@@ -54,6 +54,11 @@ const data = {
       icon: IconUsers,
     },
     {
+      title: "Payments",
+      url: "/payments",
+      icon: IconUsers,
+    },
+    {
       title: "Analytics",
       url: "#",
       icon: IconChartBar,

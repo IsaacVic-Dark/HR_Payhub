@@ -26,29 +26,40 @@ class EmployeeController {
     }
     public function create($orgId) {
         $data = validate([
-            'user_id' => 'numeric',
+            // 'user_id' => 'numeric',
             'f_name' => 'required,string',
             'l_name' => 'required,string',
-            'email' => 'required,email',
+            // 'email' => 'required,email',
             'phone' => 'string',
-            'hire_date' => 'required,string',
+            // 'hire_date' => 'required,string',
             'position' => 'string',
             'department' => 'string',
             'reports_to' => 'numeric',
             'salary' => 'required,numeric',
             'bank_account_number' => 'string',
-            'tax_id' => 'string'
+            'tax_id' => 'nullable|string'
         ]);
-        $existingEmail = DB::table('employees')->selectAllWhere('email', $data['email']);
+
+        // Generate a random user_id for demonstration purposes
+        // $user_id = strtoupper(bin2hex(random_bytes(4)));
+        $user_id = 31;
+
+        $hire_date = date('Y-m-d');
+
+        $company = "Techhub";
+
+        $generatedEmail = strtolower($data['f_name'][0] . $data['l_name']) . '@' . strtolower($company) . '.com';
+
+        $existingEmail = DB::table('employees')->selectAllWhere('email', $generatedEmail);
         if ($existingEmail) {
             return responseJson(null, "Email already exists", 400);
         }
-        if (!empty($data['user_id'])) {
-            $user = DB::table('users')->selectAllWhereID($data['user_id']);
-            if (!$user) {
-                return responseJson(null, "Invalid user_id", 400);
-            }
-        }
+        // if (!empty($user_id)) {
+        //     $user = DB::table('users')->selectAllWhereID($data['user_id']);
+        //     if (!$user) {
+        //         return responseJson(null, "Invalid user_id", 400);
+        //     }
+        // }
         if (!empty($data['reports_to'])) {
             $manager = DB::table('employees')->selectAllWhereID($data['reports_to']);
             if (!$manager) {
@@ -57,12 +68,12 @@ class EmployeeController {
         }
         $inserted = DB::table('employees')->insert([
             'organization_id' => $orgId,
-            'user_id' => $data['user_id'] ?? null,
+            'user_id' => $user_id,
             'f_name' => $data['f_name'],
             'l_name' => $data['l_name'],
-            'email' => $data['email'],
+            'email' => $generatedEmail,
             'phone' => $data['phone'] ?? null,
-            'hire_date' => $data['hire_date'],
+            'hire_date' => $hire_date,
             'position' => $data['position'] ?? null,
             'department' => $data['department'] ?? null,
             'reports_to' => $data['reports_to'] ?? null,

@@ -75,7 +75,6 @@ import {
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-
 export type Employee = {
   id: string;
   img: React.ReactNode;
@@ -207,7 +206,6 @@ export const columns: ColumnDef<Employee>[] = [
     },
   },
 ];
-
 
 export function DataTableEmployees() {
   // State management for table functionality
@@ -377,7 +375,7 @@ export function DataTableEmployees() {
               })}
           </DropdownMenuContent>
         </DropdownMenu>
-        
+
         {/* CHANGE 1: Pass employees data to EmployeeDrawerAdd */}
         <EmployeeDrawerAdd employees={employees}>
           <Button
@@ -468,13 +466,12 @@ export function DataTableEmployees() {
   );
 }
 
-// CHANGE 2: Update function signature to accept employees prop
-function EmployeeDrawerAdd({ 
-  children, 
-  employees 
-}: { 
+function EmployeeDrawerAdd({
+  children,
+  employees,
+}: {
   children: React.ReactNode;
-  employees: Employee[];  // Add employees prop
+  employees: Employee[]; // Add employees prop
 }) {
   const isMobile = useIsMobile();
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
@@ -482,15 +479,58 @@ function EmployeeDrawerAdd({
   const [location, setLocation] = React.useState("");
   const [firstName, setFirstName] = React.useState("");
   const [lastName, setLastName] = React.useState("");
+  const [reportsTo, setReportsTo] = React.useState("");
+  const [department, setDepartment] = React.useState("");
+  const [phone, setPhone] = React.useState("");
+  const [bankaccountnumber, setBankaccountnumber] = React.useState("");
+  const [salary, setSalary] = React.useState("");
 
-  // CHANGE 3: Create operations managers from received employees data
+  const [message, setMessage] = React.useState("");
+
   const operationsManagers = React.useMemo(() => {
-    return employees.filter(
-      (emp) => emp.position?.toLowerCase().includes("operations manager")
+    return employees.filter((emp) =>
+      emp.position?.toLowerCase().includes("operations manager")
     );
   }, [employees]);
 
   const initials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    const payload = {
+      f_name: firstName,
+      l_name: lastName,
+      reports_to: reportsTo,
+      position: position,
+      location: location,
+      department: department,
+      phone: phone,
+      bankaccountnumber: bankaccountnumber,
+      salary: salary,
+    };
+
+    try {
+      const response = await fetch("http://localhost:8000/api/v1/organizations/4/employees", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("Success:", result);
+      setMessage("Employee added successfully!");
+    } catch (error) {
+      console.error("Error:", error);
+      setMessage("Failed to add employee.");
+    }
+  };
 
   return (
     <Drawer
@@ -502,326 +542,341 @@ function EmployeeDrawerAdd({
         <Input type="button" value="Add Employee" />
       </DrawerTrigger>
       <DrawerContent className="w-[400px] sm:w-[540px] flex flex-col max-h-full">
-        <div className="bg-white flex flex-col h-full">
-          <div className="bg-white h-full flex flex-col">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <div className="flex items-center space-x-2">
-                <p className="text-sm font-small text-gray-500 bg-blue-100/50 p-2 rounded">
-                  ADD EMPLOYEE
-                </p>
+        <form onSubmit={handleSubmit}>
+          <div className="bg-white flex flex-col h-full">
+            <div className="bg-white h-full flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b border-gray-200">
+                <div className="flex items-center space-x-2">
+                  <p className="text-sm font-small text-gray-500 bg-blue-100/50 p-2 rounded">
+                    ADD EMPLOYEE
+                  </p>
+                </div>
+                <DrawerClose asChild>
+                  <Button variant="ghost">
+                    <svg
+                      className="w-6 h-6"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth="2"
+                        d="M6 18L18 6M6 6l12 12"
+                      ></path>
+                    </svg>
+                  </Button>
+                </DrawerClose>
               </div>
-              <DrawerClose asChild>
-                <Button variant="ghost">
+              <div className="p-6 flex-1 overflow-y-auto">
+                <div className="flex items-start space-x-4 mb-8 bg-blue-100/50 p-4 rounded-lg">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-gray-700 font-bold text-lg border">
+                      {initials}
+                    </div>
+                    <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white"></div>
+                  </div>
+
+                  <div className="flex-1">
+                    <div className="flex items-center space-x-3 mb-2">
+                      <span className="text-sm text-gray-500">
+                        id is auto generated
+                      </span>
+                    </div>
+                    <h3 className="flex text-sm text-gray-60 mb-1 space-x-2">
+                      <Input
+                        type="text"
+                        placeholder="Employee first name ..."
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        className="bg-white"
+                      />
+                      <Input
+                        type="text"
+                        placeholder="Employee last name ..."
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        className="bg-white"
+                      />
+                    </h3>
+                    <div className="flex items-center mb-2">
+                      <span className="text-sm text-gray-600 flex w-full space-x-1">
+                        <p>{position}</p>
+                        <span> </span>
+                        {location && (
+                          <p>
+                            <span>(</span>
+                            {location}
+                            <span>)</span>
+                          </p>
+                        )}
+                      </span>
+                    </div>
+                    <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full border-2 border-white">
+                      <CheckCheck size={16} />
+                      Active
+                    </span>
+                  </div>
+
+                  <button className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md bg-gray-50">
+                    <span className="flex items-center space-x-2">
+                      <span>Add</span>
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="w-5 h-5 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        viewBox="0 0 24 24"
+                      >
+                        <path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
+                        <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" />
+                        <path d="M7 3v4a1 1 0 0 0 1 1h7" />
+                      </svg>
+                    </span>
+                  </button>
+                </div>
+
+                <div className="flex items-center mb-4 space-x-3">
                   <svg
-                    className="w-6 h-6"
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="w-5 h-5 text-gray-400"
                     fill="none"
                     stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                     viewBox="0 0 24 24"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth="2"
-                      d="M6 18L18 6M6 6l12 12"
-                    ></path>
+                    <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+                    <rect x="2" y="4" width="20" height="16" rx="2" />
                   </svg>
-                </Button>
-              </DrawerClose>
-            </div>
-            <div className="p-6 flex-1 overflow-y-auto">
-              <div className="flex items-start space-x-4 mb-8 bg-blue-100/50 p-4 rounded-lg">
-                <div className="relative">
-                  <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-gray-700 font-bold text-lg border">
-                    {initials}
-                  </div>
-                  <div className="absolute -bottom-1 -right-1 w-5 h-5 bg-green-500 rounded-full border-2 border-white"></div>
-                </div>
 
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <span className="text-sm text-gray-500">
-                      id is auto generated
-                    </span>
-                  </div>
-                  <h3 className="flex text-sm text-gray-60 mb-1 space-x-2">
-                    <Input
-                      type="text"
-                      placeholder="Employee first name ..."
-                      value={firstName}
-                      onChange={(e) => setFirstName(e.target.value)}
-                      className="bg-white"
-                    />
-                    <Input
-                      type="text"
-                      placeholder="Employee last name ..."
-                      value={lastName}
-                      onChange={(e) => setLastName(e.target.value)}
-                      className="bg-white"
-                    />
-                  </h3>
-                  <div className="flex items-center mb-2">
-                    <span className="text-sm text-gray-600 flex w-full space-x-1">
-                      <p>{position}</p>
-                      <span> </span>
-                      {location && (
-                        <p>
-                          <span>(</span>
-                          {location}
-                          <span>)</span>
-                        </p>
-                      )}
-                    </span>
-                  </div>
-                  <span className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-800 bg-green-100 rounded-full border-2 border-white">
-                    <CheckCheck size={16} />
-                    Active
-                  </span>
-                </div>
-
-                <button className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md bg-gray-50">
-                  <span className="flex items-center space-x-2">
-                    <span>Add</span>
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      viewBox="0 0 24 24"
-                    >
-                      <path d="M15.2 3a2 2 0 0 1 1.4.6l3.8 3.8a2 2 0 0 1 .6 1.4V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
-                      <path d="M17 21v-7a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v7" />
-                      <path d="M7 3v4a1 1 0 0 0 1 1h7" />
-                    </svg>
-                  </span>
-                </button>
-              </div>
-
-              <div className="flex items-center mb-4 space-x-3">
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="w-5 h-5 text-gray-400"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  viewBox="0 0 24 24"
-                >
-                  <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
-                  <rect x="2" y="4" width="20" height="16" rx="2" />
-                </svg>
-
-                <span className="text-sm font-small text-gray-800 w-full">
-                  <Input
-                    type="text"
-                    placeholder="Email will automatically generated"
-                    readOnly
-                  />
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 gap-6 mb-8">
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                      ></path>
-                    </svg>
-                    <span className="text-sm font-small text-gray-800 w-full">
-                      <Input
-                        type="text"
-                        placeholder="department ..."
-                        className="w-full"
-                      />
-                    </span>
-                  </div>
-
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2-2v2m8 0H8m8 0v2a2 2 0 01-2 2H10a2 2 0 01-2-2V6"
-                      ></path>
-                    </svg>
-                    <span className="text-sm font-small text-gray-800 w-full">
-                      <Select>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Employment type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="full_time">Full time</SelectItem>
-                          <SelectItem value="part_time">Part time</SelectItem>
-                          <SelectItem value="contract">Contract</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 512 512"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="32"
-                        d="M164.9 24.6c-7.7-18.6-28-28.5-47.4-23.2l-88 24C12.1 30.2 0 46 0 64C0 311.4 200.6 512 448 512c18 0 33.8-12.1 38.6-29.5l24-88c5.3-19.4-4.6-39.7-23.2-47.4l-96-40c-16.3-6.8-35.2-2.1-46.3 11.6L304.7 368C234.3 334.7 177.3 277.7 144 207.3L193.3 167c13.7-11.2 18.4-30 11.6-46.3l-40-96z"
-                      />
-                    </svg>
-                    <span className="text-sm font-small text-gray-800 w-full">
-                      <PhoneInput />
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 576 512"
-                      xmlns="http://www.w3.org/2000/svg"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="32"
-                        d="M64 64C28.7 64 0 92.7 0 128L0 384c0 35.3 28.7 64 64 64l448 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L64 64zm48 160l160 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-160 0c-8.8 0-16-7.2-16-16s7.2-16 16-16zM96 336c0-8.8 7.2-16 16-16l352 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-352 0c-8.8 0-16-7.2-16-16zM376 160l80 0c13.3 0 24 10.7 24 24l0 48c0 13.3-10.7 24-24 24l-80 0c-13.3 0-24-10.7-24-24l0-48c0-13.3 10.7-24 24-24z"
-                      />
-                    </svg>
-                    <span className="text-sm font-small text-gray-800 w-full">
-                      <Input type="text" placeholder="Bank Account Number" />
-                    </span>
-                  </div>
-                </div>
-                <div className="space-y-4">
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
-                      ></path>
-                    </svg>
-                    <span className="text-sm font-small text-gray-800 w-full">
-                      <Input
-                        type="text"
-                        placeholder="position ..."
-                        value={position}
-                        onChange={(e) => setPosition(e.target.value)}
-                        className="w-full"
-                      />
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="currentColor"
-                      viewBox="0 0 384 512"
-                    >
-                      <path d="M215.7 499.2C267 435 384 279.4 384 192C384 86 298 0 192 0S0 86 0 192c0 87.4 117 243 168.3 307.2c12.3 15.3 35.1 15.3 47.4 0zM192 128a64 64 0 1 1 0 128 64 64 0 1 1 0-128z" />
-                    </svg>
-
-                    <span className="text-sm font-small text-gray-800 w-full">
-                      <Select onValueChange={(value) => setLocation(value)}>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Work location" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="On site">On site</SelectItem>
-                          <SelectItem value="Remote">Remote</SelectItem>
-                          <SelectItem value="Hybrid">Hybrid</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      className="w-5 h-5 text-gray-400"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      viewBox="0 0 24 24"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
-                      <path d="M12 18V6" />
-                    </svg>
-                    <span className="text-sm font-small text-gray-800 w-full">
-                      <Input type="text" placeholder="Salary" />
-                    </span>
-                  </div>
-                  
-                  {/* CHANGE 4: Fixed "Reports to" select with operations managers */}
-                  <div className="flex items-center space-x-3">
-                    <svg
-                      className="w-5 h-5 text-gray-400"
-                      fill="currentColor"
-                      viewBox="0 0 448 512"
-                    >
-                      <path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm55.2 48h-13.6l23.2 112-48.2-48-48.2 48 23.2-112h-13.6c-101.5 0-183.8 82.3-183.8 183.8c0 13 10.6 23.5 23.5 23.5H416c13 0 23.5-10.6 23.5-23.5c0-101.5-82.3-183.8-183.8-183.8z" />
-                    </svg>
-
-                    <span className="text-sm font-small text-gray-800 w-full">
-                      <Select>
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Reports to" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {operationsManagers.length === 0 ? (
-                            <SelectItem value="none" disabled>
-                              No operations managers found
-                            </SelectItem>
-                          ) : (
-                            operationsManagers.map((manager) => (
-                              <SelectItem key={manager.id} value={manager.id}>
-                                {manager.name} - {manager.department}
-                              </SelectItem>
-                            ))
-                          )}
-                        </SelectContent>
-                      </Select>
-                    </span>
-                  </div>
-                </div>
-              </div>
-              <div className="flex items-center space-x-3">                    
                   <span className="text-sm font-small text-gray-800 w-full">
-                    <Button className="w-full">Add {firstName || "Employee"}</Button>
+                    <Input
+                      type="text"
+                      placeholder="Email will automatically generated"
+                      readOnly
+                    />
                   </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-6 mb-8">
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-3">
+                      <svg
+                        className="w-5 h-5 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
+                        ></path>
+                      </svg>
+                      <span className="text-sm font-small text-gray-800 w-full">
+                        <Input
+                          type="text"
+                          placeholder="department ..."
+                          onChange={(e) => setDepartment(e.target.value)}
+                          className="w-full"
+                        />
+                      </span>
+                    </div>
+
+                    <div className="flex items-center space-x-3">
+                      <svg
+                        className="w-5 h-5 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2-2v2m8 0H8m8 0v2a2 2 0 01-2 2H10a2 2 0 01-2-2V6"
+                        ></path>
+                      </svg>
+                      <span className="text-sm font-small text-gray-800 w-full">
+                        <Select>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Employment type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="full_time">Full time</SelectItem>
+                            <SelectItem value="part_time">Part time</SelectItem>
+                            <SelectItem value="contract">Contract</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <svg
+                        className="w-5 h-5 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 512 512"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="32"
+                          d="M164.9 24.6c-7.7-18.6-28-28.5-47.4-23.2l-88 24C12.1 30.2 0 46 0 64C0 311.4 200.6 512 448 512c18 0 33.8-12.1 38.6-29.5l24-88c5.3-19.4-4.6-39.7-23.2-47.4l-96-40c-16.3-6.8-35.2-2.1-46.3 11.6L304.7 368C234.3 334.7 177.3 277.7 144 207.3L193.3 167c13.7-11.2 18.4-30 11.6-46.3l-40-96z"
+                        />
+                      </svg>
+                      <span className="text-sm font-small text-gray-800 w-full">
+                        <PhoneInput value={phone} onChange={(value) => setPhone(value)} />
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <svg
+                        className="w-5 h-5 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 576 512"
+                        xmlns="http://www.w3.org/2000/svg"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="32"
+                          d="M64 64C28.7 64 0 92.7 0 128L0 384c0 35.3 28.7 64 64 64l448 0c35.3 0 64-28.7 64-64l0-256c0-35.3-28.7-64-64-64L64 64zm48 160l160 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-160 0c-8.8 0-16-7.2-16-16s7.2-16 16-16zM96 336c0-8.8 7.2-16 16-16l352 0c8.8 0 16 7.2 16 16s-7.2 16-16 16l-352 0c-8.8 0-16-7.2-16-16zM376 160l80 0c13.3 0 24 10.7 24 24l0 48c0 13.3-10.7 24-24 24l-80 0c-13.3 0-24-10.7-24-24l0-48c0-13.3 10.7-24 24-24z"
+                        />
+                      </svg>
+                      <span className="text-sm font-small text-gray-800 w-full">
+                        <Input
+                          type="text"
+                          value={bankaccountnumber}
+                          onChange={(e) => setBankaccountnumber(e.target.value)}
+                          placeholder="Bank Account Number"
+                        />
+                      </span>
+                    </div>
+                  </div>
+                  <div className="space-y-4">
+                    <div className="flex items-center space-x-3">
+                      <svg
+                        className="w-5 h-5 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="2"
+                          d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                        ></path>
+                      </svg>
+                      <span className="text-sm font-small text-gray-800 w-full">
+                        <Input
+                          type="text"
+                          placeholder="position ..."
+                          value={position}
+                          onChange={(e) => setPosition(e.target.value)}
+                          className="w-full"
+                        />
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <svg
+                        className="w-5 h-5 text-gray-400"
+                        fill="currentColor"
+                        viewBox="0 0 384 512"
+                      >
+                        <path d="M215.7 499.2C267 435 384 279.4 384 192C384 86 298 0 192 0S0 86 0 192c0 87.4 117 243 168.3 307.2c12.3 15.3 35.1 15.3 47.4 0zM192 128a64 64 0 1 1 0 128 64 64 0 1 1 0-128z" />
+                      </svg>
+
+                      <span className="text-sm font-small text-gray-800 w-full">
+                        <Select onValueChange={(value) => setLocation(value)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Work location" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="On site">On site</SelectItem>
+                            <SelectItem value="Remote">Remote</SelectItem>
+                            <SelectItem value="Hybrid">Hybrid</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </span>
+                    </div>
+                    <div className="flex items-center space-x-3">
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        className="w-5 h-5 text-gray-400"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        viewBox="0 0 24 24"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8" />
+                        <path d="M12 18V6" />
+                      </svg>
+                      <span className="text-sm font-small text-gray-800 w-full">
+                        <Input
+                          type="number"
+                          value={salary}
+                          onChange={(e) => setSalary(e.target.value)}
+                          placeholder="Salary"
+                        />
+                      </span>
+                    </div>
+
+                    {/* CHANGE 4: Fixed "Reports to" select with operations managers */}
+                    <div className="flex items-center space-x-3">
+                      <svg
+                        className="w-5 h-5 text-gray-400"
+                        fill="currentColor"
+                        viewBox="0 0 448 512"
+                      >
+                        <path d="M224 256A128 128 0 1 0 224 0a128 128 0 1 0 0 256zm55.2 48h-13.6l23.2 112-48.2-48-48.2 48 23.2-112h-13.6c-101.5 0-183.8 82.3-183.8 183.8c0 13 10.6 23.5 23.5 23.5H416c13 0 23.5-10.6 23.5-23.5c0-101.5-82.3-183.8-183.8-183.8z" />
+                      </svg>
+
+                      <span className="text-sm font-small text-gray-800 w-full">
+                        <Select onValueChange={(value) => setReportsTo(value)}>
+                          <SelectTrigger className="w-full">
+                            <SelectValue placeholder="Reports to" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {operationsManagers.length === 0 ? (
+                              <SelectItem value="none" disabled>
+                                No operations managers found
+                              </SelectItem>
+                            ) : (
+                              operationsManagers.map((manager) => (
+                                <SelectItem key={manager.id} value={manager.id}>
+                                  {manager.name} - {manager.department}
+                                </SelectItem>
+                              ))
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center space-x-3">
+                  <span className="text-sm font-small text-gray-800 w-full">
+                    <Button type="submit" className="w-full">
+                      Add {firstName || "Employee"}
+                    </Button>
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        </form>
       </DrawerContent>
     </Drawer>
   );
