@@ -385,7 +385,7 @@ function validate(array $rules): array {
     return $sanitized;
 }
 
-function handleFileUpload(string $key, string $uploadDir = BASE_PATH.'uploads/'): ?string {
+function handleFileUpload(string $key, string $uploadDir = BASE_PATH . 'uploads/'): ?string {
     if (!isset($_FILES[$key]) || $_FILES[$key]['error'] !== UPLOAD_ERR_OK) {
         return null;
     }
@@ -458,7 +458,13 @@ function paginate(array $data, int $per_page = 10, int $page = 1): array {
  * @return void
  */
 function dd($var) {
-    header("Content-Type: text/html");
+    if (is_null($var)) {
+        echo '<div style="color: red; font-weight: bold;">Null value</div>';
+        die();
+    }
+    if (!headers_sent()) {
+        header("Content-Type: text/html");
+    }
     // Get backtrace information
     $backtrace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS, 2);
     $caller = $backtrace[0] ?? [];
