@@ -23,11 +23,13 @@ import {
   DrawerDescription,
   DrawerFooter,
 } from "@/components/ui/drawer";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function PaymentsModule() {
+  const isMobile = useIsMobile();
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [activePaymentType, setActivePaymentType] = useState("");
 
@@ -37,7 +39,7 @@ export function PaymentsModule() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="px-6 space-y-6">
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold">Payments</h1>
         <div className="flex space-x-2">
@@ -215,7 +217,7 @@ export function PaymentsModule() {
       </div>
 
       {/* Payment Drawer */}
-      <Drawer open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
+      <Drawer direction={isMobile ? "bottom" : "right"} open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
         <DrawerContent>
           <DrawerHeader>
             <DrawerTitle>

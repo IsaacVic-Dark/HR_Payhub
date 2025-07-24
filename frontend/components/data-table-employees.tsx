@@ -230,7 +230,7 @@ export function DataTableEmployees() {
         setError(null);
 
         const response = await fetch(
-          "http://localhost:8000/api/v1/organizations/4/employees"
+          "http://192.168.100.11:8080/api/v1/organizations/4/employees"
         );
 
         if (!response.ok) {
@@ -254,10 +254,10 @@ export function DataTableEmployees() {
                 className="w-8 h-8 object-cover rounded-full ml-4"
               />
             ),
-            salary: parseFloat(emp.salary),
+            salary: parseFloat(emp.base_salary),
             status: "active" as const, // You might want to derive this from your data
-            name: `${emp.f_name} ${emp.l_name}`,
-            position: emp.position,
+            name: `${emp.first_name} ${emp.last_name}`,
+            position: emp.job_title,
             department: emp.department,
             email: emp.email,
           })
@@ -498,20 +498,24 @@ function EmployeeDrawerAdd({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    //show loading on #add_new_employee_btn when submitting
+    setMessage("Adding employee...");
+
     const payload = {
-      f_name: firstName,
-      l_name: lastName,
+      first_name: firstName,
+      last_name: lastName,
       reports_to: reportsTo,
-      position: position,
+      job_title: position,
       location: location,
       department: department,
       phone: phone,
-      bankaccountnumber: bankaccountnumber,
-      salary: salary,
+      bank_account_number: bankaccountnumber,
+      base_salary: salary,
+      hire_date: new Date().toISOString(),
     };
 
     try {
-      const response = await fetch("http://localhost:8000/api/v1/organizations/4/employees", {
+      const response = await fetch("http://192.168.100.11:8080/api/v1/organizations/4/employees", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -520,6 +524,8 @@ function EmployeeDrawerAdd({
       });
 
       if (!response.ok) {
+        //show error message on #add_new_employee_btn
+        setMessage("Failed to add employee.");
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
 
@@ -868,8 +874,9 @@ function EmployeeDrawerAdd({
                 </div>
                 <div className="flex items-center space-x-3">
                   <span className="text-sm font-small text-gray-800 w-full">
-                    <Button type="submit" className="w-full">
-                      Add {firstName || "Employee"}
+                    <Button id="add_new_employee_btn" type="submit" className="w-full">
+                    Add {message ? message : (firstName || "Employee")}
+
                     </Button>
                   </span>
                 </div>
