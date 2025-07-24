@@ -34,14 +34,21 @@ class EmployeeController {
             }
         });
 
-        $employees = cache()->remember("employees_{$orgId}_" . md5(json_encode($filters)),3600,fn() =>
-                DB::table('employees')->where([
-                    'organization_id' => (int)$orgId,
-                    'department' => $filters['department'],
-                    'job_title' => $filters['job_title'],
-                ])->get()
-            );
-      
+        $query = "SELECT e.*, u.username, u.email, u.first_name, u.last_name 
+                  FROM employees e 
+                  LEFT JOIN users u ON e.user_id = u.id 
+                  WHERE e.organization_id = {$orgId}";
+
+        if (!empty($filters['department'])) {
+            $query .= " AND e.department = '{$filters['department']}'";
+        }
+
+        if (!empty($filters['job_title'])) {
+            $query .= " AND e.job_title = '{$filters['job_title']}'";
+        }
+
+        $employees = DB::raw($query);
+
 
         // Sort employees if sort parameters are provided, use php for now
         // as implementing sorting in SQL would require dynamic query building
@@ -65,25 +72,21 @@ class EmployeeController {
             code: empty($employees) ? 404 : 200
         );
     }
-    public function create($orgId) {
+    public function store($orgId) {
         $data = validate([
             'user_id' => 'numeric',
             'first_name' => 'required,string',
             'last_name' => 'required,string',
-            'email' => 'required,email',
             'phone' => 'string',
             'hire_date' => 'required,string',
             'job_title' => 'string',
             'department' => 'string',
-            'reports_to' => 'numeric',
+            'reports_to' => 'required,numeric',
             'base_salary' => 'required,numeric',
             'bank_account_number' => 'string',
             'tax_id' => 'string'
         ]);
-        $existingEmail = DB::table('employees')->selectAllWhere('email', $data['email']);
-        if ($existingEmail) {
-            return responseJson(null, "Email already exists", 400);
-        }
+
         if (!empty($data['user_id'])) {
             $user = DB::table('users')->selectAllWhereID($data['user_id']);
             if (!$user) {
@@ -96,29 +99,90 @@ class EmployeeController {
                 return responseJson(null, "Invalid reports_to (manager)", 400);
             }
         }
-        $inserted = DB::table('employees')->insert([
-            'organization_id' => $orgId,
-            'user_id' => $data['user_id'] ?? null,
-            'first_name' => $data['first_name'],
-            'last_name' => $data['last_name'],
-            'email' => $data['email'],
-            'phone' => $data['phone'] ?? null,
-            'hire_date' => $data['hire_date'],
-            'job_title' => $data['job_title'] ?? null,
-            'department' => $data['department'] ?? null,
-            'reports_to' => $data['reports_to'] ?? null,
-            'base_salary' => $data['base_salary'],
-            'bank_account_number' => $data['bank_account_number'] ?? null,
-            'tax_id' => $data['tax_id'] ?? null,
-        ]);
-        if (!$inserted) {
-            return responseJson(null, "Failed to create employee", 500);
+        $inserted = false;
+
+        //convert hire_date to MySQL format
+        $data['hire_date'] = date('Y-m-d', strtotime($data['hire_date']));
+
+        $default_password = password_hash('default_password', PASSWORD_BCRYPT);
+
+        try {
+            DB::transaction(function () use ($data, $orgId, &$inserted, $default_password) {
+
+                // 1. Insert employee first and get the ID
+                $insertEmployeeSQL = "INSERT INTO employees (organization_id, phone, hire_date, job_title, department, reports_to, base_salary, bank_account_number, tax_id, created_at) 
+            VALUES ({$orgId}, '{$data['phone']}', '{$data['hire_date']}', '{$data['job_title']}', '{$data['department']}', {$data['reports_to']}, {$data['base_salary']}, '{$data['bank_account_number']}', '{$data['tax_id']}', NOW())
+        ";
+
+                DB::raw($insertEmployeeSQL);
+
+                // 2. Get the employee ID we just inserted
+                $getEmployeeIdSQL = "SELECT LAST_INSERT_ID() as employee_id";
+                $employeeResult = DB::raw($getEmployeeIdSQL);
+                $employee_id = $employeeResult[0]->employee_id;
+
+                // 3. Get organization domain
+                $getOrgSQL = "SELECT domain FROM organizations WHERE id = {$orgId}";
+                $orgResult = DB::raw($getOrgSQL);
+
+                if (empty($orgResult) || !$orgResult[0]->domain) {
+                    throw new \Exception("Organization not found or domain is null");
+                }
+
+                $domain = $orgResult[0]->domain;
+
+                // 4. Generate email
+                $email = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['last_name']) . '@' . $domain;
+
+                //generate username
+                $username = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['last_name']);
+
+                // 5. Insert user
+                $insertUserSQL = "INSERT INTO users (organization_id, username, first_name, last_name, password_hash, email, user_type, created_at) 
+            VALUES ({$orgId}, '{$username}', '{$data['first_name']}', '{$data['last_name']}', '{$default_password}', '{$email}', 'employee', NOW())
+";
+
+                DB::raw($insertUserSQL);
+
+                // 6. Get the user ID we just inserted
+                $getUserIdSQL = "SELECT LAST_INSERT_ID() as user_id";
+                $userResult = DB::raw($getUserIdSQL);
+                $user_id = $userResult[0]->user_id;
+
+                // 7. Update employee with user_id
+                $updateEmployeeSQL = "UPDATE employees SET user_id = {$user_id} WHERE id = {$employee_id};";
+                DB::raw($updateEmployeeSQL);
+
+                $inserted = true;
+            });
+
+            if (!$inserted) {
+                return responseJson(null, "Failed to create employee", 500);
+            } else {
+                // Get the created employee with user details
+                $result = DB::raw("SELECT e.*, u.username, u.email, u.first_name, u.last_name 
+                                    FROM employees e 
+                                    LEFT JOIN users u ON e.user_id = u.id 
+                                    WHERE e.phone = '{$data['phone']}' 
+                                    ORDER BY e.created_at DESC 
+                                    LIMIT 1");
+                if (empty($result)) {
+                    return responseJson(null, "Employee not found", 404);
+                }
+                $mailSent = mail(
+                    $result[0]->email,
+                    "Welcome to HR Payhub",
+                    "Hello {$result[0]->first_name},\n\nYour account has been created successfully. Your username is {$result[0]->username} and your password is 'default_password'. Please change it after your first login.\n\nBest regards,\nHR Payhub Team"
+                );
+                return responseJson(
+                    data: $result[0] ?? null,
+                    message: "Employee created successfully",
+                    metadata: ['dev_mode' => true, 'is_email_sent' => $mailSent ?? false, 'request_url' => $_SERVER['REQUEST_URI']]
+                );
+            }
+        } catch (\Exception $e) {
+            return responseJson(null, "Error creating employee: " . $e->getMessage(), 500);
         }
-        return responseJson(
-            data: $inserted,
-            message: "Employee created successfully",
-            metadata: ['dev_mode' => true]
-        );
     }
     public function show($orgId, $id) {
         $employee = DB::table('employees')->selectAllWhere('organization_id', $orgId);
@@ -133,6 +197,14 @@ class EmployeeController {
             code: empty($employee) ? 404 : 200
         );
     }
+    /*
+     * Update an employee's details
+     * @param int $orgId Organization ID
+     * @param int $id Employee ID
+     * @return JSON response
+     * 
+     * @todo - update to use the create's logic
+     */
     public function update($orgId, $id) {
         $data = validate([
             'user_id' => 'numeric',
@@ -188,6 +260,14 @@ class EmployeeController {
             return responseJson(null, "Failed to update employee", 500);
         }
     }
+    /*
+     * Delete an employee
+     * @param int $orgId Organization ID
+     * @param int $id Employee ID
+     * @return JSON response
+     * 
+     * @todo - add soft delete functionality
+     */
     public function delete($orgId, $id) {
         $employee = DB::table('employees')->selectAllWhere('organization_id', $orgId);
         $employee = array_filter($employee, fn($e) => $e->id == $id);
