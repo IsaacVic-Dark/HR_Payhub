@@ -37,26 +37,28 @@ if (isset($_ENV['APP_TIMEZONE']) && in_array($_ENV['APP_TIMEZONE'], timezone_ide
     date_default_timezone_set('Africa/Nairobi'); // default timezone
 }
 
-// Set the error handler
-set_error_handler('customErrorHandler');
+if (php_sapi_name() !== 'cli') {
+    // Set the error handler
+    set_error_handler('customErrorHandler');
 
-//Handle fatal errors and exceptions
-register_shutdown_function(function () {
-    $error = error_get_last();
-    if ($error && in_array($error['type'], [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE])) {
-        customErrorHandler($error['type'], $error['message'], $error['file'], $error['line']);
-    }
-});
+    //Handle fatal errors and exceptions
+    register_shutdown_function(function () {
+        $error = error_get_last();
+        if ($error && in_array($error['type'], [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE])) {
+            customErrorHandler($error['type'], $error['message'], $error['file'], $error['line']);
+        }
+    });
 
-set_exception_handler(function ($exception) {
-    customErrorHandler(
-        E_ERROR,
-        $exception->getMessage(),
-        $exception->getFile(),
-        $exception->getLine(),
-        []
-    );
-});
+    set_exception_handler(function ($exception) {
+        customErrorHandler(
+            E_ERROR,
+            $exception->getMessage(),
+            $exception->getFile(),
+            $exception->getLine(),
+            []
+        );
+    });
+}
 
 //set up db connection globally, it fails,and throws an exception if it cannot connect
 //and we can use the $pdo variable in any file that includes this init.php
@@ -239,8 +241,8 @@ function displayError($errorType, $message, $file, $line, $trace, $codeContext, 
                     ';
 
     //separate the message from the Actual SQL query if it exists
-    
-        $html .= displayErrorMsg($message);
+
+    $html .= displayErrorMsg($message);
 
     //close out the err div
     $html .= '</p></div></div>';
@@ -324,7 +326,53 @@ function displayErrorMsg(string $message): string {
 
         // Highlight SQL keywords (case-insensitive)
         $keywords = [
-            'SELECT','FROM','WHERE','INSERT','INTO','VALUES','UPDATE','SET','DELETE','JOIN','LEFT','RIGHT','INNER','OUTER','ON','AS','AND','OR','ORDER BY','GROUP BY','LIMIT','OFFSET','DISTINCT','COUNT','AVG','SUM','MIN','MAX','LIKE','IN','NOT','IS','NULL','EXISTS','UNION','CASE','WHEN','THEN','ELSE','END','CAST','CONCAT','COALESCE','IF','SUBSTRING','TRIM','DESC'
+            'SELECT',
+            'FROM',
+            'WHERE',
+            'INSERT',
+            'INTO',
+            'VALUES',
+            'UPDATE',
+            'SET',
+            'DELETE',
+            'JOIN',
+            'LEFT',
+            'RIGHT',
+            'INNER',
+            'OUTER',
+            'ON',
+            'AS',
+            'AND',
+            'OR',
+            'ORDER BY',
+            'GROUP BY',
+            'LIMIT',
+            'OFFSET',
+            'DISTINCT',
+            'COUNT',
+            'AVG',
+            'SUM',
+            'MIN',
+            'MAX',
+            'LIKE',
+            'IN',
+            'NOT',
+            'IS',
+            'NULL',
+            'EXISTS',
+            'UNION',
+            'CASE',
+            'WHEN',
+            'THEN',
+            'ELSE',
+            'END',
+            'CAST',
+            'CONCAT',
+            'COALESCE',
+            'IF',
+            'SUBSTRING',
+            'TRIM',
+            'DESC'
         ];
 
         foreach ($keywords as $keyword) {
