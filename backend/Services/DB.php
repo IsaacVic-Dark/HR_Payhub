@@ -41,6 +41,23 @@ final class DB {
         return $instance;
     }
 
+    public static function transaction(callable $queries) {
+        $instance = self::$instance ?? self::getInstance(null);
+        if ($instance->pdo === null) {
+            throw new \Exception("No PDO connection available for transaction");
+        }
+
+        try {
+            $instance->pdo->beginTransaction();
+            $result = $queries();
+            $instance->pdo->commit();
+            return $result;
+        } catch (\Exception $e) {
+            $instance->pdo->rollBack();
+            throw new \Exception("Transaction failed: " . $e->getMessage());
+        }
+    }
+
     /**
      * Run a raw SQL query
      *
@@ -49,7 +66,7 @@ final class DB {
      * @return array|bool Results for SELECT or true for UPDATE/DELETE
      * @throws \Exception If query fails
      */
-    public function raw(string $sql, array $bindings = []) {
+    public function internal_raw(string $sql, array $bindings = []) {
         try {
             $statement = $this->pdo->prepare($sql);
             $statement->execute($bindings);
@@ -62,6 +79,11 @@ final class DB {
         } catch (\Exception $e) {
             throw new \Exception("Raw query error: " . $e->getMessage());
         }
+    }
+
+    public static function raw(string $sql) {
+        $instance = self::$instance ?? self::getInstance(null);
+        return $instance->internal_raw($sql);
     }
 
     private function runQuery() {
@@ -163,11 +185,11 @@ final class DB {
             $param = $column . '_ci'; // Suffix param for clarity
             //only use LOWER for string values
             if (is_string($value)) {
-                $this->sql .= "`". strtolower($column) ."` {$condition} LOWER(:{$param}) AND ";
-            }elseif (is_numeric($value)) {
+                $this->sql .= "`" . strtolower($column) . "` {$condition} LOWER(:{$param}) AND ";
+            } elseif (is_numeric($value)) {
                 $this->sql .= "`{$column}` {$condition} :{$param} AND ";
             } else {
-                throw new \Exception("Unsupported value type for column {$column}" );
+                throw new \Exception("Unsupported value type for column {$column}");
             }
             // Use LOWER() for both column and parameter
             $this->bindings[$param] = trim($value);
@@ -243,7 +265,8 @@ final class DB {
             $statement = $this->pdo->prepare($this->sql);
             $statement->execute($this->bindings);
         } catch (\Exception $e) {
-            throw new \Exception("Insert error: " . $e->getMessage());
+            throw new \Exception("Insert error: " . $e->getMessage() 
+                . " :QUERY:" . $this->getDebugFullQuery($this->sql, $this->bindings));
         }
     }
 
@@ -267,7 +290,12 @@ final class DB {
      * @return array
      */
     public function countWhere(array $condition) {
-        list($column, $value) = $condition;
+        if (count($condition) !== 1) {
+            throw new \Exception("Condition must have exactly one key-value pair");
+        }
+        $column = key($condition);
+        $value = current($condition);
+
         $this->sql = "SELECT COUNT(*) AS count FROM {$this->table} WHERE `{$column}` = :value";
         $this->bindings = ['value' => $value];
         return $this->runQuery();
