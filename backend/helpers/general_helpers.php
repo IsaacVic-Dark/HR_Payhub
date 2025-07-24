@@ -29,6 +29,141 @@ function slug($string) {
     return strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $string)));
 }
 
+
+/**
+ * Creates and returns an instance of an anonymous class that implements a simple caching mechanism.
+ * 
+ * i borrowed heavily from the laravel version, basically following it's api
+ * 
+ * Note, am not using type hints as the code is for a plugin that would otherwise be installed
+ * in environments with an older php version, for more check my updated gist
+ * 
+ * Since this a custom addition, the contents of the cache function will be under the
+ * MIT license. You can find it in my github gists for updated and environment agnostic code.
+ * 
+ * @see - https://gist.github.com/munenepeter/5bbc068d2fe2079144b6df9d55b81595
+ *
+ * @return object An instance of the anonymous cache class.
+ */
+function cache() {
+
+    return new class() {
+
+        /** @var array The array to store cached items. */
+        private $data = [];
+
+        /** @var string The filename used to persist cache data. */
+        private $file = BASE_PATH . '.cache.dat';
+
+        /**
+         * Creates the cache file if it doesn't exist and loads existing cache data.
+         */
+        public function __construct() {
+            if (!file_exists($this->file)) {
+                touch($this->file);
+                // hide in windows
+                if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                    @exec('attrib +H ' . escapeshellarg(realpath($this->file)));
+                }
+            }
+            $this->load();
+        }
+
+        /**
+         * Stores an item in the cache.
+         *
+         * @param string|int $key   The key under which to store the value.
+         * @param mixed      $value The value to store.
+         * @param int        $expiryInSeconds Time until cache expires
+         * @return void
+         */
+        public function put($key, $value, $expiryInSeconds) {
+            $this->data[$key] = [
+                'value' => $value,
+                'expiry' => time() + $expiryInSeconds
+            ];
+            $this->save();
+        }
+
+        /**
+         * Retrieves an item from the cache.
+         *
+         * @param string|int $key The key of the item to retrieve.
+         * @return mixed|null The cached value if found and not expired, null otherwise.
+         */
+        public function get($key) {
+            if (!isset($this->data[$key])) {
+                return null;
+            }
+
+            $item = $this->data[$key];
+            if ($item['expiry'] !== null && time() > $item['expiry']) {
+                $this->forget($key);
+                return null;
+            }
+
+            return $item['value'];
+        }
+
+        /**
+         * Retrieves an item from the cache or stores it if it doesn't exist.
+         *
+         * @param string|int $key     The key under which to store/retrieve the value.
+         * @param int        $seconds The number of seconds until the item expires.
+         * @param callable   $callback The function to generate the value if not found in cache.
+         * @return mixed The cached or newly generated value.
+         */
+        public function remember($key, $seconds, $callback) {
+            $value = $this->get($key);
+            if ($value === null) {
+                $value = $callback();
+                $this->put($key, $value, $seconds);
+            }
+            return $value;
+        }
+
+        /**
+         * Removes an item from the cache.
+         *
+         * @param string|int $key The key of the item to remove.
+         * @return void
+         */
+        public function forget($key) {
+            unset($this->data[$key]);
+            $this->save();
+        }
+
+        /**
+         * Saves the cache data to the file using PHP serialization.
+         *
+         * @return void
+         */
+        private function save() {
+            // Use exclusive lock to prevent corruption during concurrent writes
+            file_put_contents($this->file, serialize($this->data), LOCK_EX);
+        }
+
+        /**
+         * Loads the cache data from the file using PHP unserialization.
+         *
+         * @return void
+         */
+        private function load() {
+            if (file_exists($this->file) && filesize($this->file) > 0 && is_readable($this->file)) {
+                $content = file_get_contents($this->file);
+                // ensure we don't try to unserialize empty content
+                if (!empty($content)) {
+                    $this->data = unserialize($content) ?? [];
+                }
+            } else {
+                touch($this->file);
+                $this->data = [];
+            }
+        }
+    };
+}
+
+
 /**
  * plural
  * This returns the plural version of common english words

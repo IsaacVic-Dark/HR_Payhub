@@ -28,11 +28,10 @@ final class Router {
         return new static;
     }
 
-  public static function resource(string $uri, string $controller) {
-        // Generate RESTful routes
+    public static function resource(string $uri, string $controller) {
         $routes = [
             ['GET', $uri, $controller . '@index'],
-            ['POST', $uri, $controller . '@create'],
+            ['POST', $uri, $controller . '@store'],
             ['GET', $uri . '/{id}', $controller . '@show'],
             ['PUT', $uri . '/{id}', $controller . '@update'],
             ['DELETE', $uri . '/{id}', $controller . '@destroy'],
@@ -75,21 +74,21 @@ final class Router {
     }
 
     public function direct(string $uri, string $requestType): mixed {
-       $params = [];
+        $params = [];
         $matchedRoute = null;
         $matchedController = null;
 
         // Sort routes by specificity (most specific first)
         $sortedRoutes = static::$routes[$requestType];
-        uksort($sortedRoutes, function($a, $b) {
+        uksort($sortedRoutes, function ($a, $b) {
             // Count parameter placeholders - fewer parameters = more specific
             $aParams = substr_count($a, '([^/]+)');
             $bParams = substr_count($b, '([^/]+)');
-            
+
             if ($aParams !== $bParams) {
                 return $aParams - $bParams;
             }
-            
+
             // If same number of params, longer route is more specific
             return strlen($b) - strlen($a);
         });
@@ -98,7 +97,7 @@ final class Router {
         foreach ($sortedRoutes as $route => $controller) {
             // Escape forward slashes for regex
             $pattern = str_replace('/', '\/', $route);
-            
+
             if (preg_match("/^{$pattern}$/", $uri, $matches)) {
                 $matchedRoute = $route;
                 $matchedController = $controller;
@@ -136,22 +135,22 @@ final class Router {
         throw new \Exception("Invalid controller type for route {$requestType} /{$uri}");
     }
 
-     public function testDirect(string $uri, string $requestType): mixed {
-       $params = [];
+    public function testDirect(string $uri, string $requestType): mixed {
+        $params = [];
         $matchedRoute = null;
         $matchedController = null;
 
         // Sort routes by specificity (most specific first)
         $sortedRoutes = static::$routes[$requestType];
-        uksort($sortedRoutes, function($a, $b) {
+        uksort($sortedRoutes, function ($a, $b) {
             // Count parameter placeholders - fewer parameters = more specific
             $aParams = substr_count($a, '([^/]+)');
             $bParams = substr_count($b, '([^/]+)');
-            
+
             if ($aParams !== $bParams) {
                 return $aParams - $bParams;
             }
-            
+
             // If same number of params, longer route is more specific
             return strlen($b) - strlen($a);
         });
@@ -160,7 +159,7 @@ final class Router {
         foreach ($sortedRoutes as $route => $controller) {
             // Escape forward slashes for regex
             $pattern = str_replace('/', '\/', $route);
-            
+
             if (preg_match("/^{$pattern}$/", $uri, $matches)) {
                 $matchedRoute = $route;
                 $matchedController = $controller;

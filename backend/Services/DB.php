@@ -68,6 +68,9 @@ final class DB {
         try {
             $statement = $this->pdo->prepare($this->sql);
             $statement->execute($this->bindings);
+
+            // dd($this->getDebugFullQuery($this->sql, $this->bindings));
+
             $results = $statement->fetchAll(\PDO::FETCH_OBJ);
 
             if ($this->isUpdateOrDeleteQuery($this->sql) && empty($results)) {
@@ -75,7 +78,22 @@ final class DB {
             }
             return $results;
         } catch (\Exception $e) {
-            throw new \Exception("Query error: " . $e->getMessage());
+            //add query debug info
+            throw new \Exception("Query error: " . $e->getMessage()
+                . " :QUERY:" . $this->getDebugFullQuery($this->sql, $this->bindings));
+        }
+    }
+
+    public function get(array $cols = []) {
+        if (!$this->sql || empty($this->table)) {
+            throw new \Exception("No table specified for query");
+        }
+        $results = $this->runQuery();
+        //use php to filter the results
+        if ($results === true || empty($cols) || $cols[0] === '*') {
+            return $results;
+        } else {
+            return array_map(fn($item) => array_intersect_key((array)$item, array_flip($cols)), $results);
         }
     }
 
@@ -128,10 +146,43 @@ final class DB {
     }
 
     /**
-     * Select specific columns with a where condition
+     * Select all records with multiple where conditions
+     *
+     * @param string $column Column name
+     * @param mixed $value Value to match
+     * @param string $condition Operator (default: =)
+     * @return this
+     */
+    public function where(array $conditions, string $condition = '='): DB {
+        $this->sql = "SELECT * FROM {$this->table} WHERE ";
+        $this->bindings = [];
+        foreach ($conditions as $column => $value) {
+            if (is_null($value) || $value === '') {
+                continue; // Skip null values
+            }
+            $param = $column . '_ci'; // Suffix param for clarity
+            //only use LOWER for string values
+            if (is_string($value)) {
+                $this->sql .= "`". strtolower($column) ."` {$condition} LOWER(:{$param}) AND ";
+            }elseif (is_numeric($value)) {
+                $this->sql .= "`{$column}` {$condition} :{$param} AND ";
+            } else {
+                throw new \Exception("Unsupported value type for column {$column}" );
+            }
+            // Use LOWER() for both column and parameter
+            $this->bindings[$param] = trim($value);
+        }
+        $this->sql = rtrim($this->sql, " AND ");
+        $this->sql .= ' ORDER BY `created_at` DESC';
+
+        return $this;
+    }
+
+    /**
+     * Select specific columns with multiple where conditions
      *
      * @param array $values Columns to select
-     * @param array $condition [column, value]
+     * @param array $conditions Array of [column, value] pairs
      * @return array
      */
     public function selectWhere(array $values, array $condition) {
@@ -234,5 +285,40 @@ final class DB {
      */
     private function isUpdateOrDeleteQuery(string $sql): bool {
         return stripos($sql, 'update') !== false || stripos($sql, 'delete') !== false;
+    }
+
+    static public function getDebugFullQuery($query, $params = []) {
+        if (is_array($params) && count($params)) {
+
+            $search = [];
+            $replace = [];
+
+            foreach ($params as $k => $p) {
+                $pos = strpos($query, ":{$k}");
+                if ($pos !== false) {
+                    $query = substr($query, 0, $pos) . "%!-!{$k}!-!%" . substr($query, $pos + strlen($k) + 1);
+                } else {
+                    $pos = strpos($query, "?");
+                    if ($pos !== false) {
+                        $query = substr($query, 0, $pos) . "%!-!{$k}!-!%" . substr($query, $pos + 1);
+                    } else {
+                        break;
+                    }
+                }
+
+                $search[] = "%!-!{$k}!-!%";
+
+                // Wrap value in single quotes (NO escaping)
+                // Optionally keep \n/\r escaped if for debug readability
+                $safeParam = str_replace(["\r", "\n"], ["\\r", "\\n"], $p);
+                $replace[] = "'" . $safeParam . "'";
+            }
+
+            if (count($search)) {
+                $query = str_replace($search, $replace, $query);
+            }
+        }
+
+        return $query; // Do NOT apply stripslashes or addslashes
     }
 }

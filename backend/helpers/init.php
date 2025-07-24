@@ -1,6 +1,7 @@
 <?php
 
 use App\Services\DB;
+
 /**
  * init.php - this is the main entry point for the application
  * 
@@ -12,7 +13,7 @@ require_once __DIR__ . '/../vendor/autoload.php';
 
 //attempt to copy the .env.example
 if (!file_exists(BASE_PATH . '.env')) {
-    if(!file_exists(BASE_PATH . '.env.example') || !copy(BASE_PATH . '.env.example', BASE_PATH . '.env')) {
+    if (!file_exists(BASE_PATH . '.env.example') || !copy(BASE_PATH . '.env.example', BASE_PATH . '.env')) {
         trigger_error("Please create a .env file with your database connection details.", E_USER_ERROR);
     }
 }
@@ -40,14 +41,14 @@ if (isset($_ENV['APP_TIMEZONE']) && in_array($_ENV['APP_TIMEZONE'], timezone_ide
 set_error_handler('customErrorHandler');
 
 //Handle fatal errors and exceptions
-register_shutdown_function(function() {
+register_shutdown_function(function () {
     $error = error_get_last();
     if ($error && in_array($error['type'], [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE])) {
         customErrorHandler($error['type'], $error['message'], $error['file'], $error['line']);
     }
 });
 
-set_exception_handler(function($exception) {
+set_exception_handler(function ($exception) {
     customErrorHandler(
         E_ERROR,
         $exception->getMessage(),
@@ -87,9 +88,9 @@ function customErrorHandler($severity, $message, $file, $line, $context = []) {
             } else {
                 exit("Aborted. Database does not exist.\n");
             }
-      } else {
-    // Web: show a styled notice and button to run migrations
-    echo '
+        } else {
+            // Web: show a styled notice and button to run migrations
+            echo '
     <div style="max-width: 600px; margin: 100px auto; padding: 20px; border: 1px solid #ccc; border-radius: 8px; font-family: Verdana, sans-serif; background-color: #f9f9f9; text-align: center;">
         <h2 style="color: #b30000; margin-bottom: 10px;">Database Missing</h2>
         <p style="margin-bottom: 20px; color: #333;">
@@ -103,19 +104,18 @@ function customErrorHandler($severity, $message, $file, $line, $context = []) {
         </form>
     </div>';
 
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_migration'])) {
-        include __DIR__ . '/../database/run_migrations.php';
-        echo '<script>setTimeout(function(){ location.reload(); }, 2000);</script>';
-    }
-    exit;
-}
-
+            if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['run_migration'])) {
+                include __DIR__ . '/../database/run_migrations.php';
+                echo '<script>setTimeout(function(){ location.reload(); }, 2000);</script>';
+            }
+            exit;
+        }
     }
     // Don't handle errors that are suppressed with @
     if (!(error_reporting() & $severity)) {
         return false;
     }
-    
+
     // Get error type name
     $errorTypes = [
         E_ERROR => 'Fatal Error',
@@ -133,15 +133,15 @@ function customErrorHandler($severity, $message, $file, $line, $context = []) {
         E_DEPRECATED => 'Deprecated',
         E_USER_DEPRECATED => 'User Deprecated'
     ];
-    
+
     $errorType = $errorTypes[$severity] ?? 'Unknown Error';
-    
+
     // Get stack trace
     $trace = debug_backtrace(DEBUG_BACKTRACE_IGNORE_ARGS);
-    
+
     // Get code context around the error
     $codeContext = getCodeContext($file, $line);
-    
+
     // Get request information
     $requestInfo = [
         'url' => $_SERVER['REQUEST_METHOD'] . ' ' . $_SERVER['REQUEST_URI'],
@@ -149,15 +149,15 @@ function customErrorHandler($severity, $message, $file, $line, $context = []) {
         'user_agent' => $_SERVER['HTTP_USER_AGENT'] ?? 'Unknown',
         'timestamp' => date('Y-m-d H:i:s')
     ];
-    
+
     // Display the error
     displayError($errorType, $message, $file, $line, $trace, $codeContext, $requestInfo);
-    
+
     // Stop execution for fatal errors
     if ($severity === E_ERROR || $severity === E_CORE_ERROR || $severity === E_COMPILE_ERROR) {
         exit(1);
     }
-    
+
     return true;
 }
 
@@ -165,11 +165,11 @@ function getCodeContext($file, $errorLine, $contextLines = 3) {
     if (!file_exists($file)) {
         return [];
     }
-    
+
     $lines = file($file, FILE_IGNORE_NEW_LINES);
     $startLine = max(0, $errorLine - $contextLines - 1);
     $endLine = min(count($lines) - 1, $errorLine + $contextLines - 1);
-    
+
     $context = [];
     for ($i = $startLine; $i <= $endLine; $i++) {
         $context[] = [
@@ -178,7 +178,7 @@ function getCodeContext($file, $errorLine, $contextLines = 3) {
             'isError' => ($i + 1) === $errorLine
         ];
     }
-    
+
     return $context;
 }
 
@@ -188,10 +188,10 @@ function displayError($errorType, $message, $file, $line, $trace, $codeContext, 
     if (ob_get_level()) {
         ob_clean();
     }
-    
+
     // Set content type
     header('Content-Type: text/html; charset=UTF-8');
-    
+
     $html = '<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -236,13 +236,14 @@ function displayError($errorType, $message, $file, $line, $trace, $codeContext, 
             
             <div style="background: #f9fafb; border-left: 4px solid #dc2626; padding: 1rem; border-radius: 0 4px 4px 0;">
                 <p style="font-size: 1.125rem; color: #111827; font-weight: 500;">
-                    ' . htmlspecialchars($message) . '
-                </p>
-            </div>
-        </div>
-        ';
+                    ';
 
-  
+    //separate the message from the Actual SQL query if it exists
+    
+        $html .= displayErrorMsg($message);
+
+    //close out the err div
+    $html .= '</p></div></div>';
 
     // Code Context
     if (!empty($codeContext)) {
@@ -256,11 +257,11 @@ function displayError($errorType, $message, $file, $line, $trace, $codeContext, 
             </div>
             
             <div style="background: #1f2937; padding: 1.5rem; font-family: \'SF Mono\', Monaco, \'Cascadia Code\', \'Roboto Mono\', Consolas, \'Courier New\', monospace; font-size: 0.875rem; overflow-x: auto;">';
-        
+
         foreach ($codeContext as $contextLine) {
             $lineNumber = $contextLine['number'];
             $content = htmlspecialchars($contextLine['content']);
-            
+
             if ($contextLine['isError']) {
                 $html .= '
                 <div style="background: #fef2f2; border-left: 4px solid #dc2626; padding: 0.5rem; margin-bottom: 0.5rem; border-radius: 0 4px 4px 0;">
@@ -275,7 +276,7 @@ function displayError($errorType, $message, $file, $line, $trace, $codeContext, 
                 </div>';
             }
         }
-        
+
         $html .= '
             </div>
         </div>';
@@ -309,4 +310,46 @@ function displayError($errorType, $message, $file, $line, $trace, $codeContext, 
 
     echo $html;
     exit;
+}
+
+function displayErrorMsg(string $message): string {
+    $html = '';
+    if (strpos($message, ':QUERY:') !== false) {
+        $parts = explode(':QUERY:', $message, 2);
+        $sqlRaw = trim($parts[1]);
+
+        // Decode to normal text before highlighting (remove HTML escaping and slashes)
+        $sql = html_entity_decode($sqlRaw, ENT_QUOTES | ENT_HTML5);
+        $sql = stripslashes($sql); // removes unnecessary slashes
+
+        // Highlight SQL keywords (case-insensitive)
+        $keywords = [
+            'SELECT','FROM','WHERE','INSERT','INTO','VALUES','UPDATE','SET','DELETE','JOIN','LEFT','RIGHT','INNER','OUTER','ON','AS','AND','OR','ORDER BY','GROUP BY','LIMIT','OFFSET','DISTINCT','COUNT','AVG','SUM','MIN','MAX','LIKE','IN','NOT','IS','NULL','EXISTS','UNION','CASE','WHEN','THEN','ELSE','END','CAST','CONCAT','COALESCE','IF','SUBSTRING','TRIM','DESC'
+        ];
+
+        foreach ($keywords as $keyword) {
+            $sql = preg_replace_callback(
+                '/\b(' . preg_quote($keyword, '/') . ')\b/i',
+                function ($matches) {
+                    return '<span style="color: #ca9ee6; font-weight: bold;">' . $matches[0] . '</span>';
+                },
+                $sql
+            );
+        }
+
+        // Highlight string literals in green (Catppuccin style)
+        $sql = preg_replace_callback(
+            "/'([^']*)'/",
+            function ($matches) {
+                return '<span style="color: #16a34a;">' . htmlspecialchars($matches[0]) . '</span>';
+            },
+            $sql
+        );
+
+        $html .= htmlspecialchars(trim($parts[0])) . '<br><br><code style="background: #303446; color: #f8fafc; padding: 0.5rem; border-radius: 6px; font-size: 0.875rem; display: block; white-space: pre-wrap;">' . $sql . '</code>';
+    } else {
+        $html .= htmlspecialchars($message);
+    }
+
+    return $html;
 }
