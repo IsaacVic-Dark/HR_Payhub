@@ -1,6 +1,10 @@
 CREATE DATABASE payhub;
 USE payhub;
 
+-- Enable event scheduler for automated tasks
+SET GLOBAL event_scheduler = ON;
+
+
 -- Organizations table
 CREATE TABLE organizations (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -11,6 +15,8 @@ CREATE TABLE organizations (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
+
+ALTER TABLE organizations ADD COLUMN domain VARCHAR(100);
 
 -- Organization Configurations
 CREATE TABLE organization_configs (
@@ -40,6 +46,9 @@ CREATE TABLE users (
     FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
 );
 
+ALTER TABLE users ADD COLUMN first_name VARCHAR(50) NOT NULL AFTER username, ADD COLUMN last_name VARCHAR(50) NOT NULL AFTER first_name;
+
+
 -- Employees table
 CREATE TABLE employees (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -63,6 +72,21 @@ CREATE TABLE employees (
     FOREIGN KEY (reports_to) REFERENCES employees(id) ON DELETE SET NULL,
     INDEX idx_employee_org (organization_id, id)
 );
+
+ALTER TABLE employees DROP COLUMN first_name, DROP COLUMN last_name;
+-- status
+ALTER TABLE employees ADD COLUMN status ENUM('active', 'on_leave', 'on_probation', 'suspended', 'resigned', 'terminated', 'retired', 'deceased') DEFAULT 'active';
+-- employment_type
+ALTER TABLE employees ADD COLUMN employment_type ENUM('full_time', 'part_time', 'contract') DEFAULT 'full_time';
+-- work_location
+ALTER TABLE employees ADD COLUMN work_location ENUM('on-site', 'hybrid', 'remote') DEFAULT 'on-site';
+
+ALTER TABLE `employees` CHANGE COLUMN `email` `email` VARCHAR(100) NULL COLLATE 'utf8mb4_0900_ai_ci' AFTER `user_id`;
+
+
+
+
+
 
 -- Pay Runs table
 CREATE TABLE payruns (
