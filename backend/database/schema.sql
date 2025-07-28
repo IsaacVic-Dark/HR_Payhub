@@ -310,3 +310,18 @@ BEGIN
     VALUES (p_employee_id, p_title, p_message, p_type, p_metadata, NOW(), NOW());
 END$$
 DELIMITER ;
+
+
+
+INSERT INTO organizations (name, location, logo_url, currency, domain)
+VALUES 
+('TechNova Ltd', 'Nairobi, Kenya', 'https://example.com/logo.png', 'KES', 'technova.com');
+
+INSERT INTO users (organization_id, username, first_name, last_name, password_hash, email, user_type)
+VALUES
+(1, 'jdoe', 'John', 'Doe', SHA2('password', 256), 'j.doe@technova.com', 'employee');
+
+INSERT INTO employees 
+(organization_id, user_id, email, phone, hire_date, job_title, department, reports_to, base_salary, bank_account_number, tax_id, status, employment_type, work_location)
+VALUES
+(1, 1, 'j.doe@technova.com', '+254700123456', '2024-02-15', 'operations manager', 'Administration', NULL, 120000.00, '1234567890', 'P1234567', 'active', 'full_time', 'hybrid');

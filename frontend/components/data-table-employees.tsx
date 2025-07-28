@@ -222,64 +222,63 @@ export function DataTableEmployees() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
+  const fetchEmployeesData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const response = await fetch(
+        "http://localhost:8000/api/v1/organizations/51/employees"
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const responseData = await response.json();
+
+      // Extract the employees array from the data property
+      const employeesData = responseData.data || [];
+
+      // Transform the data to match your Employee type
+      const transformedEmployees: Employee[] = employeesData.map(
+        (emp: any) => ({
+          id: emp.id.toString(),
+          img: (
+            <img
+              src={emp.profileImage || "/profile.jpg"}
+              alt="Profile"
+              className="w-8 h-8 object-cover rounded-full ml-4"
+            />
+          ),
+          salary: parseFloat(emp.base_salary),
+          status: "active" as const, // You might want to derive this from your data
+          name: `${emp.first_name} ${emp.last_name}`,
+          position: emp.job_title,
+          department: emp.department,
+          email: emp.email,
+        })
+      );
+
+      setEmployees(transformedEmployees);
+
+      if (transformedEmployees.length > 0) {
+        console.log("Employees fetched successfully:", transformedEmployees);
+      } else {
+        console.warn("No employees found");
+      }
+    } catch (error) {
+      console.error("Failed to fetch employees:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to fetch employees"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Fetch employees data
   React.useEffect(() => {
-    const fetchEmployeesData = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const response = await fetch(
-          "http://192.168.100.11:8080/api/v1/organizations/4/employees"
-        );
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const responseData = await response.json();
-        console.log("Fetched employees:", responseData);
-
-        // Extract the employees array from the data property
-        const employeesData = responseData.data || [];
-
-        // Transform the data to match your Employee type
-        const transformedEmployees: Employee[] = employeesData.map(
-          (emp: any) => ({
-            id: emp.id.toString(),
-            img: (
-              <img
-                src={emp.profileImage || "/profile.jpg"}
-                alt="Profile"
-                className="w-8 h-8 object-cover rounded-full ml-4"
-              />
-            ),
-            salary: parseFloat(emp.base_salary),
-            status: "active" as const, // You might want to derive this from your data
-            name: `${emp.first_name} ${emp.last_name}`,
-            position: emp.job_title,
-            department: emp.department,
-            email: emp.email,
-          })
-        );
-
-        setEmployees(transformedEmployees);
-
-        if (transformedEmployees.length > 0) {
-          console.log("Employees fetched successfully:", transformedEmployees);
-        } else {
-          console.warn("No employees found");
-        }
-      } catch (error) {
-        console.error("Failed to fetch employees:", error);
-        setError(
-          error instanceof Error ? error.message : "Failed to fetch employees"
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchEmployeesData();
   }, []);
 
@@ -317,151 +316,173 @@ export function DataTableEmployees() {
   }
 
   // Error state
-  if (error) {
-    return (
-      <div className="m-6">
-        <div className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <p className="text-red-600 mb-2">Error loading employees:</p>
-            <p className="text-sm text-gray-600">{error}</p>
-            <Button
-              onClick={() => window.location.reload()}
-              variant="outline"
-              className="mt-4"
-            >
-              Try Again
-            </Button>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // if (error) {
+  //   return (
+  //     <div className="m-6">
+  //       <div className="flex items-center justify-center h-64">
+  //         <div className="text-center">
+  //           <p className="text-red-600 mb-2">Error loading employees:</p>
+  //           <p className="text-sm text-gray-600">{error}</p>
+  //           <Button
+  //             onClick={() => window.location.reload()}
+  //             variant="outline"
+  //             className="mt-4"
+  //           >
+  //             Try Again
+  //           </Button>
+  //         </div>
+  //       </div>
+  //     </div>
+  //   );
+  // }
 
   return (
     <div className="m-6">
-      <div className="flex items-center py-4">
-        <Input
-          placeholder="Filter names..."
-          value={(table.getColumn("name")?.getFilterValue() as string) ?? ""}
-          onChange={(event) =>
-            table.getColumn("name")?.setFilterValue(event.target.value)
-          }
-          className="max-w-sm"
-        />
-
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="outline" className="ml-2">
-              Columns <ChevronDown />
+      {loading ? (
+        <p className="text-center py-16 text-gray-500">Loading employees...</p>
+      ) : error ? (
+        <div className="text-center py-16">
+          <p className="text-red-600 mb-4">{error}</p>
+          <Button onClick={fetchEmployeesData}>Try Again</Button>
+        </div>
+      ) : !employees || employees.length === 0 ? (
+        <div className="text-center py-16">
+          <p className="text-gray-600 mb-4">No employees yet.</p>
+          <EmployeeDrawerAdd employees={employees}>
+            <Button>
+              <Plus />
+              Add Employee
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            {table
-              .getAllColumns()
-              .filter((column) => column.getCanHide())
-              .map((column) => {
-                return (
-                  <DropdownMenuCheckboxItem
-                    key={column.id}
-                    className="capitalize"
-                    checked={column.getIsVisible()}
-                    onCheckedChange={(value) =>
-                      column.toggleVisibility(!!value)
-                    }
-                  >
-                    {column.id}
-                  </DropdownMenuCheckboxItem>
-                );
-              })}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          </EmployeeDrawerAdd>
+        </div>
+      ) : (
+        <>
+          {/* Normal UI when employees exist */}
+          <div className="flex items-center py-4">
+            <Input
+              placeholder="Filter names..."
+              value={
+                (table.getColumn("name")?.getFilterValue() as string) ?? ""
+              }
+              onChange={(event) =>
+                table.getColumn("name")?.setFilterValue(event.target.value)
+              }
+              className="max-w-sm"
+            />
 
-        {/* CHANGE 1: Pass employees data to EmployeeDrawerAdd */}
-        <EmployeeDrawerAdd employees={employees}>
-          <Button
-            variant="outline"
-            className="ml-auto"
-            onSelect={(e) => e.preventDefault()}
-          >
-            <Plus />
-            Add employee
-          </Button>
-        </EmployeeDrawerAdd>
-      </div>
-      <div className="rounded-md border">
-        <Table>
-          <TableHeader>
-            {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id}>
-                {headerGroup.headers.map((header) => {
-                  return (
-                    <TableHead key={header.id}>
-                      {header.isPlaceholder
-                        ? null
-                        : flexRender(
-                            header.column.columnDef.header,
-                            header.getContext()
-                          )}
-                    </TableHead>
-                  );
-                })}
-              </TableRow>
-            ))}
-          </TableHeader>
-          <TableBody>
-            {table.getRowModel().rows?.length ? (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
-                  key={row.id}
-                  data-state={row.getIsSelected() && "selected"}
-                >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext()
-                      )}
-                    </TableCell>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="ml-2">
+                  Columns <ChevronDown />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {table
+                  .getAllColumns()
+                  .filter((column) => column.getCanHide())
+                  .map((column) => (
+                    <DropdownMenuCheckboxItem
+                      key={column.id}
+                      className="capitalize"
+                      checked={column.getIsVisible()}
+                      onCheckedChange={(value) =>
+                        column.toggleVisibility(!!value)
+                      }
+                    >
+                      {column.id}
+                    </DropdownMenuCheckboxItem>
                   ))}
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
-                  No results.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-      <div className="flex items-center justify-end space-x-2 py-4">
-        <div className="text-muted-foreground flex-1 text-sm">
-          {table.getFilteredSelectedRowModel().rows.length} of{" "}
-          {table.getFilteredRowModel().rows.length} row(s) selected.
-        </div>
-        <div className="space-x-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            Next
-          </Button>
-        </div>
-      </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
+
+            {/* CHANGE 1: Pass employees data to EmployeeDrawerAdd */}
+            <EmployeeDrawerAdd employees={employees}>
+              <Button
+                variant="outline"
+                className="ml-auto"
+                onSelect={(e) => e.preventDefault()}
+              >
+                <Plus />
+                Add employee
+              </Button>
+            </EmployeeDrawerAdd>
+          </div>
+          <div className="rounded-md border">
+            <Table>
+              <TableHeader>
+                {table.getHeaderGroups().map((headerGroup) => (
+                  <TableRow key={headerGroup.id}>
+                    {headerGroup.headers.map((header) => {
+                      return (
+                        <TableHead key={header.id}>
+                          {header.isPlaceholder
+                            ? null
+                            : flexRender(
+                                header.column.columnDef.header,
+                                header.getContext()
+                              )}
+                        </TableHead>
+                      );
+                    })}
+                  </TableRow>
+                ))}
+              </TableHeader>
+              <TableBody>
+                {table.getRowModel().rows?.length ? (
+                  table.getRowModel().rows.map((row) => (
+                    <TableRow
+                      key={row.id}
+                      data-state={row.getIsSelected() && "selected"}
+                    >
+                      {row.getVisibleCells().map((cell) => (
+                        <TableCell key={cell.id}>
+                          {flexRender(
+                            cell.column.columnDef.cell,
+                            cell.getContext()
+                          )}
+                        </TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell
+                      colSpan={columns.length}
+                      className="h-24 text-center"
+                    >
+                      No results.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </div>
+          <div className="flex items-center justify-end space-x-2 py-4">
+            <div className="text-muted-foreground flex-1 text-sm">
+              {table.getFilteredSelectedRowModel().rows.length} of{" "}
+              {table.getFilteredRowModel().rows.length} row(s) selected.
+            </div>
+            <div className="space-x-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => table.previousPage()}
+                disabled={!table.getCanPreviousPage()}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => table.nextPage()}
+                disabled={!table.getCanNextPage()}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -475,17 +496,31 @@ function EmployeeDrawerAdd({
 }) {
   const isMobile = useIsMobile();
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
-  const [position, setPosition] = React.useState("");
-  const [location, setLocation] = React.useState("");
-  const [firstName, setFirstName] = React.useState("");
-  const [lastName, setLastName] = React.useState("");
-  const [reportsTo, setReportsTo] = React.useState("");
-  const [department, setDepartment] = React.useState("");
-  const [phone, setPhone] = React.useState("");
-  const [bankaccountnumber, setBankaccountnumber] = React.useState("");
-  const [salary, setSalary] = React.useState("");
+
+  // const [position, setPosition] = React.useState("");
+  // const [location, setLocation] = React.useState("");
+  // const [firstName, setFirstName] = React.useState("");
+  // const [lastName, setLastName] = React.useState("");
+  // const [reportsTo, setReportsTo] = React.useState("");
+  // const [department, setDepartment] = React.useState("");
+  // const [phone, setPhone] = React.useState("");
+  // const [bankaccountnumber, setBankaccountnumber] = React.useState("");
+  // const [salary, setSalary] = React.useState("");
 
   const [message, setMessage] = React.useState("");
+  const [status, setStatus] = React.useState("");
+  const [formData, setFormData] = React.useState({
+    firstName: "",
+    lastName: "",
+    reportsTo: "",
+    position: "",
+    location: "",
+    department: "",
+    phone: "",
+    bankaccountnumber: "",
+    employment_type: "",
+    salary: "",
+  });
 
   const operationsManagers = React.useMemo(() => {
     return employees.filter((emp) =>
@@ -493,7 +528,9 @@ function EmployeeDrawerAdd({
     );
   }, [employees]);
 
-  const initials = `${firstName[0] || ""}${lastName[0] || ""}`.toUpperCase();
+  const initials = `${formData.firstName[0] || ""}${
+    formData.lastName[0] || ""
+  }`.toUpperCase();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -502,39 +539,60 @@ function EmployeeDrawerAdd({
     setMessage("Adding employee...");
 
     const payload = {
-      first_name: firstName,
-      last_name: lastName,
-      reports_to: reportsTo,
-      job_title: position,
-      location: location,
-      department: department,
-      phone: phone,
-      bank_account_number: bankaccountnumber,
-      base_salary: salary,
+      first_name: formData.firstName,
+      last_name: formData.lastName,
+      reports_to: formData.reportsTo,
+      job_title: formData.position,
+      location: formData.location,
+      department: formData.department,
+      phone: formData.phone,
+      bank_account_number: formData.bankaccountnumber,
+      base_salary: formData.salary,
+      employment_type: formData.employment_type,
       hire_date: new Date().toISOString(),
     };
 
     try {
-      const response = await fetch("http://192.168.100.11:8080/api/v1/organizations/4/employees", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      const response = await fetch(
+        "http://localhost:8000/api/v1/organizations/51/employees",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       if (!response.ok) {
-        //show error message on #add_new_employee_btn
         setMessage("Failed to add employee.");
+        setStatus("error");
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
 
       const result = await response.json();
       console.log("Success:", result);
       setMessage("Employee added successfully!");
+      setStatus("success");
+
+      setFormData({
+        firstName: "",
+        lastName: "",
+        reportsTo: "",
+        position: "",
+        location: "",
+        employment_type: "",
+        department: "",
+        phone: "",
+        bankaccountnumber: "",
+        salary: "",
+      });
+
+      setTimeout(() => setMessage(""), 2000);
     } catch (error) {
       console.error("Error:", error);
       setMessage("Failed to add employee.");
+      setStatus("error");
     }
   };
 
@@ -594,26 +652,33 @@ function EmployeeDrawerAdd({
                       <Input
                         type="text"
                         placeholder="Employee first name ..."
-                        value={firstName}
-                        onChange={(e) => setFirstName(e.target.value)}
+                        value={formData.firstName}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            firstName: e.target.value,
+                          })
+                        }
                         className="bg-white"
                       />
                       <Input
                         type="text"
                         placeholder="Employee last name ..."
-                        value={lastName}
-                        onChange={(e) => setLastName(e.target.value)}
+                        value={formData.lastName}
+                        onChange={(e) =>
+                          setFormData({ ...formData, lastName: e.target.value })
+                        }
                         className="bg-white"
                       />
                     </h3>
                     <div className="flex items-center mb-2">
                       <span className="text-sm text-gray-600 flex w-full space-x-1">
-                        <p>{position}</p>
+                        <p>{formData.position}</p>
                         <span> </span>
                         {location && (
                           <p>
                             <span>(</span>
-                            {location}
+                            {formData.location}
                             <span>)</span>
                           </p>
                         )}
@@ -690,7 +755,12 @@ function EmployeeDrawerAdd({
                         <Input
                           type="text"
                           placeholder="department ..."
-                          onChange={(e) => setDepartment(e.target.value)}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              department: e.target.value,
+                            })
+                          }
                           className="w-full"
                         />
                       </span>
@@ -711,7 +781,15 @@ function EmployeeDrawerAdd({
                         ></path>
                       </svg>
                       <span className="text-sm font-small text-gray-800 w-full">
-                        <Select>
+                        <Select
+                          value={formData.employment_type}
+                          onValueChange={(value) =>
+                            setFormData((f) => ({
+                              ...f,
+                              employment_type: value,
+                            }))
+                          }
+                        >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Employment type" />
                           </SelectTrigger>
@@ -739,7 +817,12 @@ function EmployeeDrawerAdd({
                         />
                       </svg>
                       <span className="text-sm font-small text-gray-800 w-full">
-                        <PhoneInput value={phone} onChange={(value) => setPhone(value)} />
+                        <PhoneInput
+                          value={formData.phone}
+                          onChange={(e) =>
+                            setFormData({ ...formData, phone: e.target.value })
+                          }
+                        />
                       </span>
                     </div>
                     <div className="flex items-center space-x-3">
@@ -760,8 +843,13 @@ function EmployeeDrawerAdd({
                       <span className="text-sm font-small text-gray-800 w-full">
                         <Input
                           type="text"
-                          value={bankaccountnumber}
-                          onChange={(e) => setBankaccountnumber(e.target.value)}
+                          value={formData.bankaccountnumber}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              bankaccountnumber: e.target.value,
+                            })
+                          }
                           placeholder="Bank Account Number"
                         />
                       </span>
@@ -786,8 +874,13 @@ function EmployeeDrawerAdd({
                         <Input
                           type="text"
                           placeholder="position ..."
-                          value={position}
-                          onChange={(e) => setPosition(e.target.value)}
+                          value={formData.position}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              position: e.target.value,
+                            })
+                          }
                           className="w-full"
                         />
                       </span>
@@ -802,7 +895,12 @@ function EmployeeDrawerAdd({
                       </svg>
 
                       <span className="text-sm font-small text-gray-800 w-full">
-                        <Select onValueChange={(value) => setLocation(value)}>
+                        <Select
+                          value={formData.location}
+                          onValueChange={(value) =>
+                            setFormData((f) => ({ ...f, location: value }))
+                          }
+                        >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Work location" />
                           </SelectTrigger>
@@ -832,8 +930,10 @@ function EmployeeDrawerAdd({
                       <span className="text-sm font-small text-gray-800 w-full">
                         <Input
                           type="number"
-                          value={salary}
-                          onChange={(e) => setSalary(e.target.value)}
+                          value={formData.salary}
+                          onChange={(e) =>
+                            setFormData({ ...formData, salary: e.target.value })
+                          }
                           placeholder="Salary"
                         />
                       </span>
@@ -850,7 +950,12 @@ function EmployeeDrawerAdd({
                       </svg>
 
                       <span className="text-sm font-small text-gray-800 w-full">
-                        <Select onValueChange={(value) => setReportsTo(value)}>
+                        <Select
+                          value={formData.reportsTo}
+                          onValueChange={(value) =>
+                            setFormData((f) => ({ ...f, reportsTo: value }))
+                          }
+                        >
                           <SelectTrigger className="w-full">
                             <SelectValue placeholder="Reports to" />
                           </SelectTrigger>
@@ -874,9 +979,18 @@ function EmployeeDrawerAdd({
                 </div>
                 <div className="flex items-center space-x-3">
                   <span className="text-sm font-small text-gray-800 w-full">
-                    <Button id="add_new_employee_btn" type="submit" className="w-full">
-                    Add {message ? message : (firstName || "Employee")}
-
+                    <Button
+                      id="add_new_employee_btn"
+                      type="submit"
+                      className={`w-full ${
+                        status === "success"
+                          ? "bg-green-500"
+                          : status === "error"
+                          ? "bg-red-500"
+                          : "bg-gray-500"
+                      }`}
+                    >
+                      Add {message ? message : formData.firstName || "Employee"}
                     </Button>
                   </span>
                 </div>

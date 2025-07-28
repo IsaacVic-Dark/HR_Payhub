@@ -19,6 +19,36 @@
 CREATE DATABASE IF NOT EXISTS `payhub` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
 USE `payhub`;
 
+-- Dumping structure for table payhub.employees
+CREATE TABLE IF NOT EXISTS `employees` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organization_id` int NOT NULL,
+  `user_id` int DEFAULT NULL,
+  `email` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
+  `phone` varchar(20) DEFAULT NULL,
+  `hire_date` date NOT NULL,
+  `job_title` varchar(100) DEFAULT NULL,
+  `department` varchar(100) DEFAULT NULL,
+  `reports_to` int DEFAULT NULL,
+  `base_salary` decimal(15,2) NOT NULL,
+  `bank_account_number` varchar(50) DEFAULT NULL,
+  `tax_id` varchar(50) DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `status` enum('active','on_leave','on_probation','suspended','resigned','terminated','retired','deceased') DEFAULT 'active',
+  `employment_type` enum('full_time','part_time','contract') DEFAULT 'full_time',
+  `work_location` enum('on-site','hybrid','remote') DEFAULT 'on-site',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `email` (`email`),
+  UNIQUE KEY `email_2` (`email`),
+  KEY `user_id` (`user_id`),
+  KEY `reports_to` (`reports_to`),
+  KEY `idx_employee_org` (`organization_id`,`id`),
+  CONSTRAINT `employees_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `employees_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `employees_ibfk_3` FOREIGN KEY (`reports_to`) REFERENCES `employees` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- Dumping structure for table payhub.advances
 CREATE TABLE IF NOT EXISTS `advances` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -91,36 +121,6 @@ CREATE TABLE IF NOT EXISTS `benefits` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
-
--- Dumping structure for table payhub.employees
-CREATE TABLE IF NOT EXISTS `employees` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `organization_id` int NOT NULL,
-  `user_id` int DEFAULT NULL,
-  `email` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
-  `phone` varchar(20) DEFAULT NULL,
-  `hire_date` date NOT NULL,
-  `job_title` varchar(100) DEFAULT NULL,
-  `department` varchar(100) DEFAULT NULL,
-  `reports_to` int DEFAULT NULL,
-  `base_salary` decimal(15,2) NOT NULL,
-  `bank_account_number` varchar(50) DEFAULT NULL,
-  `tax_id` varchar(50) DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `status` enum('active','on_leave','on_probation','suspended','resigned','terminated','retired','deceased') DEFAULT 'active',
-  `employment_type` enum('full_time','part_time','contract') DEFAULT 'full_time',
-  `work_location` enum('on-site','hybrid','remote') DEFAULT 'on-site',
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `email` (`email`),
-  UNIQUE KEY `email_2` (`email`),
-  KEY `user_id` (`user_id`),
-  KEY `reports_to` (`reports_to`),
-  KEY `idx_employee_org` (`organization_id`,`id`),
-  CONSTRAINT `employees_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `employees_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `employees_ibfk_3` FOREIGN KEY (`reports_to`) REFERENCES `employees` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
 
