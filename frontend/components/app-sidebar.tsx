@@ -59,6 +59,11 @@ const data = {
       icon: IconUsers,
     },
     {
+      title: "Payrun",
+      url: "/payrun",
+      icon: IconChartBar,
+    },
+    {
       title: "Analytics",
       url: "#",
       icon: IconChartBar,
