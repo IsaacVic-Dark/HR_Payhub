@@ -180,14 +180,16 @@ export function DataTablePayroll() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState<string | null>(null);
 
+  const apiUrl = process.env.NEXT_PUBLIC_BACKEND_API_URL;
+
   // Fetch employees data
   const fetchEmployeesData = async () => {
     try {
       setLoading(true);
       setError(null);
-
+      console.log(apiUrl);
       const response = await fetch(
-        "http://localhost:8000/api/v1/organizations/51/employees"
+        `${apiUrl}/organizations/51/employees`
       );
 
       if (!response.ok) {
