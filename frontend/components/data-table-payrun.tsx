@@ -1,154 +1,124 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Filter, Search, UserPlus, Download, MoreHorizontal, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Filter, Search, Plus, Download, MoreHorizontal, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
-const PayrollTable = () => {
-  // Pagination state - ADD THESE LINES
+const PayrunTable = () => {
+  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(5);
 
-  const [employees] = useState([
+  const [payruns] = useState([
     {
-      "name": "Michael Smith",
-      "employee_id": "EMP-3726",
-      "gross_pay": 8000,
-      "net_pay": 7200,
-      "salary": 6000,
-      "benefits": 1200,
-      "incentives": 800,
-      "deductions": 800,
-      "total_cost": 8800,
-      "upcoming_payroll": "2025-11-04",
-      "status": "Scheduled"
+      "id": 1,
+      "organization_id": 51,
+      "payrun_name": "January 2025 Payroll",
+      "pay_period_start": "2025-01-01",
+      "pay_period_end": "2025-01-31",
+      "pay_frequency": "monthly",
+      "status": "draft",
+      "total_gross_pay": "50000.00",
+      "total_deductions": "5000.00",
+      "total_net_pay": "45000.00",
+      "employee_count": 25,
+      "created_by": 43,
+      "reviewed_by": null,
+      "finalized_by": null,
+      "created_at": "2025-08-11 19:27:59",
+      "reviewed_at": null,
+      "finalized_at": null,
+      "updated_at": "2025-08-11 19:27:59"
     },
     {
-      "name": "Sarah Johnson",
-      "employee_id": "EMP-6259",
-      "gross_pay": 7500,
-      "net_pay": 6800,
-      "salary": 5800,
-      "benefits": 1000,
-      "incentives": 700,
-      "deductions": 700,
-      "total_cost": 8100,
-      "upcoming_payroll": "2025-11-04",
-      "status": "Scheduled"
+      "id": 2,
+      "organization_id": 51,
+      "payrun_name": "February 2025 Payroll",
+      "pay_period_start": "2025-02-01",
+      "pay_period_end": "2025-02-28",
+      "pay_frequency": "monthly",
+      "status": "reviewed",
+      "total_gross_pay": "52000.00",
+      "total_deductions": "5200.00",
+      "total_net_pay": "46800.00",
+      "employee_count": 26,
+      "created_by": 43,
+      "reviewed_by": 44,
+      "finalized_by": null,
+      "created_at": "2025-08-12 10:15:30",
+      "reviewed_at": "2025-08-12 14:20:15",
+      "finalized_at": null,
+      "updated_at": "2025-08-12 14:20:15"
     },
     {
-      "name": "David Wilson",
-      "employee_id": "EMP-5293",
-      "gross_pay": 9200,
-      "net_pay": 8400,
-      "salary": 7200,
-      "benefits": 1500,
-      "incentives": 1000,
-      "deductions": 800,
-      "total_cost": 10200,
-      "upcoming_payroll": "2025-11-04",
-      "status": "Pending"
+      "id": 3,
+      "organization_id": 51,
+      "payrun_name": "March 2025 Payroll",
+      "pay_period_start": "2025-03-01",
+      "pay_period_end": "2025-03-31",
+      "pay_frequency": "monthly",
+      "status": "finalized",
+      "total_gross_pay": "48500.00",
+      "total_deductions": "4850.00",
+      "total_net_pay": "43650.00",
+      "employee_count": 24,
+      "created_by": 43,
+      "reviewed_by": 44,
+      "finalized_by": 45,
+      "created_at": "2025-08-13 09:30:45",
+      "reviewed_at": "2025-08-13 11:45:20",
+      "finalized_at": "2025-08-13 15:30:00",
+      "updated_at": "2025-08-13 15:30:00"
     },
     {
-      "name": "Emily Davis",
-      "employee_id": "EMP-4310",
-      "gross_pay": 8700,
-      "net_pay": 7900,
-      "salary": 6800,
-      "benefits": 1300,
-      "incentives": 900,
-      "deductions": 800,
-      "total_cost": 9800,
-      "upcoming_payroll": "2025-11-04",
-      "status": "Scheduled"
+      "id": 4,
+      "organization_id": 51,
+      "payrun_name": "Bi-weekly Payroll #1",
+      "pay_period_start": "2025-04-01",
+      "pay_period_end": "2025-04-14",
+      "pay_frequency": "bi-weekly",
+      "status": "draft",
+      "total_gross_pay": "25000.00",
+      "total_deductions": "2500.00",
+      "total_net_pay": "22500.00",
+      "employee_count": 20,
+      "created_by": 43,
+      "reviewed_by": null,
+      "finalized_by": null,
+      "created_at": "2025-08-14 08:00:00",
+      "reviewed_at": null,
+      "finalized_at": null,
+      "updated_at": "2025-08-14 08:00:00"
     },
     {
-      "name": "James Brown",
-      "employee_id": "EMP-2876",
-      "gross_pay": 6500,
-      "net_pay": 5800,
-      "salary": 5000,
-      "benefits": 900,
-      "incentives": 600,
-      "deductions": 700,
-      "total_cost": 7400,
-      "upcoming_payroll": "2025-11-04",
-      "status": "Scheduled"
-    },
-    {
-      "name": "Olivia Martinez",
-      "employee_id": "EMP-6134",
-      "gross_pay": 7900,
-      "net_pay": 7100,
-      "salary": 6200,
-      "benefits": 1100,
-      "incentives": 800,
-      "deductions": 800,
-      "total_cost": 9000,
-      "upcoming_payroll": "2025-11-04",
-      "status": "Pending"
-    },
-    {
-      "name": "William Thompson",
-      "employee_id": "EMP-9482",
-      "gross_pay": 8300,
-      "net_pay": 7500,
-      "salary": 6500,
-      "benefits": 1400,
-      "incentives": 900,
-      "deductions": 800,
-      "total_cost": 9600,
-      "upcoming_payroll": "2025-11-04",
-      "status": "Scheduled"
-    },
-    {
-      "name": "Sophia White",
-      "employee_id": "EMP-7041",
-      "gross_pay": 7100,
-      "net_pay": 6400,
-      "salary": 5500,
-      "benefits": 900,
-      "incentives": 700,
-      "deductions": 700,
-      "total_cost": 8300,
-      "upcoming_payroll": "2025-11-04",
-      "status": "Scheduled"
-    },
-    {
-      "name": "Ethan Hall",
-      "employee_id": "EMP-5832",
-      "gross_pay": 8800,
-      "net_pay": 8000,
-      "salary": 7000,
-      "benefits": 1500,
-      "incentives": 900,
-      "deductions": 800,
-      "total_cost": 10200,
-      "upcoming_payroll": "2025-11-04",
-      "status": "Pending"
-    },
-    {
-      "name": "Ava King",
-      "employee_id": "EMP-3659",
-      "gross_pay": 7600,
-      "net_pay": 6900,
-      "salary": 6000,
-      "benefits": 1000,
-      "incentives": 800,
-      "deductions": 700,
-      "total_cost": 8800,
-      "upcoming_payroll": "2025-11-04",
-      "status": "Scheduled"
+      "id": 5,
+      "organization_id": 51,
+      "payrun_name": "Weekly Payroll #12",
+      "pay_period_start": "2025-04-21",
+      "pay_period_end": "2025-04-27",
+      "pay_frequency": "weekly",
+      "status": "reviewed",
+      "total_gross_pay": "12500.00",
+      "total_deductions": "1250.00",
+      "total_net_pay": "11250.00",
+      "employee_count": 15,
+      "created_by": 43,
+      "reviewed_by": 44,
+      "finalized_by": null,
+      "created_at": "2025-08-15 07:15:30",
+      "reviewed_at": "2025-08-15 12:00:00",
+      "finalized_at": null,
+      "updated_at": "2025-08-15 12:00:00"
     }
   ]);
 
-  // Pagination calculations - ADD THESE LINES
-  const totalItems = employees.length;
+  // Pagination calculations
+  const totalItems = payruns.length;
   const totalPages = Math.ceil(totalItems / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
   const endIndex = startIndex + itemsPerPage;
-  const currentEmployees = employees.slice(startIndex, endIndex);
+  const currentPayruns = payruns.slice(startIndex, endIndex);
 
-  // Pagination handlers - ADD THESE FUNCTIONS
+  // Pagination handlers
   const handlePageChange = (page) => {
     setCurrentPage(page);
   };
@@ -159,34 +129,72 @@ const PayrollTable = () => {
   };
 
   const formatCurrency = (amount) => {
-    return `$${amount.toLocaleString()}`;
+    return `$${parseFloat(amount).toLocaleString()}`;
   };
 
-  const formatDate = (dateString) => {
+  const formatDateRange = (startDate, endDate) => {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    const startFormatted = start.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+    
+    const endFormatted = end.toLocaleDateString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric' 
+    });
+    
+    return `${startFormatted} – ${endFormatted}`;
+  };
+
+  const formatLastUpdated = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
+  const capitalizeFrequency = (frequency) => {
+    return frequency.charAt(0).toUpperCase() + frequency.slice(1).replace('-', '-');
+  };
+
   const getStatusBadge = (status) => {
-    if (status === 'Scheduled') {
-      return (
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-          <span className="text-blue-700 text-xs font-medium">Scheduled</span>
-        </div>
-      );
-    } else if (status === 'Pending') {
-      return (
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-orange-500"></div>
-          <span className="text-orange-700 text-xs font-medium">Pending</span>
-        </div>
-      );
-    }
+    const statusConfig = {
+      'draft': {
+        color: 'bg-yellow-100 text-yellow-800',
+        dotColor: 'bg-yellow-500',
+        label: 'Draft'
+      },
+      'reviewed': {
+        color: 'bg-blue-100 text-blue-800',
+        dotColor: 'bg-blue-500',
+        label: 'Reviewed'
+      },
+      'finalized': {
+        color: 'bg-green-100 text-green-800',
+        dotColor: 'bg-green-500',
+        label: 'Finalized'
+      }
+    };
+
+    const config = statusConfig[status] || statusConfig['draft'];
+
+    return (
+      <div className="flex items-center gap-2">
+        <div className={`w-2 h-2 rounded-full ${config.dotColor}`}></div>
+        <span className={`px-2 py-1 rounded-full text-xs font-medium ${config.color}`}>
+          {config.label}
+        </span>
+      </div>
+    );
   };
 
   return (
@@ -194,7 +202,7 @@ const PayrollTable = () => {
       <div className="rounded-lg inset-shadow-2xs p-4"> 
         {/* Header */}
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-semibold text-gray-900">Employees Payroll</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Payrun Management</h1>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white">
               <Filter className="w-4 h-4 text-gray-500" />
@@ -204,16 +212,17 @@ const PayrollTable = () => {
               <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Find Employee"
+                placeholder="Search Payruns"
                 className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
             <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
-              <UserPlus className="w-4 h-4" />
-              Add Employee
+              <Plus className="w-4 h-4" />
+              Create Payrun
             </button>
           </div>
         </div>
+        
         {/* Table */}
         <div className="bg-white overflow-x-auto">
           <table className="w-full min-w-max">
@@ -226,27 +235,22 @@ const PayrollTable = () => {
                 </th>
                 <th className="px-4 py-3 text-left">
                   <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Period <ChevronDown className="w-3 h-3" />
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left">
+                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Frequency <ChevronDown className="w-3 h-3" />
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left">
+                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Employee Count <ChevronDown className="w-3 h-3" />
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left">
+                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Gross Pay <ChevronDown className="w-3 h-3" />
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left">
-                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Net Pay <ChevronDown className="w-3 h-3" />
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left">
-                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Salary <ChevronDown className="w-3 h-3" />
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left">
-                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Benefits <ChevronDown className="w-3 h-3" />
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left">
-                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Incentives <ChevronDown className="w-3 h-3" />
                   </div>
                 </th>
                 <th className="px-4 py-3 text-left">
@@ -256,12 +260,7 @@ const PayrollTable = () => {
                 </th>
                 <th className="px-4 py-3 text-left">
                   <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Total Cost <ChevronDown className="w-3 h-3" />
-                  </div>
-                </th>
-                <th className="px-4 py-3 text-left">
-                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Upcoming Payroll <ChevronDown className="w-3 h-3" />
+                    Net Pay <ChevronDown className="w-3 h-3" />
                   </div>
                 </th>
                 <th className="px-4 py-3 text-left">
@@ -271,51 +270,50 @@ const PayrollTable = () => {
                 </th>
                 <th className="px-4 py-3 text-left">
                   <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Payslip <ChevronDown className="w-3 h-3" />
+                    Last Updated <ChevronDown className="w-3 h-3" />
+                  </div>
+                </th>
+                <th className="px-4 py-3 text-left">
+                  <div className="flex items-center gap-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    Actions <ChevronDown className="w-3 h-3" />
                   </div>
                 </th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {/* CHANGE THIS LINE: Use currentEmployees instead of employees */}
-              {currentEmployees.map((employee) => (
-                <tr key={employee.employee_id} className="hover:bg-gray-50">
+              {currentPayruns.map((payrun) => (
+                <tr key={payrun.id} className="hover:bg-gray-50">
                   <td className="px-4 py-4">
-                    <div>
-                      <div className="text-xs font-medium text-gray-900">{employee.name}</div>
-                    </div>
+                    <div className="text-xs font-medium text-gray-900">{payrun.payrun_name}</div>
                   </td>
                   <td className="px-4 py-4 text-xs text-gray-900">
-                    {formatCurrency(employee.gross_pay)}
+                    {formatDateRange(payrun.pay_period_start, payrun.pay_period_end)}
                   </td>
                   <td className="px-4 py-4 text-xs text-gray-900">
-                    {formatCurrency(employee.net_pay)}
+                    {capitalizeFrequency(payrun.pay_frequency)}
                   </td>
                   <td className="px-4 py-4 text-xs text-gray-900">
-                    {formatCurrency(employee.salary)}
+                    {payrun.employee_count}
                   </td>
                   <td className="px-4 py-4 text-xs text-gray-900">
-                    {formatCurrency(employee.benefits)}
+                    {formatCurrency(payrun.total_gross_pay)}
                   </td>
                   <td className="px-4 py-4 text-xs text-gray-900">
-                    {formatCurrency(employee.incentives)}
-                  </td>
-                  <td className="px-4 py-4 text-xs text-gray-900">
-                    {formatCurrency(employee.deductions)}
+                    {formatCurrency(payrun.total_deductions)}
                   </td>
                   <td className="px-4 py-4 text-xs text-gray-900 font-medium">
-                    {formatCurrency(employee.total_cost)}
-                  </td>
-                  <td className="px-4 py-4 text-xs text-gray-900">
-                    {formatDate(employee.upcoming_payroll)}
+                    {formatCurrency(payrun.total_net_pay)}
                   </td>
                   <td className="px-4 py-4">
-                    {getStatusBadge(employee.status)}
+                    {getStatusBadge(payrun.status)}
+                  </td>
+                  <td className="px-4 py-4 text-xs text-gray-900">
+                    {formatLastUpdated(payrun.updated_at)}
                   </td>
                   <td className="px-4 py-4">
                     <button className="flex items-center gap-2 px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs rounded-md transition-colors">
                       <Download className="w-3 h-3" />
-                      Download
+                      Export
                     </button>
                   </td>
                 </tr>
@@ -324,7 +322,7 @@ const PayrollTable = () => {
           </table>
         </div>
 
-        {/* ADD THIS ENTIRE PAGINATION SECTION */}
+        {/* Pagination */}
         <div className="flex items-center justify-between mt-6 px-4 py-4 bg-gray-50 rounded-lg">
           <div className="flex items-center gap-4">
             <span className="text-xs text-gray-700">
@@ -396,4 +394,4 @@ const PayrollTable = () => {
   );
 };
 
-export default PayrollTable;
+export default PayrunTable;

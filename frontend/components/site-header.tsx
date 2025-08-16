@@ -1,13 +1,19 @@
+'use client';
+
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
-
+import { usePathname } from "next/navigation";
 import { Search, Mail, ExternalLink, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 
 export function SiteHeader() {
+  
+const pathname = usePathname();
+const endpoint = pathname.split("/").filter(Boolean).pop() || "Dashboard";
+const path = endpoint.charAt(0).toUpperCase() + endpoint.slice(1);
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
       <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
@@ -16,14 +22,14 @@ export function SiteHeader() {
           orientation="vertical"
           className="mx-2 data-[orientation=vertical]:h-4"
         />
-        <h1 className="text-base font-medium">Dashboard</h1>
+        <h1 className="text-base font-medium">{path}</h1>
+
         <div className="ml-auto flex items-center gap-2"></div>
 
         <div className="flex items-center justify-end w-full">
-          
           {/* Right Section */}
           <div className="flex justify-end items-center space-x-4">
-                        <div className="relative w-full">
+            <div className="relative w-full">
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
               <Input
                 type="text"
@@ -88,10 +94,7 @@ export function SiteHeader() {
                 </AvatarFallback>
               </Avatar>
               <Avatar className="h-8 w-8 border-2 border-white">
-                <AvatarImage
-                  src="#"
-                  alt="User 4"
-                />
+                <AvatarImage src="#" alt="User 4" />
                 <AvatarFallback className="bg-gray-200 text-white text-xs border-1 border-gray-200">
                   +10
                 </AvatarFallback>
