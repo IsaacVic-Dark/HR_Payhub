@@ -9,8 +9,7 @@ import {
   SidebarInset,
   SidebarProvider,
 } from "@/components/ui/sidebar"
-import PayrunTable from "@/components/data-table-payrun";
-import {} from "@/services/api/payrun";
+import PayrollTable from "@/components/payruntable";
 
 export default function Page() {
   const pathname = usePathname();
@@ -68,7 +67,7 @@ export default function Page() {
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
               <SectionCards details={cardDetails} />
-              <PayrunTable />
+              <PayrollTable />
             </div>
           </div>
         </div>

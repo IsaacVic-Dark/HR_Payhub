@@ -54,6 +54,11 @@ const data = {
       icon: IconUsers,
     },
     {
+      title: "Leaves",
+      url: "/leaves",
+      icon: IconUsers,
+    },
+    {
       title: "Payments",
       url: "/payments",
       icon: IconUsers,
