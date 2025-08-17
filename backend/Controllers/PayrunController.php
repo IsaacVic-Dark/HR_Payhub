@@ -6,20 +6,56 @@ use App\Services\DB;
 
 class PayrunController {
     public function index($orgId) {
-        $filters = [
-            'status' => $_GET['status'] ?? null,
-            'pay_frequency' => $_GET['pay_frequency'] ?? null,
+        // Define allowed filters
+        $allowedFilters = [
+            'status' => ['draft', 'reviewed', 'finalized'],
+            'pay_frequency' => ['weekly', 'bi-weekly', 'monthly'],
         ];
-        $payruns = DB::table('payruns')->selectAllWhere('organization_id', $orgId);
-        foreach ($filters as $key => $val) {
-            if ($val !== null) {
-                $payruns = array_filter($payruns, fn($p) => $p->$key == $val);
-            }
+
+        // Get pagination parameters
+        $perPage = min((int)($_GET['per_page'] ?? 15), 100);
+        $page = max((int)($_GET['page'] ?? 1), 1);
+
+        // Start building the query with organization_id
+        $query = DB::table('payruns')
+            ->where(['organization_id' => $orgId]);
+
+        // Apply status filter if valid
+        if (isset($_GET['status']) && in_array($_GET['status'], $allowedFilters['status'])) {
+            $query->where(['status' => $_GET['status']]);
         }
+
+        // Apply pay frequency filter if valid
+        if (isset($_GET['pay_frequency']) && in_array($_GET['pay_frequency'], $allowedFilters['pay_frequency'])) {
+            $query->where(['pay_frequency' => $_GET['pay_frequency']]);
+        }
+
+        // Apply search filter
+        if (isset($_GET['search']) && !empty($_GET['search'])) {
+            $query->where(['payrun_name' => $_GET['search']], 'LIKE');
+        }
+
+        // Get total count
+        $total = $query->count()[0]->count ?? 0;
+
+        // Apply pagination and get results
+        $payruns = $query->orderBy('created_at', 'DESC')
+                        ->limit($perPage)
+                        ->offset(($page - 1) * $perPage)
+                        ->get();
+
         return responseJson(
-            data: array_values($payruns),
+            data: $payruns,
             message: "Fetched payruns",
-            metadata: ['dev_mode' => true]
+            metadata: [
+                'pagination' => [
+                    'total' => $total,
+                    'per_page' => $perPage,
+                    'current_page' => $page,
+                    'last_page' => ceil($total / $perPage),
+                ],
+                'dev_mode' => true
+            ]
         );
     }
     public function create($orgId) {

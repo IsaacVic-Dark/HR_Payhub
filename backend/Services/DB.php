@@ -9,18 +9,21 @@ namespace App\Services;
  * 
  * @author Peter Munene <munenenjega@gmail.com>
  */
-final class DB {
+final class DB
+{
     private static $instance;
     private $pdo;
     private $table;
     private $sql;
     private $bindings = [];
 
-    private function __construct($pdo) {
+    private function __construct($pdo)
+    {
         $this->pdo = $pdo;
     }
 
-    public static function getInstance($pdo) {
+    public static function getInstance($pdo)
+    {
         if (self::$instance === null) {
             self::$instance = new self($pdo);
         }
@@ -33,7 +36,8 @@ final class DB {
      * @param string $table The name of the table
      * @return DB
      */
-    public static function table(string $table) {
+    public static function table(string $table)
+    {
         $instance = self::$instance ?? self::getInstance(null);
         $instance->table = $table;
         $instance->sql = '';
@@ -41,7 +45,8 @@ final class DB {
         return $instance;
     }
 
-    public static function transaction(callable $queries) {
+    public static function transaction(callable $queries)
+    {
         $instance = self::$instance ?? self::getInstance(null);
         if ($instance->pdo === null) {
             throw new \Exception("No PDO connection available for transaction");
@@ -66,7 +71,8 @@ final class DB {
      * @return array|bool Results for SELECT or true for UPDATE/DELETE
      * @throws \Exception If query fails
      */
-    public function internal_raw(string $sql, array $bindings = []) {
+    public function internal_raw(string $sql, array $bindings = [])
+    {
         try {
             $statement = $this->pdo->prepare($sql);
             $statement->execute($bindings);
@@ -81,12 +87,14 @@ final class DB {
         }
     }
 
-    public static function raw(string $sql) {
+    public static function raw(string $sql)
+    {
         $instance = self::$instance ?? self::getInstance(null);
         return $instance->internal_raw($sql);
     }
 
-    private function runQuery() {
+    private function runQuery()
+    {
         try {
             $statement = $this->pdo->prepare($this->sql);
             $statement->execute($this->bindings);
@@ -106,7 +114,8 @@ final class DB {
         }
     }
 
-    public function get(array $cols = []) {
+    public function get(array $cols = [])
+    {
         if (!$this->sql || empty($this->table)) {
             throw new \Exception("No table specified for query");
         }
@@ -124,7 +133,8 @@ final class DB {
      *
      * @return array
      */
-    public function selectAll() {
+    public function selectAll()
+    {
         $this->sql = "SELECT * FROM {$this->table} ORDER BY `created_at` DESC";
         return $this->runQuery();
     }
@@ -135,7 +145,8 @@ final class DB {
      * @param array $values Columns to select
      * @return array
      */
-    public function select(array $values) {
+    public function select(array $values)
+    {
         $columns = implode(',', $values);
         $this->sql = "SELECT {$columns} FROM {$this->table}";
         return $this->runQuery();
@@ -147,7 +158,8 @@ final class DB {
      * @param mixed $value ID value
      * @return array
      */
-    public function selectAllWhereID($value) {
+    public function selectAllWhereID($value)
+    {
         $this->sql = "SELECT * FROM {$this->table} WHERE `id` = :id ORDER BY `created_at` DESC";
         $this->bindings = ['id' => $value];
         return $this->runQuery();
@@ -161,7 +173,8 @@ final class DB {
      * @param string $condition Operator (default: =)
      * @return array
      */
-    public function selectAllWhere(string $column, $value, string $condition = '=') {
+    public function selectAllWhere(string $column, $value, string $condition = '=')
+    {
         $this->sql = "SELECT * FROM {$this->table} WHERE `{$column}` {$condition} :value ORDER BY `created_at` DESC";
         $this->bindings = ['value' => $value];
         return $this->runQuery();
@@ -175,28 +188,58 @@ final class DB {
      * @param string $condition Operator (default: =)
      * @return this
      */
-    public function where(array $conditions, string $condition = '='): DB {
-        $this->sql = "SELECT * FROM {$this->table} WHERE ";
-        $this->bindings = [];
-        foreach ($conditions as $column => $value) {
-            if (is_null($value) || $value === '') {
-                continue; // Skip null values
-            }
-            $param = $column . '_ci'; // Suffix param for clarity
-            //only use LOWER for string values
-            if (is_string($value)) {
-                $this->sql .= "`" . strtolower($column) . "` {$condition} LOWER(:{$param}) AND ";
-            } elseif (is_numeric($value)) {
-                $this->sql .= "`{$column}` {$condition} :{$param} AND ";
-            } else {
-                throw new \Exception("Unsupported value type for column {$column}");
-            }
-            // Use LOWER() for both column and parameter
-            $this->bindings[$param] = trim($value);
-        }
-        $this->sql = rtrim($this->sql, " AND ");
-        $this->sql .= ' ORDER BY `created_at` DESC';
+    // Add to your DB class
+    public function orderBy(string $column, string $direction = 'ASC'): DB
+    {
+        $this->sql .= " ORDER BY `{$column}` {$direction}";
+        return $this;
+    }
 
+    public function limit(int $limit): DB
+    {
+        $this->sql .= " LIMIT {$limit}";
+        return $this;
+    }
+
+    public function offset(int $offset): DB
+    {
+        $this->sql .= " OFFSET {$offset}";
+        return $this;
+    }
+
+    public function where(array $conditions, string $operator = '='): DB
+    {
+        // Initialize SQL if not already set
+        if (empty($this->sql)) {
+            $this->sql = "SELECT * FROM {$this->table}";
+            $this->bindings = [];
+        }
+
+        // Check if we need to add WHERE or AND
+        if (strpos($this->sql, 'WHERE') === false) {
+            $this->sql .= " WHERE ";
+        } else {
+            $this->sql .= " AND ";
+        }
+
+        $whereParts = [];
+        foreach ($conditions as $column => $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            $param = str_replace('.', '_', $column) . '_' . count($this->bindings);
+
+            if ($operator === 'LIKE') {
+                $whereParts[] = "`{$column}` LIKE :{$param}";
+                $this->bindings[$param] = "%{$value}%";
+            } else {
+                $whereParts[] = "`{$column}` {$operator} :{$param}";
+                $this->bindings[$param] = $value;
+            }
+        }
+
+        $this->sql .= implode(' AND ', $whereParts);
         return $this;
     }
 
@@ -207,7 +250,8 @@ final class DB {
      * @param array $conditions Array of [column, value] pairs
      * @return array
      */
-    public function selectWhere(array $values, array $condition) {
+    public function selectWhere(array $values, array $condition)
+    {
         $columns = implode(',', $values);
         list($column, $value) = $condition;
         $this->sql = "SELECT {$columns} FROM {$this->table} WHERE `{$column}` = :value";
@@ -223,7 +267,8 @@ final class DB {
      * @param mixed $isValue Value for WHERE clause
      * @return bool
      */
-    public function update(array $dataToUpdate, string $where, $isValue) {
+    public function update(array $dataToUpdate, string $where, $isValue)
+    {
         $setParts = [];
         $bindings = [];
         foreach ($dataToUpdate as $key => $value) {
@@ -244,7 +289,8 @@ final class DB {
      * @param mixed $isValue Value for WHERE clause
      * @return bool
      */
-    public function delete(string $where, $isValue) {
+    public function delete(string $where, $isValue)
+    {
         $this->sql = "DELETE FROM {$this->table} WHERE `{$where}` = :value";
         $this->bindings = ['value' => $isValue];
         return $this->runQuery();
@@ -256,7 +302,8 @@ final class DB {
      * @param array $parameters Key-value pairs to insert
      * @return void
      */
-    public function insert(array $parameters) {
+    public function insert(array $parameters)
+    {
         $columns = implode(', ', array_keys($parameters));
         $placeholders = ':' . implode(', :', array_keys($parameters));
         $this->sql = "INSERT INTO {$this->table} ({$columns}) VALUES ({$placeholders})";
@@ -265,7 +312,7 @@ final class DB {
             $statement = $this->pdo->prepare($this->sql);
             $statement->execute($this->bindings);
         } catch (\Exception $e) {
-            throw new \Exception("Insert error: " . $e->getMessage() 
+            throw new \Exception("Insert error: " . $e->getMessage()
                 . " :QUERY:" . $this->getDebugFullQuery($this->sql, $this->bindings));
         }
     }
@@ -278,7 +325,8 @@ final class DB {
      * @param string $pk Primary key
      * @return array
      */
-    public function join(string $table2, string $fk, string $pk) {
+    public function join(string $table2, string $fk, string $pk)
+    {
         $this->sql = "SELECT * FROM `{$this->table}` INNER JOIN `{$table2}` ON {$this->table}.{$fk} = {$table2}.{$pk}";
         return $this->runQuery();
     }
@@ -289,7 +337,8 @@ final class DB {
      * @param array $condition [column, value]
      * @return array
      */
-    public function countWhere(array $condition) {
+    public function countWhere(array $condition)
+    {
         if (count($condition) !== 1) {
             throw new \Exception("Condition must have exactly one key-value pair");
         }
@@ -300,9 +349,26 @@ final class DB {
         $this->bindings = ['value' => $value];
         return $this->runQuery();
     }
-    public function count() {
-        $this->sql = "SELECT COUNT(*) AS count FROM {$this->table}";
-        return $this->runQuery();
+    public function count()
+    {
+        // Store original SQL and bindings
+        $originalSql = $this->sql;
+        $originalBindings = $this->bindings;
+
+        // If we have a WHERE clause, modify it for COUNT
+        if (strpos($originalSql, 'WHERE') !== false) {
+            $countSql = "SELECT COUNT(*) AS count " . substr($originalSql, strpos($originalSql, 'FROM'));
+        } else {
+            $countSql = "SELECT COUNT(*) AS count FROM {$this->table}";
+        }
+
+        try {
+            $statement = $this->pdo->prepare($countSql);
+            $statement->execute($originalBindings);
+            return $statement->fetchAll(\PDO::FETCH_OBJ);
+        } catch (\Exception $e) {
+            throw new \Exception("Count error: " . $e->getMessage());
+        }
     }
 
     /**
@@ -311,11 +377,13 @@ final class DB {
      * @param string $sql SQL query
      * @return bool
      */
-    private function isUpdateOrDeleteQuery(string $sql): bool {
+    private function isUpdateOrDeleteQuery(string $sql): bool
+    {
         return stripos($sql, 'update') !== false || stripos($sql, 'delete') !== false;
     }
 
-    static public function getDebugFullQuery($query, $params = []) {
+    static public function getDebugFullQuery($query, $params = [])
+    {
         if (is_array($params) && count($params)) {
 
             $search = [];

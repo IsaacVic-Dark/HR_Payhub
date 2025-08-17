@@ -143,7 +143,11 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white">
               <Filter className="w-4 h-4 text-gray-500" />
-              <span className="text-xs text-gray-700">Filters</span>
+              <span className="text-xs text-gray-700">Status</span>
+            </div>
+            <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <span className="text-xs text-gray-700">Frequency</span>
             </div>
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
