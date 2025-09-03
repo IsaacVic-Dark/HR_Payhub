@@ -34,6 +34,14 @@ interface PayrunApiResponse {
   };
 }
 
+interface PayrunFilters {
+  status?: string;
+  search?: string;
+  pay_frequency?: string;
+  page?: number;
+  limit?: number;
+}
+
 class PayrunAPI {
   private async handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
     try {
@@ -60,9 +68,32 @@ class PayrunAPI {
     }
   }
 
-  async getPayruns(organizationId: string): Promise<ApiResponse<PayrunApiResponse>> {
+  private buildQueryParams(filters: PayrunFilters): string {
+    const params = new URLSearchParams();
+    
+    if (filters.status) {
+      params.append('status', filters.status);
+    }
+    if (filters.search) {
+      params.append('search', filters.search);
+    }
+    if (filters.pay_frequency) {
+      params.append('pay_frequency', filters.pay_frequency);
+    }
+    if (filters.page) {
+      params.append('page', filters.page.toString());
+    }
+    if (filters.limit) {
+      params.append('limit', filters.limit.toString());
+    }
+
+    return params.toString();
+  }
+
+  async getPayruns(organizationId: string, filters: PayrunFilters = {}): Promise<ApiResponse<PayrunApiResponse>> {
     try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payruns`;
+      const queryParams = this.buildQueryParams(filters);
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payruns${queryParams ? `?${queryParams}` : ''}`;
 
       const response = await fetch(url, {
         method: "GET",
@@ -84,4 +115,5 @@ export type {
   PayrunType,
   ApiResponse,
   PayrunApiResponse,
+  PayrunFilters,
 };

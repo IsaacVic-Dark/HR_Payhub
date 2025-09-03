@@ -7,6 +7,7 @@ use App\Controllers\UserController;
 use App\Controllers\EmployeeController;
 use App\Controllers\PayrunController;
 use App\Controllers\PayrunDetailController;
+use App\Controllers\LeaveController;
 
 
 Router::resource('api/v1/organizations', OrganizationController::class);
@@ -14,6 +15,8 @@ Router::resource('api/v1/organizations/{id}/configs', OrganizationConfigControll
 Router::resource('api/v1/users', UserController::class);
 Router::resource('api/v1/organizations/{id}/employees', EmployeeController::class);
 Router::resource('api/v1/organizations/{id}/payruns', PayrunController::class);
+// Router::resource('api/v1/organizations/{id}/leaves', LeaveController::class);
+Router::resource('api/v1/organizations/leaves', LeaveController::class);
 Router::resource('api/v1/payruns/{id}/details', PayrunDetailController::class);
 
 

@@ -1,8 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Filter, Search, Plus, Download, ChevronDown } from 'lucide-react';
-import { payrunAPI, PayrunType } from '@/services/api/payrun';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { Filter, Search, Plus, Download, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
+import { payrunAPI, PayrunType, PayrunFilters } from '@/services/api/payrun';
 
 interface PayrunTableProps {
   organizationId: string;
@@ -12,12 +12,66 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
   const [payruns, setPayruns] = useState<PayrunType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  
+  // Filter and pagination state
+  const [filters, setFilters] = useState<PayrunFilters>({
+    page: 1,
+    limit: 10
+  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  
+  // Filter dropdown states
+  const [showStatusFilter, setShowStatusFilter] = useState(false);
+  const [showFrequencyFilter, setShowFrequencyFilter] = useState(false);
+  
+  // Refs for click outside
+  const statusFilterRef = useRef<HTMLDivElement>(null);
+  const frequencyFilterRef = useRef<HTMLDivElement>(null);
+
+  // Handle click outside to close dropdowns
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (statusFilterRef.current && !statusFilterRef.current.contains(event.target as Node)) {
+        setShowStatusFilter(false);
+      }
+      if (frequencyFilterRef.current && !frequencyFilterRef.current.contains(event.target as Node)) {
+        setShowFrequencyFilter(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const fetchPayruns = useCallback(async () => {
+    try {
+      setLoading(true);
+      const response = await payrunAPI.getPayruns("51", filters);
+      
+      if (response.success && response.data) {
+        setPayruns(response.data.data);
+        // Assuming your API returns pagination metadata
+        if (response.data.metadata) {
+          setTotalItems(response.data.metadata.total || response.data.data.length);
+          setTotalPages(response.data.metadata.totalPages || Math.ceil(response.data.data.length / (filters.limit || 10)));
+        }
+      } else {
+        setError(response.error || 'Failed to fetch payruns');
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'An error occurred');
+    } finally {
+      setLoading(false);
+    }
+  }, [filters]);
 
   useEffect(() => {
     const fetchPayruns = async () => {
       try {
         setLoading(true);
-        const response = await payrunAPI.getPayruns(51);
+        const response = await payrunAPI.getPayruns(organizationId);
         
         if (response.success && response.data) {
           setPayruns(response.data.data);
@@ -143,11 +197,7 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white">
               <Filter className="w-4 h-4 text-gray-500" />
-              <span className="text-xs text-gray-700">Status</span>
-            </div>
-            <div className="flex items-center gap-2 px-3 py-2 border border-gray-300 rounded-lg bg-white">
-              <Filter className="w-4 h-4 text-gray-500" />
-              <span className="text-xs text-gray-700">Frequency</span>
+              <span className="text-xs text-gray-700">Filters</span>
             </div>
             <div className="relative">
               <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
@@ -169,7 +219,7 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
           {payruns.length === 0 ? (
             <div className="flex items-center justify-center py-12">
               <div className="text-center">
-                <p className="text-red-500 font-medium">No payruns found</p>
+                <p className="text-gray-500 font-medium">No payruns found</p>
                 <p className="text-gray-400 text-sm mt-1">Create your first payrun to get started</p>
               </div>
             </div>
@@ -271,6 +321,92 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
             </table>
           )}
         </div>
+
+        {/* Pagination */}
+        {payruns.length > 0 && (
+          <div className="flex items-center justify-between mt-6 px-4 py-4 bg-gray-50 rounded-lg">
+            <div className="flex items-center gap-4">
+              <span className="text-xs text-gray-700">
+                Showing {((filters.page || 1) - 1) * (filters.limit || 10) + 1} to {Math.min((filters.page || 1) * (filters.limit || 10), totalItems)} of {totalItems} results
+              </span>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-gray-700">Rows per page:</span>
+                <select
+                  value={filters.limit || 10}
+                  onChange={(e) => handleLimitChange(Number(e.target.value))}
+                  className="px-3 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={20}>20</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1">
+              {/* Previous Button */}
+              <button
+                onClick={() => handlePageChange((filters.page || 1) - 1)}
+                disabled={(filters.page || 1) === 1}
+                className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors ${
+                  (filters.page || 1) === 1 
+                    ? 'text-gray-400 cursor-not-allowed' 
+                    : 'text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                <ChevronLeft className="w-3 h-3" />
+                Previous
+              </button>
+
+              {/* Page Numbers */}
+              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                const currentPage = filters.page || 1;
+                let pageNumber;
+                
+                if (totalPages <= 5) {
+                  pageNumber = i + 1;
+                } else if (currentPage <= 3) {
+                  pageNumber = i + 1;
+                } else if (currentPage >= totalPages - 2) {
+                  pageNumber = totalPages - 4 + i;
+                } else {
+                  pageNumber = currentPage - 2 + i;
+                }
+                
+                return (
+                  <button
+                    key={pageNumber}
+                    onClick={() => handlePageChange(pageNumber)}
+                    className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                      currentPage === pageNumber
+                        ? 'bg-blue-600 text-white'
+                        : 'text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {pageNumber}
+                  </button>
+                );
+              })}
+
+              {/* Next Button */}
+              <button
+                onClick={() => handlePageChange((filters.page || 1) + 1)}
+                disabled={(filters.page || 1) === totalPages}
+                className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors ${
+                  (filters.page || 1) === totalPages 
+                    ? 'text-gray-400 cursor-not-allowed' 
+                    : 'text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                Next
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

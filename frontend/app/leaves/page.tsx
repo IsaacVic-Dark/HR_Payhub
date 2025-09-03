@@ -9,43 +9,43 @@ import {
   SidebarInset,
   SidebarProvider,
 } from "@/components/ui/sidebar"
-import PayrunTable from "@/components/data-table-payrun";
+import LeaveTable from "@/components/data-table-leaves";
 
 export default function Page() {
   const pathname = usePathname();
 
   const cardDetails: CardDetail[] = [
     {
-      title: "Gross Pay",
-      value: "Kshs 50,000.00",
+      title: "Sick Leave",
+      value: "12",
       change: "",
       changeIcon: null,
-      description: "Total amount before deductions.",
-      footerText: "Covers all employees in this payrun",
+      description: "Number of sick leave requests submitted.",
+      footerText: "Track employee health-related absences",
     },
     {
-      title: "Deductions",
-      value: "Kshs 5,000.00",
+      title: "Casual Leave",
+      value: "8",
       change: "",
       changeIcon: null,
-      description: "Statutory & company deductions applied.",
-      footerText: "Includes taxes and other withholdings",
+      description: "Casual leaves taken for short-term needs.",
+      footerText: "Covers brief personal time off",
     },
     {
-      title: "Net Pay",
-      value: "Kshs 45,000.00",
+      title: "Annual Leave",
+      value: "20",
       change: "",
       changeIcon: null,
-      description: "Final payout after deductions.",
-      footerText: "Net salary disbursed to employees",
+      description: "Total annual leave applications.",
+      footerText: "Reflects planned vacations and holidays",
     },
     {
-      title: "Upcoming Payrun",
-      value: "September 2025",
+      title: "Paternity Leave",
+      value: "3",
       change: "",
       changeIcon: null,
-      description: "Scheduled payroll for the next period.",
-      footerText: "Prepare in advance to avoid delays",
+      description: "Paternity leave taken for new fathers.",
+      footerText: "Supports work-life balance for families",
     },
   ];
 
@@ -67,7 +67,7 @@ export default function Page() {
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
               <SectionCards details={cardDetails} />
-              <PayrunTable />
+              <LeaveTable />
             </div>
           </div>
         </div>
