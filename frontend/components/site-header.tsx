@@ -1,19 +1,63 @@
 'use client';
 
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { usePathname } from "next/navigation";
-import { Search, Mail, ExternalLink, UserPlus } from "lucide-react";
+import { Search, BellDot, Bell, ExternalLink, UserPlus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
+import { NotificationModal } from "@/components/NotificationModal";
+import { notificationService } from "@/services/api/notification";
 
 export function SiteHeader() {
   
 const pathname = usePathname();
 const endpoint = pathname.split("/").filter(Boolean).pop() || "Dashboard";
 const path = endpoint.charAt(0).toUpperCase() + endpoint.slice(1);
+
+// const NotificationButton: React.FC = () => {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  // Function to fetch notification count
+  const fetchUnreadCount = async () => {
+    if (loading) return;
+    
+    setLoading(true);
+    try {
+      const response = await notificationService.getNotifications();
+      setUnreadCount(response.unread_count);
+    } catch (error) {
+      console.error('Error fetching notification count:', error);
+      setUnreadCount(0);
+    } finally {
+      setLoading(false);
+    }
+  };
+  // }
+
+  // Fetch unread count on component mount
+  useEffect(() => {
+    fetchUnreadCount();
+  }, []);
+
+  // Handle notification read event
+  const handleNotificationRead = () => {
+    fetchUnreadCount();
+  };
+
+  // Handle button click
+  const handleButtonClick = () => {
+    setIsModalOpen(true);
+  };
+
+  const hasUnreadNotifications = unreadCount > 0;
+
+
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
       <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
@@ -37,14 +81,35 @@ const path = endpoint.charAt(0).toUpperCase() + endpoint.slice(1);
                 className="pl-10 pr-4 py-2 w-full bg-gray-50 border-gray-200 focus:bg-white focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
               />
             </div>
-            {/* Mail Icon */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-            >
-              <Mail className="h-5 w-5" />
-            </Button>
+            {/* BellDot Icon */}
+       <Button
+        variant="ghost"
+        size="icon"
+        className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 relative"
+        onClick={handleButtonClick}
+      >
+        {hasUnreadNotifications ? (
+          <BellDot className="h-5 w-5" />
+        ) : (
+          <Bell className="h-5 w-5" />
+        )}
+        
+        {/* Notification badge for unread count */}
+        {hasUnreadNotifications && (
+          <Badge
+            variant="destructive"
+            className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs flex items-center justify-center min-w-[20px]"
+          >
+            {unreadCount > 99 ? '99+' : unreadCount}
+          </Badge>
+        )}
+      </Button>
+
+            <NotificationModal
+        open={isModalOpen}
+        onOpenChange={setIsModalOpen}
+        onNotificationRead={handleNotificationRead}
+      />
 
             {/* External Link Icon */}
             <Button

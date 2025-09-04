@@ -70,34 +70,34 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<
       string,
-      { color: string; dotColor: string; label: string }
+      { color: string; label: string }
     > = {
       pending: {
         color: 'bg-yellow-100 text-yellow-800',
-        dotColor: 'bg-yellow-500',
+        // dotColor: 'bg-yellow-500',
         label: 'Pending',
       },
       approved: {
         color: 'bg-green-100 text-green-800',
-        dotColor: 'bg-green-500',
+        // dotColor: 'bg-green-500',
         label: 'Approved',
       },
       rejected: {
         color: 'bg-red-100 text-red-800',
-        dotColor: 'bg-red-500',
+        // dotColor: 'bg-red-500',
         label: 'Rejected',
       },
     };
 
     const config = statusConfig[status] || {
       color: 'bg-gray-100 text-gray-800',
-      dotColor: 'bg-gray-400',
+      // dotColor: 'bg-gray-400',
       label: status,
     };
 
     return (
       <div className="flex items-center gap-2">
-        <div className={`w-2 h-2 rounded-full ${config.dotColor}`}></div>
+        {/* <div className={`w-2 h-2 rounded-full ${config.dotColor}`}></div> */}
         <span
           className={`px-2 py-1 rounded-full text-xs font-medium ${config.color}`}
         >
