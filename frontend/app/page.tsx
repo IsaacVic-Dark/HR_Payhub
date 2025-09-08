@@ -1,8 +1,11 @@
 import Image from "next/image";
-import Page from "./dashboard/page";
+// import ProtectedRoute from '@/lib/ProtectedRoute';
+import PayrollLanding from "./landing/page";
 
 export default function Home() {
   return (
-      <Page />
+    // <ProtectedRoute>
+      <PayrollLanding />
+    // </ProtectedRoute>      
   );
 }

@@ -7,15 +7,26 @@ use App\Services\Router;
  * 
  * this is an api endpoint in php for our payhub app
  * 
- * @author Peter Munene <munenenjega@gmail.com>
  */
 
 const BASE_PATH = __DIR__ . '/';
 
 require_once __DIR__ . '/helpers/init.php';
 
-header("Access-Control-Allow-Origin: *"); // this will be set to the domain of the frontend app in production
-header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+// Handle CORS preflight OPTIONS requests first
+if (request_method() === 'OPTIONS') {
+    header("Access-Control-Allow-Origin: http://localhost:3000");
+    header("Access-Control-Allow-Methods: GET, POST, PUT, DELETE, OPTIONS");
+    header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
+    header("Access-Control-Allow-Credentials: true");
+    header("Access-Control-Max-Age: 86400"); // 24 hours
+    http_response_code(200);
+    exit(0);
+}
+
+// Set CORS headers for all responses
+header("Access-Control-Allow-Origin: http://localhost:3000");
+header("Access-Control-Allow-Credentials: true");
 header("Access-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With");
 
 //return html

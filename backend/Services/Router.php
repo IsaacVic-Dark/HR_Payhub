@@ -10,6 +10,7 @@ final class Router {
         'PUT' => [],
         'PATCH' => [],
         'DELETE' => [],
+        'OPTIONS' => [],
     ];
     public static $prefix = '';
 

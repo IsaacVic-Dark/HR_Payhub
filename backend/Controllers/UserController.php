@@ -45,7 +45,8 @@ class UserController {
         if (isset($data['user_type']) && !in_array($data['user_type'], $allowedTypes)) {
             return responseJson(null, "Invalid user_type", 400);
         }
-        $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
+        // $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
+        $passwordHash = $data['password'];
         $inserted = DB::table('users')->insert([
             'organization_id' => $data['organization_id'],
             'username' => $data['username'],
