@@ -12,7 +12,7 @@ class OrganizationController {
             metadata: ['dev_mode' => true]
         );
     }
-    public function create() {
+    public function store() {
         // Handle file upload for logo
         $logoUrl = handleFileUpload('logo');
 
@@ -20,7 +20,8 @@ class OrganizationController {
             'name' => 'required,string',
             'location' => 'required,string',
             // logo_url is not required if file is uploaded
-            'logo_url' => $logoUrl ? '' : 'required,string',
+            'logo_url' => $logoUrl ? '' : 'string',
+            'domain' => 'string',
             'currency' => 'string'
         ]);
 
@@ -30,6 +31,7 @@ class OrganizationController {
         $inserted = DB::table('organizations')->insert([
             'name' => $data['name'],
             'location' => $data['location'],
+            'domain' => $data['domain'],
             'logo_url' => $finalLogoUrl,
             'currency' => strtoupper($data['currency']),
         ]);

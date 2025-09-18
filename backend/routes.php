@@ -13,15 +13,15 @@ use App\Controllers\NotificationController;
 use App\Controllers\AuthController; // Add this line
 
 // In your routes.php, add this at the end:
-Router::options('api/v1/{any}', function($any) {
-    http_response_code(200);
-    exit;
-});
+// Router::options('api/v1/{any}', function($any) {
+//     http_response_code(200);
+//     exit;
+// });
 
-Router::options('api/v1/{any}/{id}', function($any, $id) {
-    http_response_code(200);
-    exit;
-});
+// Router::options('api/v1/{any}/{id}', function($any, $id) {
+//     http_response_code(200);
+//     exit;
+// });
 
 // Add authentication routes
 Router::post('api/v1/auth/login', AuthController::class . '@login');
