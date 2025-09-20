@@ -87,10 +87,10 @@ final class DB
         }
     }
 
-    public static function raw(string $sql)
+    public static function raw(string $sql, array $bindings = [])
     {
         $instance = self::$instance ?? self::getInstance(null);
-        return $instance->internal_raw($sql);
+        return $instance->internal_raw($sql, $bindings);
     }
 
     private function runQuery()

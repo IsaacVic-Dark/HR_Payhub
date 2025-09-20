@@ -5,6 +5,17 @@ import { Filter, Search, Plus, ChevronDown, ChevronLeft, ChevronRight, MapPin, B
 import { organizationAPI, Organization, OrganizationFilters } from '@/api/organization';
 import OrganizationDrawer from '@/app/organization/drawer';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 
 interface OrganizationTableProps {
   className?: string;
@@ -37,8 +48,10 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
     isOpen: boolean;
     organizationId?: number;
     organizationName?: string;
+    isDeleting?: boolean;
   }>({
-    isOpen: false
+    isOpen: false,
+    isDeleting: false
   });
 
   const fetchOrganizations = useCallback(async () => {
@@ -51,7 +64,7 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
         if (response.data.metadata) {
           setTotalItems(response.data.metadata.total || response.data.data.length);
           setTotalPages(
-            response.data.metadata.totalPages ||
+            response.data.metadata.total_pages ||
               Math.ceil(response.data.data.length / (filters.limit || 10))
           );
         }
@@ -117,20 +130,22 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
     setDeleteConfirm({
       isOpen: true,
       organizationId,
-      organizationName
+      organizationName,
+      isDeleting: false
     });
   };
 
   const closeDeleteConfirm = () => {
     setDeleteConfirm({
-      isOpen: false
+      isOpen: false,
+      isDeleting: false
     });
   };
 
   const handleDelete = async () => {
     if (!deleteConfirm.organizationId) return;
 
-    console.log("Organization id :", deleteConfirm.organizationId);
+    setDeleteConfirm(prev => ({ ...prev, isDeleting: true }));
 
     try {
       const response = await organizationAPI.deleteOrganization(deleteConfirm.organizationId);
@@ -139,9 +154,11 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
         closeDeleteConfirm();
       } else {
         setError(response.error || 'Failed to delete organization');
+        setDeleteConfirm(prev => ({ ...prev, isDeleting: false }));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete organization');
+      setDeleteConfirm(prev => ({ ...prev, isDeleting: false }));
     }
   };
 
@@ -195,7 +212,7 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
           </div>
 
           {/* Table */}
-          <div className="bg-white overflow-x-auto ">
+          <div className="bg-white overflow-x-auto">
             {organizations.length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-center">
@@ -213,16 +230,19 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
                       Organization
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Location
+                      Type & Registration
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Domain
+                      Location & Contact
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Currency
+                      Financial Details
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Created At
+                      Payroll Info
+                    </th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                      Status & Date
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                       Actions
@@ -233,30 +253,64 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
                   {organizations.map((org) => (
                     <tr key={org.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className="ml-4">
-                            <div className="text-sm font-medium text-gray-900">{org.name}</div>
+                        <div className="flex flex-col">
+                          <div className="text-sm font-medium text-gray-900">{org.name}</div>
+                          <div className="text-xs text-gray-500">
+                            <Globe className="w-3 h-3 inline mr-1" />
+                            {org.domain}
                           </div>
+                          <div className="text-xs text-gray-500">KRA: {org.kra_pin}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center text-sm text-gray-900">
-                          {org.location}
+                        <div className="flex flex-col">
+                          <div className="text-sm text-gray-900">{org.legal_type}</div>
+                          <div className="text-xs text-gray-500">{org.registration_number}</div>
+                          <div className="text-xs text-gray-500">Prefix: {org.payroll_number_prefix}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center text-sm text-gray-900">
-                          {org.domain}
+                        <div className="flex flex-col">
+                          <div className="text-sm text-gray-900">
+                            <MapPin className="w-3 h-3 inline mr-1" />
+                            {org.location}
+                          </div>
+                          <div className="text-xs text-gray-500">{org.primary_phone}</div>
+                          <div className="text-xs text-gray-500 truncate max-w-32">{org.official_email}</div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center text-sm text-gray-900">
-                          {org.currency}
+                        <div className="flex flex-col">
+                          <div className="text-sm text-gray-900">
+                            <Coins className="w-3 h-3 inline mr-1" />
+                            {org.currency}
+                          </div>
+                          <div className="text-xs text-gray-500">{org.bank_account_name}</div>
+                          <div className="text-xs text-gray-500">{org.bank_account_number}</div>
+                          <div className="text-xs text-gray-500">{org.bank_branch}</div>
                         </div>
                       </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                        <div className="flex items-center">
-                          {formatDate(org.created_at)}
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <div className="text-sm text-gray-900">{org.payroll_schedule}</div>
+                          <div className="text-xs text-gray-500">Pay Day: {org.default_payday}</div>
+                          <div className="text-xs text-gray-500">NSSF: {org.nssf_number}</div>
+                          <div className="text-xs text-gray-500">NHIF: {org.nhif_number}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex flex-col">
+                          <div className={`text-xs px-2 py-1 rounded-full w-fit ${
+                            org.is_active 
+                              ? 'bg-green-100 text-green-800' 
+                              : 'bg-red-100 text-red-800'
+                          }`}>
+                            {org.is_active ? 'Active' : 'Inactive'}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-1">
+                            <Calendar className="w-3 h-3 inline mr-1" />
+                            {formatDate(org.created_at)}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -275,13 +329,38 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
                           >
                             <Edit className="w-3 h-3" />
                           </button>
-                          <button 
-                            onClick={() => openDeleteConfirm(org.id, org.name)}
-                            className="flex items-center gap-1 px-2 py-1 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
-                            title="Delete organization"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <button 
+                                className="flex items-center gap-1 px-2 py-1 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
+                                title="Delete organization"
+                              >
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Organization</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete <strong>{org.name}</strong>? This action cannot be undone and will permanently remove all associated data including employees, payroll records, and organizational settings.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => {
+                                    openDeleteConfirm(org.id, org.name);
+                                  }}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  {deleteConfirm.isDeleting && deleteConfirm.organizationId === org.id 
+                                    ? 'Deleting...' 
+                                    : 'Delete'
+                                  }
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </div>
                       </td>
                     </tr>
@@ -311,6 +390,7 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
                     <option value={10}>10</option>
                     <option value={20}>20</option>
                     <option value={25}>25</option>
+                    <option value={50}>50</option>
                   </select>
                 </div>
               </div>
@@ -320,7 +400,7 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
                 <button
                   onClick={() => handlePageChange((filters.page || 1) - 1)}
                   disabled={(filters.page || 1) === 1}
-                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors ${
+                  className={`flex items-center gap-1 px-3 py-1 text-xs rounded-md transition-colors ${
                     (filters.page || 1) === 1
                       ? 'text-gray-400 cursor-not-allowed'
                       : 'text-gray-700 hover:bg-gray-200'
@@ -331,25 +411,25 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
                 </button>
 
                 {/* Page Numbers */}
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
                   const currentPage = filters.page || 1;
                   let pageNumber;
 
-                  if (totalPages <= 5) {
+                  if (totalPages <= 7) {
                     pageNumber = i + 1;
-                  } else if (currentPage <= 3) {
+                  } else if (currentPage <= 4) {
                     pageNumber = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNumber = totalPages - 4 + i;
+                  } else if (currentPage >= totalPages - 3) {
+                    pageNumber = totalPages - 6 + i;
                   } else {
-                    pageNumber = currentPage - 2 + i;
+                    pageNumber = currentPage - 3 + i;
                   }
 
                   return (
                     <button
                       key={pageNumber}
                       onClick={() => handlePageChange(pageNumber)}
-                      className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                      className={`px-3 py-1 text-xs rounded-md transition-colors ${
                         currentPage === pageNumber
                           ? 'bg-purple-600 text-white'
                           : 'text-gray-700 hover:bg-gray-200'
@@ -360,11 +440,16 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
                   );
                 })}
 
+                {/* Show dots if there are many pages */}
+                {totalPages > 7 && (filters.page || 1) < totalPages - 3 && (
+                  <span className="px-2 py-1 text-xs text-gray-500">...</span>
+                )}
+
                 {/* Next Button */}
                 <button
                   onClick={() => handlePageChange((filters.page || 1) + 1)}
                   disabled={(filters.page || 1) === totalPages}
-                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors ${
+                  className={`flex items-center gap-1 px-3 py-1 text-xs rounded-md transition-colors ${
                     (filters.page || 1) === totalPages
                       ? 'text-gray-400 cursor-not-allowed'
                       : 'text-gray-700 hover:bg-gray-200'
@@ -387,56 +472,6 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
         organizationId={drawerState.organizationId}
         onSuccess={handleDrawerSuccess}
       />
-
-      {/* Delete Confirmation Modal */}
-      {deleteConfirm.isOpen && (
-        <div className="fixed inset-0 z-50 overflow-y-auto">
-          <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-            {/* Background overlay */}
-            <div 
-              className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
-              onClick={closeDeleteConfirm}
-            />
-
-            {/* Modal panel */}
-            <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-              <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-                <div className="sm:flex sm:items-start">
-                  <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
-                    <Trash2 className="h-6 w-6 text-red-600" />
-                  </div>
-                  <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                    <h3 className="text-lg leading-6 font-medium text-gray-900">
-                      Delete Organization
-                    </h3>
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-500">
-                        Are you sure you want to delete "{deleteConfirm.organizationName}"? This action cannot be undone and will permanently remove all associated data.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                <button
-                  type="button"
-                  onClick={handleDelete}
-                  className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
-                >
-                  Delete
-                </button>
-                <button
-                  type="button"
-                  onClick={closeDeleteConfirm}
-                  className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   );
 };

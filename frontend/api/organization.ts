@@ -43,16 +43,16 @@ class OrganizationAPI {
   async getOrganizations(filters: OrganizationFilters = {}): Promise<OrganizationResponse> {
     try {
       const queryParams = new URLSearchParams();
-      
+
       if (filters.page) queryParams.append('page', filters.page.toString());
       if (filters.limit) queryParams.append('limit', filters.limit.toString());
       if (filters.search) queryParams.append('search', filters.search);
       if (filters.location) queryParams.append('location', filters.location);
       if (filters.currency) queryParams.append('currency', filters.currency);
 
-      const url = `${this.baseURL}/organizations`;
-      // const url = `${this.baseURL}/organizations${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
-      
+      // Fix: Actually append the query parameters to the URL
+      const url = `${this.baseURL}/organizations${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+
       const response = await fetch(url, {
         method: 'GET',
         headers: {
@@ -65,7 +65,7 @@ class OrganizationAPI {
       }
 
       const data = await response.json();
-      
+
       return {
         success: true,
         data: {
@@ -96,7 +96,7 @@ class OrganizationAPI {
       }
 
       const data = await response.json();
-      
+
       return {
         success: true,
         data: {
@@ -127,7 +127,7 @@ class OrganizationAPI {
       }
 
       const data = await response.json();
-      
+
       return {
         success: true,
         data: {
@@ -158,7 +158,7 @@ class OrganizationAPI {
       }
 
       const data = await response.json();
-      
+
       return {
         success: true,
         data: {

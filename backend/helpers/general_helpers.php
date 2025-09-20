@@ -291,29 +291,45 @@ function time_ago($datetime, $full = false) {
     return $string ? implode(', ', $string) . ' ago' : 'just now';
 }
 
-function responseJson($data, string $message, int $code = 200, array $metadata = []) {
-    if (str_contains($message, 'error')) {
-        $code = 500;
+function responseJson(
+    $data,
+    string $message,
+    int $code = 200,
+    array $metadata = [],
+    bool $success = null
+) {
+    // Decide success if not explicitly set
+    if ($success === null) {
+        $success = $code >= 200 && $code < 300;
     }
+
     http_response_code($code);
 
     echo json_encode([
+        'success' => $success,
         'data' => $data,
         'message' => $message,
         'metadata' => $metadata ?: null
     ]);
     exit(0);
 }
+
 function getInputData(): array {
     $input = file_get_contents('php://input');
     $json = json_decode($input, true);
 
     if (json_last_error() !== JSON_ERROR_NONE) {
-        responseJson(null, 'Invalid JSON input.', 400);
+        responseJson(
+            data: null,
+            message: 'Invalid JSON input.',
+            code: 400,
+            success: false
+        );
     }
 
     return is_array($json) ? $json : [];
 }
+
 
 function validate(array $rules): array {
     $input = array_merge($_GET, $_POST, getInputData());
@@ -379,11 +395,17 @@ function validate(array $rules): array {
     }
 
     if (!empty($errors)) {
-        responseJson($errors, 'Validation error', 400);
+        responseJson(
+            data: $errors,
+            message: 'Validation error',
+            code: 400,
+            success: false
+        );
     }
 
     return $sanitized;
 }
+
 
 function handleFileUpload(string $key, string $uploadDir = BASE_PATH . 'uploads/'): ?string {
     if (!isset($_FILES[$key]) || $_FILES[$key]['error'] !== UPLOAD_ERR_OK) {

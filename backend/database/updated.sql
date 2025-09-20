@@ -183,15 +183,49 @@ CREATE TABLE IF NOT EXISTS `notifications` (
 -- Dumping structure for table payhub.organizations
 CREATE TABLE IF NOT EXISTS `organizations` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL,
-  `location` varchar(255) DEFAULT NULL,
+  `tenant_id` int DEFAULT NULL, -- Link to main tenants table
+  `name` varchar(100) NOT NULL, -- Consider increasing length to 255
+  `payroll_number_prefix` varchar(10) DEFAULT 'EMP',
+  `kra_pin` varchar(11) DEFAULT NULL,
+  `nssf_number` varchar(15) DEFAULT NULL,
+  `nhif_number` varchar(15) DEFAULT NULL,
+  `legal_type` enum('LTD','PLC','Sole_Proprietor','Partnership','NGO','Government','School','Other') DEFAULT NULL,
+  `registration_number` varchar(50) DEFAULT NULL,
+  `physical_address` varchar(255) DEFAULT NULL, -- Specific address
+  `location` varchar(255) DEFAULT NULL, -- Original, more generic field
+  `postal_address` varchar(255) DEFAULT NULL,
+  `postal_code_id` int DEFAULT NULL,
+  `county_id` int DEFAULT NULL, -- Specific county in Kenya
+  `primary_phone` varchar(20) DEFAULT NULL,
+  `secondary_phone` varchar(20) DEFAULT NULL,
+  `official_email` varchar(255) DEFAULT NULL,
   `logo_url` varchar(255) DEFAULT NULL,
   `currency` varchar(10) DEFAULT 'KES',
+  `payroll_schedule` enum('Monthly','Bi-Monthly','Weekly') DEFAULT 'Monthly',
+  `payroll_lock_date` date DEFAULT NULL,
+  `default_payday` int DEFAULT NULL,
+  `bank_id` int DEFAULT NULL,
+  `bank_account_name` varchar(255) DEFAULT NULL,
+  `bank_account_number` varchar(255) DEFAULT NULL,
+  `bank_branch` varchar(255) DEFAULT NULL,
+  `swift_code` varchar(11) DEFAULT NULL,
+  `nssf_branch_code` varchar(50) DEFAULT NULL,
+  `nhif_branch_code` varchar(50) DEFAULT NULL,
+  `primary_administrator_id` int DEFAULT NULL, -- Link to users table
+  `is_active` tinyint(1) DEFAULT '1',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `domain` varchar(100) DEFAULT NULL,
-  PRIMARY KEY (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=51 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  PRIMARY KEY (`id`),
+  KEY `idx_org_tenant_id` (`tenant_id`),
+  KEY `idx_org_kra_pin` (`kra_pin`),
+  KEY `idx_org_county_id` (`county_id`)
+  -- Foreign keys to be added after referenced tables are confirmed to exist
+  -- FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
+  -- FOREIGN KEY (`county_id`) REFERENCES `counties` (`id`),
+  -- FOREIGN KEY (`bank_id`) REFERENCES `banks` (`id`),
+  -- FOREIGN KEY (`primary_administrator_id`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
 

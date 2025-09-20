@@ -1,327 +1,373 @@
-CREATE DATABASE payhub;
-USE payhub;
-
--- Enable event scheduler for automated tasks
-SET GLOBAL event_scheduler = ON;
-
-
--- Organizations table
-CREATE TABLE organizations (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    name VARCHAR(100) NOT NULL,
-    location VARCHAR(255),
-    logo_url VARCHAR(255),
-    currency VARCHAR(10) DEFAULT 'KES',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
-ALTER TABLE organizations ADD COLUMN domain VARCHAR(100);
-
--- Organization Configurations
-CREATE TABLE organization_configs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
-    config_type ENUM('tax', 'deduction', 'loan', 'benefit', 'per_diem', 'advance', 'refund') NOT NULL,
-    name VARCHAR(100) NOT NULL,
-    percentage DECIMAL(5, 2),
-    fixed_amount DECIMAL(15, 2),
-    is_active BOOLEAN DEFAULT TRUE,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_config (organization_id, config_type, name)
-);
-
--- Users table
-CREATE TABLE users (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
-    username VARCHAR(50) UNIQUE NOT NULL,
-    password_hash VARCHAR(255) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    user_type ENUM('employee', 'admin', 'super_admin') DEFAULT 'employee',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE
-);
-
-ALTER TABLE users ADD COLUMN first_name VARCHAR(50) NOT NULL AFTER username, ADD COLUMN last_name VARCHAR(50) NOT NULL AFTER first_name;
-
-
--- Employees table
-CREATE TABLE employees (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
-    user_id INT,
-    first_name VARCHAR(50) NOT NULL,
-    last_name VARCHAR(50) NOT NULL,
-    email VARCHAR(100) UNIQUE NOT NULL,
-    phone VARCHAR(20),
-    hire_date DATE NOT NULL,
-    job_title VARCHAR(100),
-    department VARCHAR(100),
-    reports_to INT,
-    base_salary DECIMAL(15, 2) NOT NULL,
-    bank_account_number VARCHAR(50),
-    tax_id VARCHAR(50),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL,
-    FOREIGN KEY (reports_to) REFERENCES employees(id) ON DELETE SET NULL,
-    INDEX idx_employee_org (organization_id, id)
-);
-
-ALTER TABLE employees DROP COLUMN first_name, DROP COLUMN last_name;
--- status
-ALTER TABLE employees ADD COLUMN status ENUM('active', 'on_leave', 'on_probation', 'suspended', 'resigned', 'terminated', 'retired', 'deceased') DEFAULT 'active';
--- employment_type
-ALTER TABLE employees ADD COLUMN employment_type ENUM('full_time', 'part_time', 'contract') DEFAULT 'full_time';
--- work_location
-ALTER TABLE employees ADD COLUMN work_location ENUM('on-site', 'hybrid', 'remote') DEFAULT 'on-site';
-
-ALTER TABLE `employees` CHANGE COLUMN `email` `email` VARCHAR(100) NULL COLLATE 'utf8mb4_0900_ai_ci' AFTER `user_id`;
-
-
-
-
-
-
--- Pay Runs table
-CREATE TABLE payruns (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
-    payrun_name VARCHAR(100) NOT NULL,
-    pay_period_start DATE NOT NULL,
-    pay_period_end DATE NOT NULL,
-    pay_frequency ENUM('weekly', 'bi-weekly', 'monthly') DEFAULT 'monthly',
-    status ENUM('draft', 'reviewed', 'finalized') DEFAULT 'draft',
-    total_gross_pay DECIMAL(15, 2) DEFAULT 0.00,
-    total_deductions DECIMAL(15, 2) DEFAULT 0.00,
-    total_net_pay DECIMAL(15, 2) DEFAULT 0.00,
-    employee_count INT DEFAULT 0,
-    created_by INT NOT NULL,
-    reviewed_by INT,
-    finalized_by INT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    reviewed_at TIMESTAMP,
-    finalized_at TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-    FOREIGN KEY (created_by) REFERENCES users(id),
-    FOREIGN KEY (reviewed_by) REFERENCES users(id),
-    FOREIGN KEY (finalized_by) REFERENCES users(id),
-    INDEX idx_payrun_period (pay_period_start, pay_period_end),
-    INDEX idx_payrun_status (status)
-);
-
--- Pay Run Details table
-CREATE TABLE payrun_details (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    payrun_id INT NOT NULL,
-    employee_id INT NOT NULL,
-    basic_salary DECIMAL(15, 2) NOT NULL,
-    overtime_amount DECIMAL(15, 2) DEFAULT 0.00,
-    bonus_amount DECIMAL(15, 2) DEFAULT 0.00,
-    commission_amount DECIMAL(15, 2) DEFAULT 0.00,
-    gross_pay DECIMAL(15, 2) NOT NULL,
-    total_deductions DECIMAL(15, 2) NOT NULL,
-    net_pay DECIMAL(15, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (payrun_id) REFERENCES payruns(id) ON DELETE CASCADE,
-    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_payrun_employee (payrun_id, employee_id)
-);
-
--- Pay Run Deductions
-CREATE TABLE payrun_deductions (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    payrun_detail_id INT NOT NULL,
-    config_id INT NOT NULL,
-    amount DECIMAL(15, 2) NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (payrun_detail_id) REFERENCES payrun_details(id) ON DELETE CASCADE,
-    FOREIGN KEY (config_id) REFERENCES organization_configs(id) ON DELETE CASCADE
-);
-
--- Loans table
-CREATE TABLE loans (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    employee_id INT NOT NULL,
-    config_id INT NOT NULL,
-    amount DECIMAL(15, 2) NOT NULL,
-    interest_rate DECIMAL(5, 2),
-    start_date DATE NOT NULL,
-    end_date DATE,
-    status ENUM('pending', 'approved', 'rejected', 'repaid') DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-    FOREIGN KEY (config_id) REFERENCES organization_configs(id) ON DELETE CASCADE
-);
-
--- Advances table
-CREATE TABLE advances (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    employee_id INT NOT NULL,
-    config_id INT NOT NULL,
-    amount DECIMAL(15, 2) NOT NULL,
-    request_date DATE NOT NULL,
-    status ENUM('pending', 'approved', 'rejected', 'repaid') DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-    FOREIGN KEY (config_id) REFERENCES organization_configs(id) ON DELETE CASCADE
-);
-
--- Refunds table
-CREATE TABLE refunds (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    employee_id INT NOT NULL,
-    config_id INT NOT NULL,
-    amount DECIMAL(15, 2) NOT NULL,
-    refund_date DATE NOT NULL,
-    status ENUM('pending', 'approved', 'rejected', 'processed') DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-    FOREIGN KEY (config_id) REFERENCES organization_configs(id) ON DELETE CASCADE
-);
-
--- Per Diems table
-CREATE TABLE per_diems (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    employee_id INT NOT NULL,
-    config_id INT NOT NULL,
-    amount DECIMAL(15, 2) NOT NULL,
-    trip_date DATE NOT NULL,
-    status ENUM('pending', 'approved', 'rejected', 'paid') DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-    FOREIGN KEY (config_id) REFERENCES organization_configs(id) ON DELETE CASCADE
-);
-
--- Leaves table
-CREATE TABLE leaves (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    employee_id INT NOT NULL,
-    leave_type ENUM('sick', 'casual', 'annual', 'maternity', 'paternity', 'other') NOT NULL,
-    start_date DATE NOT NULL,
-    end_date DATE NOT NULL,
-    status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-);
-
--- Benefits table
-CREATE TABLE benefits (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    employee_id INT NOT NULL,
-    config_id INT NOT NULL,
-    amount DECIMAL(15, 2) NOT NULL,
-    date_granted DATE NOT NULL,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE,
-    FOREIGN KEY (config_id) REFERENCES organization_configs(id) ON DELETE CASCADE
-);
-
--- Approvals table
-CREATE TABLE approvals (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    entity_type ENUM('leave', 'loan', 'advance', 'refund', 'per_diem') NOT NULL,
-    entity_id INT NOT NULL,
-    approver_id INT NOT NULL,
-    status ENUM('pending', 'approved', 'rejected') DEFAULT 'pending',
-    comments TEXT,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (approver_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Audit Logs table
-CREATE TABLE audit_logs (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    organization_id INT NOT NULL,
-    user_id INT NOT NULL,
-    entity_type VARCHAR(50) NOT NULL,
-    entity_id INT NOT NULL,
-    action ENUM('create', 'update', 'delete') NOT NULL,
-    details JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);
-
--- Notifications table
-CREATE TABLE notifications (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    employee_id INT NOT NULL,
-    title VARCHAR(255) NOT NULL,
-    message TEXT NOT NULL,
-    type ENUM('salary', 'tax', 'leave', 'loan', 'advance', 'refund', 'per_diem', 'other') NOT NULL,
-    is_read BOOLEAN DEFAULT FALSE,
-    metadata JSON,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (employee_id) REFERENCES employees(id) ON DELETE CASCADE
-);
-
--- Insert or update audit log
-DELIMITER $$
-CREATE PROCEDURE upsert_audit_log(
-    IN p_organization_id INT,
-    IN p_user_id INT,
-    IN p_entity_type VARCHAR(50),
-    IN p_entity_id INT,
-    IN p_action ENUM('create', 'update', 'delete'),
-    IN p_details JSON
-)
-BEGIN
-    INSERT INTO audit_logs (organization_id, user_id, entity_type, entity_id, action, details, created_at)
-    VALUES (p_organization_id, p_user_id, p_entity_type, p_entity_id, p_action, p_details, NOW());
-END$$
-DELIMITER ;
-
--- Mark notification as read
-DELIMITER $$
-CREATE PROCEDURE mark_notification_read(IN p_notification_id INT)
-BEGIN
-    UPDATE notifications SET is_read = TRUE, updated_at = NOW() WHERE id = p_notification_id;
-END$$
-DELIMITER ;
-
--- Insert notification
-DELIMITER $$
-CREATE PROCEDURE insert_notification(
-    IN p_employee_id INT,
-    IN p_title VARCHAR(255),
-    IN p_message TEXT,
-    IN p_type ENUM('salary', 'tax', 'leave', 'loan', 'advance', 'refund', 'per_diem', 'other'),
-    IN p_metadata JSON
-)
-BEGIN
-    INSERT INTO notifications (employee_id, title, message, type, metadata, created_at, updated_at)
-    VALUES (p_employee_id, p_title, p_message, p_type, p_metadata, NOW(), NOW());
-END$$
-DELIMITER ;
-
-
-
-INSERT INTO organizations (name, location, logo_url, currency, domain)
-VALUES 
-('TechNova Ltd', 'Nairobi, Kenya', 'https://example.com/logo.png', 'KES', 'technova.com');
-
-INSERT INTO users (organization_id, username, first_name, last_name, password_hash, email, user_type)
-VALUES
-(1, 'jdoe', 'John', 'Doe', SHA2('password', 256), 'j.doe@technova.com', 'employee');
-
-INSERT INTO employees 
-(organization_id, user_id, email, phone, hire_date, job_title, department, reports_to, base_salary, bank_account_number, tax_id, status, employment_type, work_location)
-VALUES
-(1, 1, 'j.doe@technova.com', '+254700123456', '2024-02-15', 'operations manager', 'Administration', NULL, 120000.00, '1234567890', 'P1234567', 'active', 'full_time', 'hybrid');
+{
+    "success": true,
+    "data": [
+        {
+            "id": 197,
+            "tenant_id": 1,
+            "name": "Savanna Tech Solutions Ltd",
+            "payroll_number_prefix": "ST",
+            "kra_pin": "P051123456X",
+            "nssf_number": "NSSF123456789",
+            "nhif_number": "NHIF1234567",
+            "legal_type": "LTD",
+            "registration_number": "CPV/2021/12345",
+            "physical_address": "UAP Tower, 17th Floor",
+            "postal_address": "P.O. Box 1234",
+            "postal_code_id": 100,
+            "county_id": 1,
+            "primary_phone": "+254712345678",
+            "secondary_phone": "+254722334455",
+            "official_email": "info@savannatech.com",
+            "location": "Nairobi",
+            "logo_url": "https://example.com/logo1.png",
+            "currency": "KES",
+            "payroll_schedule": "Monthly",
+            "payroll_lock_date": null,
+            "default_payday": 30,
+            "bank_id": 1,
+            "bank_account_name": "Savanna Tech Solutions Ltd",
+            "bank_account_number": "1234567890",
+            "bank_branch": "KCB UAP Tower",
+            "swift_code": null,
+            "nssf_branch_code": "NSSFNAI",
+            "nhif_branch_code": "NHIFNAI",
+            "primary_administrator_id": 1,
+            "is_active": 1,
+            "created_at": "2025-09-20 23:25:41",
+            "updated_at": "2025-09-20 23:25:41",
+            "domain": "savannatech.com"
+        },
+        {
+            "id": 198,
+            "tenant_id": 1,
+            "name": "Coastal Processors Ltd",
+            "payroll_number_prefix": "CP",
+            "kra_pin": "P051987654Z",
+            "nssf_number": "NSSF987654321",
+            "nhif_number": "NHIF7654321",
+            "legal_type": "LTD",
+            "registration_number": "CPV/2015/67890",
+            "physical_address": "Mombasa Road, Plot 456",
+            "postal_address": "P.O. Box 9876",
+            "postal_code_id": 80100,
+            "county_id": 2,
+            "primary_phone": "+254712345678",
+            "secondary_phone": "+254733112233",
+            "official_email": "accounts@coastalprocessors.com",
+            "location": "Mombasa",
+            "logo_url": null,
+            "currency": "KES",
+            "payroll_schedule": "Monthly",
+            "payroll_lock_date": null,
+            "default_payday": 30,
+            "bank_id": 2,
+            "bank_account_name": "Coastal Processors Ltd",
+            "bank_account_number": "9876543210",
+            "bank_branch": "Equity Mombasa",
+            "swift_code": null,
+            "nssf_branch_code": "NSSFMOM",
+            "nhif_branch_code": "NHIFMOM",
+            "primary_administrator_id": 2,
+            "is_active": 1,
+            "created_at": "2025-09-20 23:25:41",
+            "updated_at": "2025-09-20 23:25:41",
+            "domain": "coastalprocessors.com"
+        },
+        {
+            "id": 199,
+            "tenant_id": 2,
+            "name": "Prestige Academy",
+            "payroll_number_prefix": "PA",
+            "kra_pin": "P052112233A",
+            "nssf_number": "NSSF112233445",
+            "nhif_number": "NHIF4455667",
+            "legal_type": "School",
+            "registration_number": "MS/2020/54321",
+            "physical_address": "Kenyatta Avenue, Block B",
+            "postal_address": "P.O. Box 5432",
+            "postal_code_id": 20100,
+            "county_id": 4,
+            "primary_phone": "+254745678912",
+            "secondary_phone": null,
+            "official_email": "admin@prestigeacademy.sc.ke",
+            "location": "Nakuru",
+            "logo_url": "https://example.com/logo3.png",
+            "currency": "KES",
+            "payroll_schedule": "Monthly",
+            "payroll_lock_date": null,
+            "default_payday": 25,
+            "bank_id": 3,
+            "bank_account_name": "Prestige Academy",
+            "bank_account_number": "4567890123",
+            "bank_branch": "Co-op Nakuru",
+            "swift_code": null,
+            "nssf_branch_code": "NSSFNAK",
+            "nhif_branch_code": "NHIFNAK",
+            "primary_administrator_id": 3,
+            "is_active": 1,
+            "created_at": "2025-09-20 23:25:41",
+            "updated_at": "2025-09-20 23:25:41",
+            "domain": "prestigeacademy.sc.ke"
+        },
+        {
+            "id": 200,
+            "tenant_id": 2,
+            "name": "Lakeview Medical Hospital",
+            "payroll_number_prefix": "LM",
+            "kra_pin": "P052445566B",
+            "nssf_number": "NSSF554466778",
+            "nhif_number": "NHIF7788990",
+            "legal_type": "LTD",
+            "registration_number": "CPV/2018/11223",
+            "physical_address": "Oginga Odinga Street",
+            "postal_address": "P.O. Box 1122",
+            "postal_code_id": 40100,
+            "county_id": 3,
+            "primary_phone": "+254770123456",
+            "secondary_phone": "+254722334455",
+            "official_email": "frontdesk@lakeviewmedical.org",
+            "location": "Kisumu",
+            "logo_url": null,
+            "currency": "KES",
+            "payroll_schedule": "Monthly",
+            "payroll_lock_date": null,
+            "default_payday": 27,
+            "bank_id": 4,
+            "bank_account_name": "Lakeview Medical Hospital",
+            "bank_account_number": "1122334455",
+            "bank_branch": "Absa Kisumu",
+            "swift_code": null,
+            "nssf_branch_code": "NSSFKIS",
+            "nhif_branch_code": "NHIFKIS",
+            "primary_administrator_id": 4,
+            "is_active": 1,
+            "created_at": "2025-09-20 23:25:41",
+            "updated_at": "2025-09-20 23:25:41",
+            "domain": "lakeviewmedical.org"
+        },
+        {
+            "id": 201,
+            "tenant_id": 3,
+            "name": "Highlands Farmers Co-op",
+            "payroll_number_prefix": "HF",
+            "kra_pin": "P052778899C",
+            "nssf_number": "NSSF667788990",
+            "nhif_number": "NHIF9988776",
+            "legal_type": "Other",
+            "registration_number": "CAC/2019/33445",
+            "physical_address": "Nandi Road, Eldoret",
+            "postal_address": "P.O. Box 3344",
+            "postal_code_id": 30100,
+            "county_id": 5,
+            "primary_phone": "+254754321098",
+            "secondary_phone": "+254711223344",
+            "official_email": "manager@highlandscoop.co.ke",
+            "location": "Eldoret",
+            "logo_url": "https://example.com/logo5.png",
+            "currency": "KES",
+            "payroll_schedule": "Monthly",
+            "payroll_lock_date": null,
+            "default_payday": 26,
+            "bank_id": 5,
+            "bank_account_name": "Highlands Farmers Cooperative",
+            "bank_account_number": "5566778899",
+            "bank_branch": "NCBA Eldoret",
+            "swift_code": null,
+            "nssf_branch_code": "NSSFELD",
+            "nhif_branch_code": "NHIFELD",
+            "primary_administrator_id": 5,
+            "is_active": 1,
+            "created_at": "2025-09-20 23:25:41",
+            "updated_at": "2025-09-20 23:25:41",
+            "domain": "highlandscoop.co.ke"
+        },
+        {
+            "id": 202,
+            "tenant_id": 3,
+            "name": "Speedy Cargo Logistics",
+            "payroll_number_prefix": "SC",
+            "kra_pin": "P051334455D",
+            "nssf_number": "NSSF334455667",
+            "nhif_number": "NHIF2233445",
+            "legal_type": "LTD",
+            "registration_number": "CPV/2017/44556",
+            "physical_address": "Enterprise Road, Industrial Area",
+            "postal_address": "P.O. Box 4455",
+            "postal_code_id": 500,
+            "county_id": 1,
+            "primary_phone": "+254734567890",
+            "secondary_phone": null,
+            "official_email": "dispatch@speedycargo.co.ke",
+            "location": "Nairobi",
+            "logo_url": null,
+            "currency": "KES",
+            "payroll_schedule": "Bi-Monthly",
+            "payroll_lock_date": null,
+            "default_payday": 15,
+            "bank_id": 6,
+            "bank_account_name": "Speedy Cargo Logistics",
+            "bank_account_number": "6677889900",
+            "bank_branch": "Equity Industrial Area",
+            "swift_code": null,
+            "nssf_branch_code": "NSSFNAI",
+            "nhif_branch_code": "NHIFNAI",
+            "primary_administrator_id": 6,
+            "is_active": 1,
+            "created_at": "2025-09-20 23:25:41",
+            "updated_at": "2025-09-20 23:25:41",
+            "domain": "speedycargo.co.ke"
+        },
+        {
+            "id": 203,
+            "tenant_id": 4,
+            "name": "Twiga Foods Ltd",
+            "payroll_number_prefix": "TF",
+            "kra_pin": "P051556677E",
+            "nssf_number": "NSSF556677889",
+            "nhif_number": "NHIF5544332",
+            "legal_type": "LTD",
+            "registration_number": "CPV/2022/55667",
+            "physical_address": "Thika Road Mall, 2nd Floor",
+            "postal_address": "P.O. Box 5566",
+            "postal_code_id": 900,
+            "county_id": 6,
+            "primary_phone": "+254787654321",
+            "secondary_phone": "+254700112233",
+            "official_email": "bookings@twigafoods.com",
+            "location": "Kiambu",
+            "logo_url": "https://example.com/logo7.png",
+            "currency": "KES",
+            "payroll_schedule": "Weekly",
+            "payroll_lock_date": null,
+            "default_payday": 5,
+            "bank_id": 7,
+            "bank_account_name": "Twiga Foods Ltd",
+            "bank_account_number": "7788990011",
+            "bank_branch": "KCB Thika Road",
+            "swift_code": null,
+            "nssf_branch_code": "NSSFKIAM",
+            "nhif_branch_code": "NHIFKIAM",
+            "primary_administrator_id": 7,
+            "is_active": 1,
+            "created_at": "2025-09-20 23:25:41",
+            "updated_at": "2025-09-20 23:25:41",
+            "domain": "twigafoods.com"
+        },
+        {
+            "id": 204,
+            "tenant_id": 4,
+            "name": "Njoroge & Advocates LLP",
+            "payroll_number_prefix": "NA",
+            "kra_pin": "P051998877F",
+            "nssf_number": "NSSF998877665",
+            "nhif_number": "NHIF1122334",
+            "legal_type": "Partnership",
+            "registration_number": "LSK/2023/00123",
+            "physical_address": "ICEA Building, Chiromo Road",
+            "postal_address": "P.O. Box 7788",
+            "postal_code_id": 100,
+            "county_id": 1,
+            "primary_phone": "+254711334455",
+            "secondary_phone": null,
+            "official_email": "legal@njorogeadvocates.com",
+            "location": "Nairobi",
+            "logo_url": null,
+            "currency": "KES",
+            "payroll_schedule": "Monthly",
+            "payroll_lock_date": null,
+            "default_payday": 28,
+            "bank_id": 8,
+            "bank_account_name": "Njoroge & Advocates LLP",
+            "bank_account_number": "9900112233",
+            "bank_branch": "Co-operative Bank Westlands",
+            "swift_code": null,
+            "nssf_branch_code": "NSSFNAI",
+            "nhif_branch_code": "NHIFNAI",
+            "primary_administrator_id": 8,
+            "is_active": 1,
+            "created_at": "2025-09-20 23:25:41",
+            "updated_at": "2025-09-20 23:25:41",
+            "domain": "njorogeadvocates.com"
+        },
+        {
+            "id": 205,
+            "tenant_id": 5,
+            "name": "Uchumi Retail Stores",
+            "payroll_number_prefix": "UR",
+            "kra_pin": "P051665544G",
+            "nssf_number": "NSSF665544332",
+            "nhif_number": "NHIF6655443",
+            "legal_type": "LTD",
+            "registration_number": "CPV/2010/99887",
+            "physical_address": "Tom Mboya Street",
+            "postal_address": "P.O. Box 9988",
+            "postal_code_id": 100,
+            "county_id": 1,
+            "primary_phone": "+254722665544",
+            "secondary_phone": "+254733998877",
+            "official_email": "customercare@uchumistores.com",
+            "location": "Nairobi",
+            "logo_url": "https://example.com/logo9.png",
+            "currency": "KES",
+            "payroll_schedule": "Bi-Monthly",
+            "payroll_lock_date": null,
+            "default_payday": 20,
+            "bank_id": 9,
+            "bank_account_name": "Uchumi Retail Stores Ltd",
+            "bank_account_number": "4455667788",
+            "bank_branch": "Absa Tom Mboya",
+            "swift_code": null,
+            "nssf_branch_code": "NSSFNAI",
+            "nhif_branch_code": "NHIFNAI",
+            "primary_administrator_id": 9,
+            "is_active": 1,
+            "created_at": "2025-09-20 23:25:41",
+            "updated_at": "2025-09-20 23:25:41",
+            "domain": "uchumistores.com"
+        },
+        {
+            "id": 206,
+            "tenant_id": 5,
+            "name": "Maasai Safari Adventures",
+            "payroll_number_prefix": "MS",
+            "kra_pin": "P052334455H",
+            "nssf_number": "NSSF223344556",
+            "nhif_number": "NHIF4433221",
+            "legal_type": "Sole_Proprietor",
+            "registration_number": "BN/2023/55667",
+            "physical_address": "Maasai Mara Road",
+            "postal_address": "P.O. Box 3344",
+            "postal_code_id": 20500,
+            "county_id": null,
+            "primary_phone": "+254755443322",
+            "secondary_phone": "+254766554433",
+            "official_email": "book@maasaisafari.com",
+            "location": "Narok",
+            "logo_url": null,
+            "currency": "KES",
+            "payroll_schedule": "Monthly",
+            "payroll_lock_date": null,
+            "default_payday": 28,
+            "bank_id": 10,
+            "bank_account_name": "Maasai Safari Adventures",
+            "bank_account_number": "3344556677",
+            "bank_branch": "NCBA Narok",
+            "swift_code": null,
+            "nssf_branch_code": "NSSFNAR",
+            "nhif_branch_code": "NHIFNAR",
+            "primary_administrator_id": 10,
+            "is_active": 1,
+            "created_at": "2025-09-20 23:25:41",
+            "updated_at": "2025-09-20 23:25:41",
+            "domain": "maasaisafari.com"
+        }
+    ],
+    "message": "Organizations fetched successfully",
+    "metadata": {
+        "page": 1,
+        "limit": 10,
+        "total": 25,
+        "total_pages": 3,
+        "dev_mode": true
+    }
+}

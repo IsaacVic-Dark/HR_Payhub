@@ -4,15 +4,55 @@ namespace App\Controllers;
 
 use App\Services\DB;
 
-class OrganizationController {
-    public function index() {
-        return responseJson(
-            data: DB::table('organizations')->selectAll(),
-            message: "Successfull fetch all organisations",
-            metadata: ['dev_mode' => true]
-        );
+class OrganizationController
+{
+public function index()
+{
+    // Get query params from request
+    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+    $name = isset($_GET['name']) ? trim($_GET['name']) : null;
+
+    $offset = ($page - 1) * $limit;
+
+    // Build WHERE clause and bindings
+    $whereClause = '';
+    $bindings = [];
+    
+    if ($name) {
+        $whereClause = "WHERE `name` LIKE :name";
+        $bindings = ['name' => "%{$name}%"];
     }
-    public function store() {
+
+    // Get total count
+    $countSql = "SELECT COUNT(*) as count FROM organizations {$whereClause}";
+    $totalResult = DB::raw($countSql, $bindings);
+    $total = isset($totalResult[0]) ? (int) $totalResult[0]->count : 0;
+
+    // Build main query
+    $sql = "SELECT * FROM organizations {$whereClause} ORDER BY `created_at` DESC LIMIT {$limit} OFFSET {$offset}";
+    
+    // Fetch paginated data
+    $organizations = DB::raw($sql, $bindings);
+
+    // Calculate pagination metadata
+    $totalPages = ceil($total / $limit);
+
+    return responseJson(
+        success: true,
+        data: $organizations,
+        message: "Organizations fetched successfully",
+        metadata: [
+            'page' => $page,
+            'limit' => $limit,
+            'total' => $total,
+            'total_pages' => $totalPages,
+            'dev_mode' => true
+        ]
+    );
+}
+    public function store()
+    {
         // Handle file upload for logo
         $logoUrl = handleFileUpload('logo');
 
@@ -43,7 +83,8 @@ class OrganizationController {
         );
     }
 
-    public function show($id) {
+    public function show($id)
+    {
         $org = DB::table('organizations')->selectAllWhereID($id);
         if (!$org || count($org) === 0) {
             return responseJson(null, "Organization not found", 404);
@@ -55,7 +96,8 @@ class OrganizationController {
         );
     }
 
-    public function update($id) {
+    public function update($id)
+    {
         // Handle file upload for logo
         $logoUrl = handleFileUpload('logo');
 
@@ -93,7 +135,8 @@ class OrganizationController {
         }
     }
 
-    public function delete($id) {
+    public function destroy($id)
+    {
         $org = DB::table('organizations')->selectAllWhereID($id);
         if (!$org || count($org) === 0) {
             return responseJson(null, "Organization not found", 404);
