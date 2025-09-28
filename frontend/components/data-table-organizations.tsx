@@ -142,25 +142,20 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
     });
   };
 
-  const handleDelete = async () => {
-    if (!deleteConfirm.organizationId) return;
+const handleDelete = async (organizationId: number) => {
+  if (!organizationId) return;
 
-    setDeleteConfirm(prev => ({ ...prev, isDeleting: true }));
-
-    try {
-      const response = await organizationAPI.deleteOrganization(deleteConfirm.organizationId);
-      if (response.success) {
-        await fetchOrganizations(); // Refresh the table
-        closeDeleteConfirm();
-      } else {
-        setError(response.error || 'Failed to delete organization');
-        setDeleteConfirm(prev => ({ ...prev, isDeleting: false }));
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to delete organization');
-      setDeleteConfirm(prev => ({ ...prev, isDeleting: false }));
+  try {
+    const response = await organizationAPI.deleteOrganization(organizationId);
+    if (response.success) {
+      await fetchOrganizations(); // Refresh the table
+    } else {
+      setError(response.error || 'Failed to delete organization');
     }
-  };
+  } catch (err) {
+    setError(err instanceof Error ? err.message : 'Failed to delete organization');
+  }
+};
 
   if (loading) {
     return (
@@ -348,9 +343,7 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Cancel</AlertDialogCancel>
                                 <AlertDialogAction
-                                  onClick={() => {
-                                    openDeleteConfirm(org.id, org.name);
-                                  }}
+                                  onClick={() => handleDelete(org.id)}
                                   className="bg-red-600 hover:bg-red-700"
                                 >
                                   {deleteConfirm.isDeleting && deleteConfirm.organizationId === org.id 

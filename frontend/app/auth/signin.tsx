@@ -47,10 +47,6 @@ const Signin = () => {
     </div>
   );
 
-  //   const renderContent = () => {
-
-  //     }
-
   return (
     <div className="min-h-screen bg-white flex">
       {renderSidebar()}

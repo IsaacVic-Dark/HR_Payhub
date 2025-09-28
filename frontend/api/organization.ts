@@ -2,14 +2,41 @@
 
 export interface Organization {
   id: number;
+  tenant_id: number;
   name: string;
+  payroll_number_prefix: string;
+  kra_pin: string;
+  nssf_number: string;
+  nhif_number: string;
+  legal_type: string;
+  registration_number: string;
+  physical_address: string;
+  postal_address: string;
+  postal_code_id: number;
+  county_id: number | null;
+  primary_phone: string;
+  secondary_phone: string;
+  official_email: string;
   location: string;
-  logo_url: string;
+  logo_url: string | null;
   currency: string;
+  payroll_schedule: string;
+  payroll_lock_date: string | null;
+  default_payday: number;
+  bank_id: number;
+  bank_account_name: string;
+  bank_account_number: string;
+  bank_branch: string;
+  swift_code: string | null;
+  nssf_branch_code: string;
+  nhif_branch_code: string;
+  primary_administrator_id: number;
+  is_active: number; // could also be `boolean` if API returns true/false instead of 1/0
   created_at: string;
   updated_at: string;
   domain: string;
 }
+
 
 export interface OrganizationFilters {
   page?: number;

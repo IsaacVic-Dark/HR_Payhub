@@ -206,7 +206,7 @@ export function EmployeeDrawerAdd({
             </div>
             <div className="p-6 flex-1 overflow-y-auto">
               <form onSubmit={handleSubmit}>
-                <div className="flex items-start space-x-4 mb-8 bg-blue-100/50 p-4 rounded-lg">
+                <div className="flex items-start space-x-4 mb-8 bg-purple-200 p-4 rounded-lg">
                   <div className="relative">
                     <div className="w-16 h-16 rounded-full bg-white flex items-center justify-center text-gray-700 font-bold text-lg border">
                       {initials}
@@ -951,27 +951,7 @@ export function EmployeeDrawerEdit({
                       className="bg-white"
                     />
                   </h3>
-                  <div className="flex items-center space-x-2 mb-2">
-                    <span className="text-sm text-gray-600 flex">
-                      {/* Added onChange handler for position */}
-                      <Input
-                        type="text"
-                        value={emp.position}
-                        onChange={(e) =>
-                          updateEmployee("position", e.target.value)
-                        }
-                        className="border-none shadow-none p-0 w-auto bg-transparent"
-                        style={{ width: `${emp.position.length + 1}ch` }} // or use state to measure text
-                      />
 
-                      <Input
-                        type="text"
-                        value="remote"
-                        className="border-none shadow-none ml-2"
-                        readOnly
-                      />
-                    </span>
-                  </div>
                   <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-2">
                     {employeeStatuses.map(({ label, value }) => (
                       <div

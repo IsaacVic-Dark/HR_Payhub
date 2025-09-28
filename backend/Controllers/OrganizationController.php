@@ -6,51 +6,51 @@ use App\Services\DB;
 
 class OrganizationController
 {
-public function index()
-{
-    // Get query params from request
-    $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
-    $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
-    $name = isset($_GET['name']) ? trim($_GET['name']) : null;
+    public function index()
+    {
+        // Get query params from request
+        $page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
+        $limit = isset($_GET['limit']) ? (int)$_GET['limit'] : 10;
+        $name = isset($_GET['name']) ? trim($_GET['name']) : null;
 
-    $offset = ($page - 1) * $limit;
+        $offset = ($page - 1) * $limit;
 
-    // Build WHERE clause and bindings
-    $whereClause = '';
-    $bindings = [];
-    
-    if ($name) {
-        $whereClause = "WHERE `name` LIKE :name";
-        $bindings = ['name' => "%{$name}%"];
+        // Build WHERE clause and bindings
+        $whereClause = '';
+        $bindings = [];
+        
+        if ($name) {
+            $whereClause = "WHERE `name` LIKE :name";
+            $bindings = ['name' => "%{$name}%"];
+        }
+
+        // Get total count
+        $countSql = "SELECT COUNT(*) as count FROM organizations {$whereClause}";
+        $totalResult = DB::raw($countSql, $bindings);
+        $total = isset($totalResult[0]) ? (int) $totalResult[0]->count : 0;
+
+        // Build main query
+        $sql = "SELECT * FROM organizations {$whereClause} ORDER BY `created_at` DESC LIMIT {$limit} OFFSET {$offset}";
+        
+        // Fetch paginated data
+        $organizations = DB::raw($sql, $bindings);
+
+        // Calculate pagination metadata
+        $totalPages = ceil($total / $limit);
+
+        return responseJson(
+            success: true,
+            data: $organizations,
+            message: "Organizations fetched successfully",
+            metadata: [
+                'page' => $page,
+                'limit' => $limit,
+                'total' => $total,
+                'total_pages' => $totalPages,
+                'dev_mode' => true
+            ]
+        );
     }
-
-    // Get total count
-    $countSql = "SELECT COUNT(*) as count FROM organizations {$whereClause}";
-    $totalResult = DB::raw($countSql, $bindings);
-    $total = isset($totalResult[0]) ? (int) $totalResult[0]->count : 0;
-
-    // Build main query
-    $sql = "SELECT * FROM organizations {$whereClause} ORDER BY `created_at` DESC LIMIT {$limit} OFFSET {$offset}";
-    
-    // Fetch paginated data
-    $organizations = DB::raw($sql, $bindings);
-
-    // Calculate pagination metadata
-    $totalPages = ceil($total / $limit);
-
-    return responseJson(
-        success: true,
-        data: $organizations,
-        message: "Organizations fetched successfully",
-        metadata: [
-            'page' => $page,
-            'limit' => $limit,
-            'total' => $total,
-            'total_pages' => $totalPages,
-            'dev_mode' => true
-        ]
-    );
-}
     public function store()
     {
         // Handle file upload for logo

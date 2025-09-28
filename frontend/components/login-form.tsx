@@ -175,12 +175,12 @@ export function LoginForm({
   return (
     <form className={cn("flex flex-col gap-6", className)} {...props} onSubmit={handleSubmit} noValidate>
       <div className="flex flex-col items-center gap-2 text-center">
-        <div className="flex items-center gap-2 mb-2">
+        {/* <div className="flex items-center gap-2 mb-2">
           <div className="w-8 h-8 rounded-lg flex items-center justify-center text-white font-bold text-lg" style={{ backgroundColor: '#895bf5' }}>
             P
           </div>
           <h1 className="text-2xl font-bold" style={{ color: '#895bf5' }}>PayHub</h1>
-        </div>
+        </div> */}
         <h2 className="text-xl font-semibold">Welcome back</h2>
       </div>
 
