@@ -1,10 +1,30 @@
-'use client';
+"use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { Filter, Search, Plus, ChevronDown, ChevronLeft, ChevronRight, MapPin, Building2, Globe, Coins, Calendar, Eye, Edit, Trash2 } from 'lucide-react';
-import { organizationAPI, Organization, OrganizationFilters } from '@/api/organization';
-import OrganizationDrawer from '@/app/organization/drawer';
-import { Input } from '@/components/ui/input';
+import React, { useState, useEffect, useCallback, useRef } from "react";
+import {
+  Filter,
+  Search,
+  Plus,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  MapPin,
+  Building2,
+  Globe,
+  Coins,
+  Calendar,
+  Eye,
+  Edit,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  organizationAPI,
+  Organization,
+  OrganizationFilters,
+} from "@/api/organization";
+import OrganizationDrawer from "@/app/organization/drawer";
+import { Input } from "@/components/ui/input";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -15,7 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+} from "@/components/ui/alert-dialog";
 
 interface OrganizationTableProps {
   className?: string;
@@ -33,14 +53,24 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
+  // Local state for filter inputs
+  const [searchTerm, setSearchTerm] = useState("");
+  const [locationFilter, setLocationFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [showFilters, setShowFilters] = useState(false);
+
+  // Add these after your existing useState declarations
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
   // Drawer state
   const [drawerState, setDrawerState] = useState<{
     isOpen: boolean;
-    mode: 'add' | 'edit' | 'view';
+    mode: "add" | "edit" | "view";
     organizationId?: number;
   }>({
     isOpen: false,
-    mode: 'add'
+    mode: "add",
   });
 
   // Delete confirmation state
@@ -51,7 +81,7 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
     isDeleting?: boolean;
   }>({
     isOpen: false,
-    isDeleting: false
+    isDeleting: false,
   });
 
   const fetchOrganizations = useCallback(async () => {
@@ -60,19 +90,21 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
       const response = await organizationAPI.getOrganizations(filters);
 
       if (response.success && response.data) {
-        setOrganizations(response.data.data);
+        setOrganizations(response.data);
         if (response.data.metadata) {
-          setTotalItems(response.data.metadata.total || response.data.data.length);
+          setTotalItems(
+            response.data.metadata.total || response.data.data.length
+          );
           setTotalPages(
             response.data.metadata.total_pages ||
               Math.ceil(response.data.data.length / (filters.limit || 10))
           );
         }
       } else {
-        setError(response.error || 'Failed to fetch organizations');
+        setError(response.error || "Failed to fetch organizations");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      setError(err instanceof Error ? err.message : "An error occurred");
     } finally {
       setLoading(false);
     }
@@ -84,10 +116,10 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
+    return date.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
     });
   };
 
@@ -102,22 +134,79 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
   };
 
   const handleSearch = (searchTerm: string) => {
-    setFilters((prev) => ({ ...prev, search: searchTerm, page: 1 }));
+    setSearchTerm(searchTerm);
+
+    // Clear existing timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+
+    // Set new timeout for 500ms delay
+    searchTimeoutRef.current = setTimeout(() => {
+      setFilters((prev) => ({
+        ...prev,
+        name: searchTerm || undefined,
+        page: 1,
+      }));
+    }, 500);
   };
 
+  const handleLocationFilter = (location: string) => {
+    setLocationFilter(location);
+
+    // Clear existing timeout
+    if (locationTimeoutRef.current) {
+      clearTimeout(locationTimeoutRef.current);
+    }
+
+    // Set new timeout for 500ms delay
+    locationTimeoutRef.current = setTimeout(() => {
+      setFilters((prev) => ({
+        ...prev,
+        location: location || undefined,
+        page: 1,
+      }));
+    }, 500);
+  };
+
+  const handleStatusFilter = (status: string) => {
+    setStatusFilter(status);
+    setFilters((prev) => ({ ...prev, status: status || undefined, page: 1 }));
+  };
+
+  const clearAllFilters = () => {
+    // Clear any pending timeouts
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
+    }
+    if (locationTimeoutRef.current) {
+      clearTimeout(locationTimeoutRef.current);
+    }
+
+    setSearchTerm("");
+    setLocationFilter("");
+    setStatusFilter("");
+    setFilters({ page: 1, limit: filters.limit });
+  };
+
+  const hasActiveFilters = searchTerm || locationFilter || statusFilter;
+
   // Drawer handlers
-  const openDrawer = (mode: 'add' | 'edit' | 'view', organizationId?: number) => {
+  const openDrawer = (
+    mode: "add" | "edit" | "view",
+    organizationId?: number
+  ) => {
     setDrawerState({
       isOpen: true,
       mode,
-      organizationId
+      organizationId,
     });
   };
 
   const closeDrawer = () => {
     setDrawerState({
       isOpen: false,
-      mode: 'add'
+      mode: "add",
     });
   };
 
@@ -126,36 +215,53 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
   };
 
   // Delete handlers
-  const openDeleteConfirm = (organizationId: number, organizationName: string) => {
+  const openDeleteConfirm = (
+    organizationId: number,
+    organizationName: string
+  ) => {
     setDeleteConfirm({
       isOpen: true,
       organizationId,
       organizationName,
-      isDeleting: false
+      isDeleting: false,
     });
   };
 
   const closeDeleteConfirm = () => {
     setDeleteConfirm({
       isOpen: false,
-      isDeleting: false
+      isDeleting: false,
     });
   };
 
-const handleDelete = async (organizationId: number) => {
-  if (!organizationId) return;
+  const handleDelete = async (organizationId: number) => {
+    if (!organizationId) return;
 
-  try {
-    const response = await organizationAPI.deleteOrganization(organizationId);
-    if (response.success) {
-      await fetchOrganizations(); // Refresh the table
-    } else {
-      setError(response.error || 'Failed to delete organization');
+    try {
+      const response = await organizationAPI.deleteOrganization(organizationId);
+      if (response.success) {
+        await fetchOrganizations(); // Refresh the table
+      } else {
+        setError(response.error || "Failed to delete organization");
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to delete organization"
+      );
     }
-  } catch (err) {
-    setError(err instanceof Error ? err.message : 'Failed to delete organization');
-  }
-};
+  };
+
+  // Add this useEffect for cleanup
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+      if (locationTimeoutRef.current) {
+        clearTimeout(locationTimeoutRef.current);
+      }
+    };
+  }, []);
 
   if (loading) {
     return (
@@ -172,7 +278,9 @@ const handleDelete = async (organizationId: number) => {
       <div className="w-full mx-auto p-4 bg-white">
         <div className="rounded-lg shadow-sm border p-4 flex items-center justify-center py-12">
           <div className="text-center">
-            <p className="text-red-600 font-medium">Error loading organizations</p>
+            <p className="text-red-600 font-medium">
+              Error loading organizations
+            </p>
             <p className="text-gray-500 text-sm mt-1">{error}</p>
           </div>
         </div>
@@ -185,19 +293,52 @@ const handleDelete = async (organizationId: number) => {
       <div className={`w-full mx-auto p-4 bg-white ${className}`}>
         <div className="rounded-lg shadow-sm border p-4">
           {/* Header */}
-          <div className="flex items-center justify-end mb-6">          
+          <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`flex items-center gap-2 px-3 py-2 text-xs font-medium rounded-lg transition-colors ${
+                  showFilters || hasActiveFilters
+                    ? "bg-purple-100 text-purple-700 border border-purple-300"
+                    : "bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200"
+                }`}
+              >
+                <Filter className="w-4 h-4" />
+                Filters
+                {hasActiveFilters && (
+                  <span className="ml-1 px-1.5 py-0.5 bg-purple-600 text-white rounded-full text-xs">
+                    {
+                      [searchTerm, locationFilter, statusFilter].filter(Boolean)
+                        .length
+                    }
+                  </span>
+                )}
+              </button>
+
+              {hasActiveFilters && (
+                <button
+                  onClick={clearAllFilters}
+                  className="flex items-center gap-1 px-2 py-1 text-xs text-gray-500 hover:text-gray-700 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                  Clear all
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center gap-3">
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <Input
                   type="text"
                   placeholder="Search organizations"
+                  value={searchTerm}
                   onChange={(e) => handleSearch(e.target.value)}
-                  className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                  className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent w-64"
                 />
               </div>
-              <button 
-                onClick={() => openDrawer('add')}
+              <button
+                onClick={() => openDrawer("add")}
                 className="flex items-center gap-2 px-4 py-2 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 transition-colors"
               >
                 <Plus className="w-4 h-4" />
@@ -206,14 +347,107 @@ const handleDelete = async (organizationId: number) => {
             </div>
           </div>
 
+          {/* Advanced Filters */}
+          {showFilters && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Location
+                  </label>
+                  <div className="relative">
+                    <MapPin className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+                    <Input
+                      type="text"
+                      placeholder="Filter by location"
+                      value={locationFilter}
+                      onChange={(e) => handleLocationFilter(e.target.value)}
+                      className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Status
+                  </label>
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => handleStatusFilter(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
+                  >
+                    <option value="">All Statuses</option>
+                    <option value="active">Active</option>
+                    <option value="inactive">Inactive</option>
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    onClick={clearAllFilters}
+                    className="flex items-center gap-2 px-4 py-2 text-xs text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    <X className="w-4 h-4" />
+                    Clear Filters
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Active Filters Display */}
+          {hasActiveFilters && (
+            <div className="mb-4 flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-gray-500">Active filters:</span>
+              {searchTerm && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-md">
+                  Name: "{searchTerm}"
+                  <button
+                    onClick={() => handleSearch("")}
+                    className="text-purple-500 hover:text-purple-700"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {locationFilter && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-md">
+                  Location: "{locationFilter}"
+                  <button
+                    onClick={() => handleLocationFilter("")}
+                    className="text-blue-500 hover:text-blue-700"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {statusFilter && (
+                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-md">
+                  Status:{" "}
+                  {statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
+                  <button
+                    onClick={() => handleStatusFilter("")}
+                    className="text-green-500 hover:text-green-700"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Table */}
           <div className="bg-white overflow-x-auto">
             {organizations.length === 0 ? (
               <div className="flex items-center justify-center py-12">
                 <div className="text-center">
-                  <p className="text-gray-500 font-medium">No organizations found</p>
+                  <p className="text-gray-500 font-medium">
+                    No organizations found
+                  </p>
                   <p className="text-gray-400 text-sm mt-1">
-                    Create your first organization to get started
+                    {hasActiveFilters
+                      ? "Try adjusting your filters or create a new organization"
+                      : "Create your first organization to get started"}
                   </p>
                 </div>
               </div>
@@ -249,19 +483,29 @@ const handleDelete = async (organizationId: number) => {
                     <tr key={org.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-col">
-                          <div className="text-sm font-medium text-gray-900">{org.name}</div>
+                          <div className="text-sm font-medium text-gray-900">
+                            {org.name}
+                          </div>
                           <div className="text-xs text-gray-500">
                             <Globe className="w-3 h-3 inline mr-1" />
                             {org.domain}
                           </div>
-                          <div className="text-xs text-gray-500">KRA: {org.kra_pin}</div>
+                          <div className="text-xs text-gray-500">
+                            KRA: {org.kra_pin}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-col">
-                          <div className="text-sm text-gray-900">{org.legal_type}</div>
-                          <div className="text-xs text-gray-500">{org.registration_number}</div>
-                          <div className="text-xs text-gray-500">Prefix: {org.payroll_number_prefix}</div>
+                          <div className="text-sm text-gray-900">
+                            {org.legal_type}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {org.registration_number}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Prefix: {org.payroll_number_prefix}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -270,8 +514,12 @@ const handleDelete = async (organizationId: number) => {
                             <MapPin className="w-3 h-3 inline mr-1" />
                             {org.location}
                           </div>
-                          <div className="text-xs text-gray-500">{org.primary_phone}</div>
-                          <div className="text-xs text-gray-500 truncate max-w-32">{org.official_email}</div>
+                          <div className="text-xs text-gray-500">
+                            {org.primary_phone}
+                          </div>
+                          <div className="text-xs text-gray-500 truncate max-w-32">
+                            {org.official_email}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -280,27 +528,43 @@ const handleDelete = async (organizationId: number) => {
                             <Coins className="w-3 h-3 inline mr-1" />
                             {org.currency}
                           </div>
-                          <div className="text-xs text-gray-500">{org.bank_account_name}</div>
-                          <div className="text-xs text-gray-500">{org.bank_account_number}</div>
-                          <div className="text-xs text-gray-500">{org.bank_branch}</div>
+                          <div className="text-xs text-gray-500">
+                            {org.bank_account_name}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {org.bank_account_number}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            {org.bank_branch}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-col">
-                          <div className="text-sm text-gray-900">{org.payroll_schedule}</div>
-                          <div className="text-xs text-gray-500">Pay Day: {org.default_payday}</div>
-                          <div className="text-xs text-gray-500">NSSF: {org.nssf_number}</div>
-                          <div className="text-xs text-gray-500">NHIF: {org.nhif_number}</div>
+                          <div className="text-sm text-gray-900">
+                            {org.payroll_schedule}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            Pay Day: {org.default_payday}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            NSSF: {org.nssf_number}
+                          </div>
+                          <div className="text-xs text-gray-500">
+                            NHIF: {org.nhif_number}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex flex-col">
-                          <div className={`text-xs px-2 py-1 rounded-full w-fit ${
-                            org.is_active 
-                              ? 'bg-green-100 text-green-800' 
-                              : 'bg-red-100 text-red-800'
-                          }`}>
-                            {org.is_active ? 'Active' : 'Inactive'}
+                          <div
+                            className={`text-xs px-2 py-1 rounded-full w-fit ${
+                              org.is_active
+                                ? "bg-green-100 text-green-800"
+                                : "bg-red-100 text-red-800"
+                            }`}
+                          >
+                            {org.is_active ? "Active" : "Inactive"}
                           </div>
                           <div className="text-xs text-gray-500 mt-1">
                             <Calendar className="w-3 h-3 inline mr-1" />
@@ -310,15 +574,15 @@ const handleDelete = async (organizationId: number) => {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => openDrawer('view', org.id)}
+                          <button
+                            onClick={() => openDrawer("view", org.id)}
                             className="flex items-center gap-1 px-2 py-1 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded transition-colors"
                             title="View details"
                           >
                             <Eye className="w-3 h-3" />
                           </button>
-                          <button 
-                            onClick={() => openDrawer('edit', org.id)}
+                          <button
+                            onClick={() => openDrawer("edit", org.id)}
                             className="flex items-center gap-1 px-2 py-1 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded transition-colors"
                             title="Edit organization"
                           >
@@ -326,7 +590,7 @@ const handleDelete = async (organizationId: number) => {
                           </button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <button 
+                              <button
                                 className="flex items-center gap-1 px-2 py-1 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
                                 title="Delete organization"
                               >
@@ -335,9 +599,15 @@ const handleDelete = async (organizationId: number) => {
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Organization</AlertDialogTitle>
+                                <AlertDialogTitle>
+                                  Delete Organization
+                                </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Are you sure you want to delete <strong>{org.name}</strong>? This action cannot be undone and will permanently remove all associated data including employees, payroll records, and organizational settings.
+                                  Are you sure you want to delete{" "}
+                                  <strong>{org.name}</strong>? This action
+                                  cannot be undone and will permanently remove
+                                  all associated data including employees,
+                                  payroll records, and organizational settings.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -346,10 +616,10 @@ const handleDelete = async (organizationId: number) => {
                                   onClick={() => handleDelete(org.id)}
                                   className="bg-red-600 hover:bg-red-700"
                                 >
-                                  {deleteConfirm.isDeleting && deleteConfirm.organizationId === org.id 
-                                    ? 'Deleting...' 
-                                    : 'Delete'
-                                  }
+                                  {deleteConfirm.isDeleting &&
+                                  deleteConfirm.organizationId === org.id
+                                    ? "Deleting..."
+                                    : "Delete"}
                                 </AlertDialogAction>
                               </AlertDialogFooter>
                             </AlertDialogContent>
@@ -368,9 +638,13 @@ const handleDelete = async (organizationId: number) => {
             <div className="flex items-center justify-between mt-6 px-4 py-4 bg-gray-50 rounded-lg">
               <div className="flex items-center gap-4">
                 <span className="text-xs text-gray-700">
-                  Showing {((filters.page || 1) - 1) * (filters.limit || 10) + 1} to{' '}
-                  {Math.min((filters.page || 1) * (filters.limit || 10), totalItems)} of{' '}
-                  {totalItems} results
+                  Showing{" "}
+                  {((filters.page || 1) - 1) * (filters.limit || 10) + 1} to{" "}
+                  {Math.min(
+                    (filters.page || 1) * (filters.limit || 10),
+                    totalItems
+                  )}{" "}
+                  of {totalItems} results
                 </span>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-700">Rows per page:</span>
@@ -395,8 +669,8 @@ const handleDelete = async (organizationId: number) => {
                   disabled={(filters.page || 1) === 1}
                   className={`flex items-center gap-1 px-3 py-1 text-xs rounded-md transition-colors ${
                     (filters.page || 1) === 1
-                      ? 'text-gray-400 cursor-not-allowed'
-                      : 'text-gray-700 hover:bg-gray-200'
+                      ? "text-gray-400 cursor-not-allowed"
+                      : "text-gray-700 hover:bg-gray-200"
                   }`}
                 >
                   <ChevronLeft className="w-3 h-3" />
@@ -424,8 +698,8 @@ const handleDelete = async (organizationId: number) => {
                       onClick={() => handlePageChange(pageNumber)}
                       className={`px-3 py-1 text-xs rounded-md transition-colors ${
                         currentPage === pageNumber
-                          ? 'bg-purple-600 text-white'
-                          : 'text-gray-700 hover:bg-gray-200'
+                          ? "bg-purple-600 text-white"
+                          : "text-gray-700 hover:bg-gray-200"
                       }`}
                     >
                       {pageNumber}
@@ -444,8 +718,8 @@ const handleDelete = async (organizationId: number) => {
                   disabled={(filters.page || 1) === totalPages}
                   className={`flex items-center gap-1 px-3 py-1 text-xs rounded-md transition-colors ${
                     (filters.page || 1) === totalPages
-                      ? 'text-gray-400 cursor-not-allowed'
-                      : 'text-gray-700 hover:bg-gray-200'
+                      ? "text-gray-400 cursor-not-allowed"
+                      : "text-gray-700 hover:bg-gray-200"
                   }`}
                 >
                   Next

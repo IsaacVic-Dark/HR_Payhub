@@ -2,62 +2,61 @@
 
 export interface Organization {
   id: number;
-  tenant_id: number;
+  tenant_id: number | null;
   name: string;
   payroll_number_prefix: string;
-  kra_pin: string;
-  nssf_number: string;
-  nhif_number: string;
-  legal_type: string;
-  registration_number: string;
-  physical_address: string;
-  postal_address: string;
-  postal_code_id: number;
+  kra_pin: string | null;
+  nssf_number: string | null;
+  nhif_number: string | null;
+  legal_type: string | null;
+  registration_number: string | null;
+  physical_address: string | null;
+  postal_address: string | null;
+  postal_code_id: number | null;
   county_id: number | null;
-  primary_phone: string;
-  secondary_phone: string;
-  official_email: string;
+  primary_phone: string | null;
+  secondary_phone: string | null;
+  official_email: string | null;
   location: string;
   logo_url: string | null;
   currency: string;
   payroll_schedule: string;
   payroll_lock_date: string | null;
-  default_payday: number;
-  bank_id: number;
-  bank_account_name: string;
-  bank_account_number: string;
-  bank_branch: string;
+  default_payday: number | null;
+  bank_id: number | null;
+  bank_account_name: string | null;
+  bank_account_number: string | null;
+  bank_branch: string | null;
   swift_code: string | null;
-  nssf_branch_code: string;
-  nhif_branch_code: string;
-  primary_administrator_id: number;
-  is_active: number; // could also be `boolean` if API returns true/false instead of 1/0
+  nssf_branch_code: string | null;
+  nhif_branch_code: string | null;
+  primary_administrator_id: number | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
-  domain: string;
+  domain: string | null;
 }
-
 
 export interface OrganizationFilters {
   page?: number;
   limit?: number;
-  search?: string;
+  name?: string;
   location?: string;
-  currency?: string;
+  status?: string;
 }
 
 export interface OrganizationResponse {
   success: boolean;
-  data?: {
-    data: Organization[];
-    metadata?: {
-      total?: number;
-      totalPages?: number;
-      currentPage?: number;
-      dev_mode?: boolean;
-    };
-  };
+  data?: Organization | Organization[];
   error?: string;
+  metadata?: {
+    page?: number;
+    limit?: number;
+    total?: number;
+    total_pages?: number;
+    filters_applied?: any;
+    dev_mode?: boolean;
+  };
 }
 
 class OrganizationAPI {
@@ -73,11 +72,10 @@ class OrganizationAPI {
 
       if (filters.page) queryParams.append('page', filters.page.toString());
       if (filters.limit) queryParams.append('limit', filters.limit.toString());
-      if (filters.search) queryParams.append('search', filters.search);
+      if (filters.name) queryParams.append('name', filters.name);
       if (filters.location) queryParams.append('location', filters.location);
-      if (filters.currency) queryParams.append('currency', filters.currency);
+      if (filters.status) queryParams.append('status', filters.status);
 
-      // Fix: Actually append the query parameters to the URL
       const url = `${this.baseURL}/organizations${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
 
       const response = await fetch(url, {
@@ -95,10 +93,8 @@ class OrganizationAPI {
 
       return {
         success: true,
-        data: {
-          data: data.data,
-          metadata: data.metadata
-        }
+        data: data.data,
+        metadata: data.metadata
       };
     } catch (error) {
       console.error('Error fetching organizations:', error);
@@ -126,9 +122,7 @@ class OrganizationAPI {
 
       return {
         success: true,
-        data: {
-          data: [data.data]
-        }
+        data: data.data
       };
     } catch (error) {
       console.error('Error fetching organization:', error);
@@ -139,7 +133,7 @@ class OrganizationAPI {
     }
   }
 
-  async createOrganization(organization: Omit<Organization, 'id' | 'created_at' | 'updated_at'>): Promise<OrganizationResponse> {
+  async createOrganization(organization: Partial<Organization>): Promise<OrganizationResponse> {
     try {
       const response = await fetch(`${this.baseURL}/organizations`, {
         method: 'POST',
@@ -157,9 +151,7 @@ class OrganizationAPI {
 
       return {
         success: true,
-        data: {
-          data: [data.data]
-        }
+        data: data.data
       };
     } catch (error) {
       console.error('Error creating organization:', error);
@@ -188,9 +180,7 @@ class OrganizationAPI {
 
       return {
         success: true,
-        data: {
-          data: [data.data]
-        }
+        data: data.data
       };
     } catch (error) {
       console.error('Error updating organization:', error);
@@ -214,11 +204,11 @@ class OrganizationAPI {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
+      const data = await response.json();
+
       return {
         success: true,
-        data: {
-          data: []
-        }
+        data: data.data
       };
     } catch (error) {
       console.error('Error deleting organization:', error);
