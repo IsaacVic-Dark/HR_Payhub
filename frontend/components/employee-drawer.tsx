@@ -5,10 +5,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { PhoneInput } from "@/components/ui/phone-input";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  CheckCheck,
-  Plus,
-} from "lucide-react";
+import { CheckCheck, Plus } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Drawer,
@@ -30,7 +27,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
-
 export type Employee = {
   id: string;
   img: React.ReactNode;
@@ -49,8 +45,8 @@ export type Employee = {
   department: string;
   p_email: string;
   email: string;
+  personal_email?: string; // ADD THIS LINE
 };
-
 
 const employeeStatuses: { label: string; value: Employee["status"] }[] = [
   { label: "Deceased", value: "deceased" },
@@ -77,7 +73,8 @@ export function EmployeeDrawerAdd({
   const [status, setStatus] = React.useState("");
   const [formData, setFormData] = React.useState({
     firstName: "",
-    lastName: "",
+    middleName: "", // ADD THIS
+    surname: "",
     reportsTo: "",
     position: "",
     p_email: "",
@@ -96,7 +93,7 @@ export function EmployeeDrawerAdd({
   }, [employees]);
 
   const initials = `${formData.firstName[0] || ""}${
-    formData.lastName[0] || ""
+    formData.surname[0] || ""
   }`.toUpperCase();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -107,7 +104,8 @@ export function EmployeeDrawerAdd({
 
     const payload = {
       first_name: formData.firstName,
-      last_name: formData.lastName,
+      middle_name: formData.middleName || null, // CHANGE
+      surname: formData.surname,
       reports_to: formData.reportsTo,
       job_title: formData.position,
       personal_email: formData.p_email,
@@ -145,7 +143,8 @@ export function EmployeeDrawerAdd({
 
       setFormData({
         firstName: "",
-        lastName: "",
+        middleName: "", // ADD THIS
+        surname: "",
         reportsTo: "",
         position: "",
         p_email: "",
@@ -235,10 +234,22 @@ export function EmployeeDrawerAdd({
                       />
                       <Input
                         type="text"
-                        placeholder="Last name"
-                        value={formData.lastName}
+                        placeholder="Middle name (optional)"
+                        value={formData.middleName}
                         onChange={(e) =>
-                          setFormData({ ...formData, lastName: e.target.value })
+                          setFormData({
+                            ...formData,
+                            middleName: e.target.value,
+                          })
+                        }
+                        className="bg-white"
+                      />
+                      <Input
+                        type="text"
+                        placeholder="Surname"
+                        value={formData.surname}
+                        onChange={(e) =>
+                          setFormData({ ...formData, surname: e.target.value })
                         }
                         className="bg-white"
                       />
@@ -262,7 +273,7 @@ export function EmployeeDrawerAdd({
                     </span>
                   </div>
 
-                  <button 
+                  <button
                     type="submit"
                     className="px-4 py-2 text-sm text-gray-600 border border-gray-300 rounded-md bg-gray-50"
                   >
@@ -302,8 +313,8 @@ export function EmployeeDrawerAdd({
                       <rect x="2" y="4" width="20" height="16" rx="2" />
                     </svg>
                     <Input
-                      type="text"
-                      placeholder="Email"
+                      type="email"
+                      placeholder="Personal Email"
                       value={formData.p_email}
                       onChange={(e) =>
                         setFormData({
@@ -313,7 +324,9 @@ export function EmployeeDrawerAdd({
                       }
                     />
                   </span>
-                  <p className="text-xs font-small ml-10 mt-2">Work emails will be automatically generated</p>
+                  <p className="text-xs font-small ml-10 mt-2">
+                    Work emails will be automatically generated
+                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-6 mb-8">
@@ -753,6 +766,28 @@ export function EmployeeDrawer({
                       {employee.email}
                     </span>
                   </div>
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="w-5 h-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                    </svg>
+
+                    <span className="text-sm text-gray-500">
+                      Personal Email
+                    </span>
+                    <span className="text-sm font-medium text-gray-800">
+                      {employee.personal_email || "N/A"}
+                    </span>
+                  </div>
                 </div>
                 <div className="space-y-4">
                   <div className="flex items-center space-x-3">
@@ -1061,6 +1096,32 @@ export function EmployeeDrawerEdit({
                         value={emp.email}
                         onChange={(e) =>
                           updateEmployee("email", e.target.value)
+                        }
+                      />
+                    </span>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      className="w-5 h-5 text-gray-400"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      viewBox="0 0 24 24"
+                    >
+                      <path d="m22 7-8.991 5.727a2 2 0 0 1-2.009 0L2 7" />
+                      <rect x="2" y="4" width="20" height="16" rx="2" />
+                    </svg>
+
+                    <span className="text-sm font-medium text-gray-800">
+                      <Input
+                        type="text"
+                        placeholder="Personal Email"
+                        value={emp.personal_email || ""}
+                        onChange={(e) =>
+                          updateEmployee("personal_email", e.target.value)
                         }
                       />
                     </span>

@@ -34,7 +34,7 @@ class EmployeeController {
             }
         });
 
-        $query = "SELECT e.*, u.username, u.email, u.first_name, u.last_name 
+        $query = "SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
                   FROM employees e 
                   LEFT JOIN users u ON e.user_id = u.id 
                   WHERE e.organization_id = {$orgId}";
@@ -72,11 +72,14 @@ class EmployeeController {
             code: empty($employees) ? 404 : 200
         );
     }
+    
     public function store($orgId) {
         $data = validate([
             'user_id' => 'numeric',
             'first_name' => 'required,string',
-            'last_name' => 'required,string',
+            'middle_name' => 'string',
+            'surname' => 'required,string',
+            'personal_email' => 'email',
             'phone' => 'string',
             'hire_date' => 'required,string',
             'job_title' => 'string',
@@ -132,14 +135,17 @@ class EmployeeController {
                 $domain = $orgResult[0]->domain;
 
                 // 4. Generate email
-                $email = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['last_name']) . '@' . $domain;
+                $email = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['surname']) . '@' . $domain;
 
                 //generate username
-                $username = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['last_name']);
+                $username = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['surname']);
 
-                // 5. Insert user
-                $insertUserSQL = "INSERT INTO users (organization_id, username, first_name, last_name, password_hash, email, user_type, created_at) 
-            VALUES ({$orgId}, '{$username}', '{$data['first_name']}', '{$data['last_name']}', '{$default_password}', '{$email}', 'employee', NOW())
+                // 5. Insert user with personal_email, middle_name, and surname
+                $personalEmail = !empty($data['personal_email']) ? "'{$data['personal_email']}'" : 'NULL';
+                $middleName = !empty($data['middle_name']) ? "'{$data['middle_name']}'" : 'NULL';
+                
+                $insertUserSQL = "INSERT INTO users (organization_id, username, first_name, middle_name, surname, password_hash, email, personal_email, user_type, created_at) 
+            VALUES ({$orgId}, '{$username}', '{$data['first_name']}', {$middleName}, '{$data['surname']}', '{$default_password}', '{$email}', {$personalEmail}, 'employee', NOW())
 ";
 
                 DB::raw($insertUserSQL);
@@ -160,7 +166,7 @@ class EmployeeController {
                 return responseJson(null, "Failed to create employee", 500);
             } else {
                 // Get the created employee with user details
-                $result = DB::raw("SELECT e.*, u.username, u.email, u.first_name, u.last_name 
+                $result = DB::raw("SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
                                     FROM employees e 
                                     LEFT JOIN users u ON e.user_id = u.id 
                                     WHERE e.phone = '{$data['phone']}' 
@@ -184,19 +190,26 @@ class EmployeeController {
             return responseJson(null, "Error creating employee: " . $e->getMessage(), 500);
         }
     }
+    
     public function show($orgId, $id) {
-        $employee = DB::table('employees')->selectAllWhere('organization_id', $orgId);
-        $employee = array_filter($employee, fn($e) => $e->id == $id);
-        if (!$employee) {
+        $query = "SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
+                  FROM employees e 
+                  LEFT JOIN users u ON e.user_id = u.id 
+                  WHERE e.organization_id = {$orgId} AND e.id = {$id}";
+        
+        $employee = DB::raw($query);
+        
+        if (!$employee || empty($employee)) {
             return responseJson(null, "Employee not found", 404);
         }
         return responseJson(
-            data: array_values($employee)[0],
-            message: empty($employee) ? "No employee found" : "Employee fetched successfully",
+            data: $employee[0],
+            message: "Employee fetched successfully",
             metadata: ['dev_mode' => true],
-            code: empty($employee) ? 404 : 200
+            code: 200
         );
     }
+    
     /*
      * Update an employee's details
      * @param int $orgId Organization ID
@@ -209,8 +222,10 @@ class EmployeeController {
         $data = validate([
             'user_id' => 'numeric',
             'first_name' => 'string',
-            'last_name' => 'string',
+            'middle_name' => 'string',
+            'surname' => 'string',
             'email' => 'email',
+            'personal_email' => 'email',
             'phone' => 'string',
             'hire_date' => 'string',
             'job_title' => 'string',
@@ -220,46 +235,83 @@ class EmployeeController {
             'bank_account_number' => 'string',
             'tax_id' => 'string'
         ]);
-        $updateData = array_filter($data, fn($v) => $v !== null);
-        if (isset($updateData['email'])) {
-            $existingEmail = DB::table('employees')->selectAllWhere('email', $updateData['email']);
-            if ($existingEmail && $existingEmail[0]->id != $id) {
+        
+        // Separate employee data from user data
+        $employeeData = array_filter([
+            'phone' => $data['phone'] ?? null,
+            'hire_date' => $data['hire_date'] ?? null,
+            'job_title' => $data['job_title'] ?? null,
+            'department' => $data['department'] ?? null,
+            'reports_to' => $data['reports_to'] ?? null,
+            'base_salary' => $data['base_salary'] ?? null,
+            'bank_account_number' => $data['bank_account_number'] ?? null,
+            'tax_id' => $data['tax_id'] ?? null
+        ], fn($v) => $v !== null);
+        
+        $userData = array_filter([
+            'first_name' => $data['first_name'] ?? null,
+            'middle_name' => $data['middle_name'] ?? null,
+            'surname' => $data['surname'] ?? null,
+            'email' => $data['email'] ?? null,
+            'personal_email' => $data['personal_email'] ?? null
+        ], fn($v) => $v !== null);
+        
+        if (isset($userData['email'])) {
+            $existingEmail = DB::table('users')->selectAllWhere('email', $userData['email']);
+            if ($existingEmail && $existingEmail[0]->id != $data['user_id']) {
                 return responseJson(null, "Email already exists", 400);
             }
         }
-        if (isset($updateData['user_id'])) {
-            $user = DB::table('users')->selectAllWhereID($updateData['user_id']);
+        if (isset($data['user_id'])) {
+            $user = DB::table('users')->selectAllWhereID($data['user_id']);
             if (!$user) {
                 return responseJson(null, "Invalid user_id", 400);
             }
         }
-        if (isset($updateData['reports_to'])) {
-            $manager = DB::table('employees')->selectAllWhereID($updateData['reports_to']);
+        if (isset($employeeData['reports_to'])) {
+            $manager = DB::table('employees')->selectAllWhereID($employeeData['reports_to']);
             if (!$manager) {
                 return responseJson(null, "Invalid reports_to (manager)", 400);
             }
         }
-        if (empty($updateData)) {
+        if (empty($employeeData) && empty($userData)) {
             return responseJson(null, "No data provided for update", 400);
         }
+        
+        // Get employee to find user_id
         $employee = DB::table('employees')->selectAllWhere('organization_id', $orgId);
         $employee = array_filter($employee, fn($e) => $e->id == $id);
         if (!$employee) {
             return responseJson(null, "Employee not found", 404);
         }
-        $updated = DB::table('employees')->update($updateData, 'id', $id);
-        if ($updated) {
-            $employee = DB::table('employees')->selectAllWhere('organization_id', $orgId);
-            $employee = array_filter($employee, fn($e) => $e->id == $id);
-            return responseJson(
-                data: array_values($employee)[0],
-                message: "Employee updated successfully",
-                metadata: ['dev_mode' => true]
-            );
-        } else {
-            return responseJson(null, "Failed to update employee", 500);
+        
+        $employee = array_values($employee)[0];
+        
+        // Update employee table
+        if (!empty($employeeData)) {
+            DB::table('employees')->update($employeeData, 'id', $id);
         }
+        
+        // Update user table
+        if (!empty($userData) && $employee->user_id) {
+            DB::table('users')->update($userData, 'id', $employee->user_id);
+        }
+        
+        // Fetch updated employee with user details
+        $query = "SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
+                  FROM employees e 
+                  LEFT JOIN users u ON e.user_id = u.id 
+                  WHERE e.organization_id = {$orgId} AND e.id = {$id}";
+        
+        $updatedEmployee = DB::raw($query);
+        
+        return responseJson(
+            data: $updatedEmployee[0],
+            message: "Employee updated successfully",
+            metadata: ['dev_mode' => true]
+        );
     }
+    
     /*
      * Delete an employee
      * @param int $orgId Organization ID

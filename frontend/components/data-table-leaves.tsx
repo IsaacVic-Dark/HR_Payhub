@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { Filter, Search, Plus, ChevronDown, ChevronLeft, ChevronRight, Check, X, Eye } from 'lucide-react';
+import { Filter, Search, Plus, Check, X, Eye } from 'lucide-react';
 import { leaveAPI, LeaveType, LeaveFilters } from '@/services/api/leave';
 import { Button } from '@/components/ui/button';
 import { LeaveActionDialog } from '@/app/leaves/leave-action-dialog';
 import { LeaveViewDrawer } from '@/app/leaves/leave-view-drawer';
 import { toast } from 'sonner';
+import { DataTable, ColumnDef } from '@/components/table';
 
 interface LeaveTableProps {
   organizationId: string;
@@ -73,7 +74,7 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
   const filteredLeaves = leaves.filter((leave) => {
     const matchesSearch =
       searchTerm === '' ||
-      `${leave.first_name} ${leave.last_name}`
+      `${leave.first_name} ${leave.surname}`
         .toLowerCase()
         .includes(searchTerm.toLowerCase()) ||
       leave.employee_email?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -133,13 +134,11 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
     };
 
     return (
-      <div className="flex items-center gap-2">
-        <span
-          className={`px-2 py-1 rounded-full text-xs font-medium ${config.color}`}
-        >
-          {config.label}
-        </span>
-      </div>
+      <span
+        className={`px-2 py-1 rounded-full text-xs font-medium ${config.color}`}
+      >
+        {config.label}
+      </span>
     );
   };
 
@@ -170,7 +169,7 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
           `Leave ${actionType === 'approve' ? 'approved' : 'rejected'} successfully`
         );
         setDialogOpen(false);
-        fetchLeaves(); // Refresh the list
+        fetchLeaves();
       } else {
         toast.error(response.error || 'Failed to update leave status');
       }
@@ -198,28 +197,70 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
     setEndDateFilter('');
   };
 
-  if (loading) {
-    return (
-      <div className="w-full mx-auto p-4 bg-white">
-        <div className="rounded-lg shadow-sm border p-4 flex items-center justify-center py-12">
-          <p className="text-gray-500">Loading leaves...</p>
+  // Table columns configuration
+  const columns: ColumnDef<LeaveType>[] = [
+    {
+      key: 'employee',
+      header: 'Employee',
+      cell: (leave) => `${leave.first_name} ${leave.surname}`,
+    },
+    {
+      key: 'leave_type',
+      header: 'Leave Type',
+      cell: (leave) => <span className="capitalize">{leave.leave_type}</span>,
+    },
+    {
+      key: 'period',
+      header: 'Period',
+      cell: (leave) => formatDateRange(leave.start_date, leave.end_date),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      cell: (leave) => getStatusBadge(leave.status),
+    },
+    {
+      key: 'email',
+      header: 'Email',
+      cell: (leave) => leave.employee_email || '—',
+    },
+    {
+      key: 'actions',
+      header: 'Actions',
+      cell: (leave) => (
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => handleViewClick(leave)}
+            className="h-8 w-8 p-0"
+          >
+            <Eye className="h-4 w-4" />
+          </Button>
+          {leave.status === 'pending' && (
+            <>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleActionClick(leave, 'approve')}
+                className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
+              >
+                <Check className="h-4 w-4" />
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => handleActionClick(leave, 'reject')}
+                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </>
+          )}
         </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="w-full mx-auto p-4 bg-white">
-        <div className="rounded-lg shadow-sm border p-4 flex items-center justify-center py-12">
-          <div className="text-center">
-            <p className="text-red-600 font-medium">Error loading leaves</p>
-            <p className="text-gray-500 text-sm mt-1">{error}</p>
-          </div>
-        </div>
-      </div>
-    );
-  }
+      ),
+    },
+  ];
 
   return (
     <>
@@ -310,180 +351,26 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
             </div>
           )}
 
-          {/* Table */}
-          <div className="bg-white overflow-x-auto">
-            {filteredLeaves.length === 0 ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <p className="text-gray-500 font-medium">No leaves found</p>
-                  <p className="text-gray-400 text-sm mt-1">
-                    {searchTerm || selectedLeaveType || startDateFilter || endDateFilter
-                      ? 'Try adjusting your filters'
-                      : 'Create your first leave to get started'}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <table className="w-full min-w-max">
-                <thead className="border-b border-gray-200">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Employee
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Leave Type
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Period
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Email
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {filteredLeaves.map((leave) => (
-                    <tr key={leave.leave_id} className="hover:bg-gray-50">
-                      <td className="px-4 py-4 text-xs text-gray-900">
-                        {leave.first_name} {leave.last_name}
-                      </td>
-                      <td className="px-4 py-4 text-xs text-gray-900 capitalize">
-                        {leave.leave_type}
-                      </td>
-                      <td className="px-4 py-4 text-xs text-gray-900">
-                        {formatDateRange(leave.start_date, leave.end_date)}
-                      </td>
-                      <td className="px-4 py-4">{getStatusBadge(leave.status)}</td>
-                      <td className="px-4 py-4 text-xs text-gray-900">
-                        {leave.employee_email || '—'}
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex items-center gap-2">
-                          <Button
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => handleViewClick(leave)}
-                            className="h-8 w-8 p-0"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {leave.status === 'pending' && (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleActionClick(leave, 'approve')}
-                                className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
-                              >
-                                <Check className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleActionClick(leave, 'reject')}
-                                className="h-8 w-8 p-0 text-red-600 hover:text-red-700 hover:bg-red-50"
-                              >
-                                <X className="h-4 w-4" />
-                              </Button>
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {/* Pagination */}
-          {filteredLeaves.length > 0 && (
-            <div className="flex items-center justify-between mt-6 px-4 py-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-4">
-                <span className="text-xs text-gray-700">
-                  Showing {((filters.page || 1) - 1) * (filters.limit || 10) + 1} to{' '}
-                  {Math.min((filters.page || 1) * (filters.limit || 10), totalItems)} of{' '}
-                  {totalItems} results
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-700">Rows per page:</span>
-                  <select
-                    value={filters.limit || 10}
-                    onChange={(e) => handleLimitChange(Number(e.target.value))}
-                    className="px-3 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={25}>25</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => handlePageChange((filters.page || 1) - 1)}
-                  disabled={(filters.page || 1) === 1}
-                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors ${
-                    (filters.page || 1) === 1
-                      ? 'text-gray-400 cursor-not-allowed'
-                      : 'text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                  Previous
-                </button>
-
-                {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                  const currentPage = filters.page || 1;
-                  let pageNumber;
-
-                  if (totalPages <= 5) {
-                    pageNumber = i + 1;
-                  } else if (currentPage <= 3) {
-                    pageNumber = i + 1;
-                  } else if (currentPage >= totalPages - 2) {
-                    pageNumber = totalPages - 4 + i;
-                  } else {
-                    pageNumber = currentPage - 2 + i;
-                  }
-
-                  return (
-                    <button
-                      key={pageNumber}
-                      onClick={() => handlePageChange(pageNumber)}
-                      className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                        currentPage === pageNumber
-                          ? 'bg-blue-600 text-white'
-                          : 'text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {pageNumber}
-                    </button>
-                  );
-                })}
-
-                <button
-                  onClick={() => handlePageChange((filters.page || 1) + 1)}
-                  disabled={(filters.page || 1) === totalPages}
-                  className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors ${
-                    (filters.page || 1) === totalPages
-                      ? 'text-gray-400 cursor-not-allowed'
-                      : 'text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  Next
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Data Table */}
+          <DataTable
+            data={filteredLeaves}
+            columns={columns}
+            pagination={{
+              page: filters.page || 1,
+              limit: filters.limit || 10,
+              totalItems,
+              totalPages,
+            }}
+            onPageChange={handlePageChange}
+            onLimitChange={handleLimitChange}
+            loading={loading}
+            error={error}
+            emptyMessage={
+              searchTerm || selectedLeaveType || startDateFilter || endDateFilter
+                ? 'No leaves match your filters'
+                : 'No leaves found'
+            }
+          />
         </div>
       </div>
 
@@ -499,7 +386,7 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
         }
         employeeName={
           selectedLeave
-            ? `${selectedLeave.first_name} ${selectedLeave.last_name}`
+            ? `${selectedLeave.first_name} ${selectedLeave.surname}`
             : ''
         }
         onConfirm={handleConfirmAction}

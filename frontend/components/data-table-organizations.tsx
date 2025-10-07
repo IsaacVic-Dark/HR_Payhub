@@ -5,9 +5,6 @@ import {
   Filter,
   Search,
   Plus,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   MapPin,
   Building2,
   Globe,
@@ -36,6 +33,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { DataTable, ColumnDef } from "@/components/table";
 
 interface OrganizationTableProps {
   className?: string;
@@ -136,12 +134,10 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
   const handleSearch = (searchTerm: string) => {
     setSearchTerm(searchTerm);
 
-    // Clear existing timeout
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
 
-    // Set new timeout for 500ms delay
     searchTimeoutRef.current = setTimeout(() => {
       setFilters((prev) => ({
         ...prev,
@@ -154,12 +150,10 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
   const handleLocationFilter = (location: string) => {
     setLocationFilter(location);
 
-    // Clear existing timeout
     if (locationTimeoutRef.current) {
       clearTimeout(locationTimeoutRef.current);
     }
 
-    // Set new timeout for 500ms delay
     locationTimeoutRef.current = setTimeout(() => {
       setFilters((prev) => ({
         ...prev,
@@ -175,7 +169,6 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
   };
 
   const clearAllFilters = () => {
-    // Clear any pending timeouts
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
@@ -211,7 +204,7 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
   };
 
   const handleDrawerSuccess = () => {
-    fetchOrganizations(); // Refresh the table
+    fetchOrganizations();
   };
 
   // Delete handlers
@@ -227,20 +220,13 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
     });
   };
 
-  const closeDeleteConfirm = () => {
-    setDeleteConfirm({
-      isOpen: false,
-      isDeleting: false,
-    });
-  };
-
   const handleDelete = async (organizationId: number) => {
     if (!organizationId) return;
 
     try {
       const response = await organizationAPI.deleteOrganization(organizationId);
       if (response.success) {
-        await fetchOrganizations(); // Refresh the table
+        await fetchOrganizations();
       } else {
         setError(response.error || "Failed to delete organization");
       }
@@ -251,42 +237,158 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
     }
   };
 
-  // Add this useEffect for cleanup
-  useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
-      }
-      if (locationTimeoutRef.current) {
-        clearTimeout(locationTimeoutRef.current);
-      }
-    };
-  }, []);
-
-  if (loading) {
-    return (
-      <div className="w-full mx-auto p-4 bg-white">
-        <div className="rounded-lg shadow-sm border p-4 flex items-center justify-center py-12">
-          <p className="text-gray-500">Loading organizations...</p>
+  // Table columns configuration
+  const columns: ColumnDef<Organization>[] = [
+    {
+      key: "organization",
+      header: "Organization",
+      cell: (org) => (
+        <div className="flex flex-col">
+          <div className="text-sm font-medium text-gray-900">{org.name}</div>
+          <div className="text-xs text-gray-500">
+            <Globe className="w-3 h-3 inline mr-1" />
+            {org.domain}
+          </div>
+          <div className="text-xs text-gray-500">KRA: {org.kra_pin}</div>
         </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="w-full mx-auto p-4 bg-white">
-        <div className="rounded-lg shadow-sm border p-4 flex items-center justify-center py-12">
-          <div className="text-center">
-            <p className="text-red-600 font-medium">
-              Error loading organizations
-            </p>
-            <p className="text-gray-500 text-sm mt-1">{error}</p>
+      ),
+    },
+    {
+      key: "type",
+      header: "Type & Registration",
+      cell: (org) => (
+        <div className="flex flex-col">
+          <div className="text-sm text-gray-900">{org.legal_type}</div>
+          <div className="text-xs text-gray-500">{org.registration_number}</div>
+          <div className="text-xs text-gray-500">
+            Prefix: {org.payroll_number_prefix}
           </div>
         </div>
-      </div>
-    );
-  }
+      ),
+    },
+    {
+      key: "location",
+      header: "Location & Contact",
+      cell: (org) => (
+        <div className="flex flex-col">
+          <div className="text-sm text-gray-900">
+            <MapPin className="w-3 h-3 inline mr-1" />
+            {org.location}
+          </div>
+          <div className="text-xs text-gray-500">{org.primary_phone}</div>
+          <div className="text-xs text-gray-500 truncate max-w-32">
+            {org.official_email}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "financial",
+      header: "Financial Details",
+      cell: (org) => (
+        <div className="flex flex-col">
+          <div className="text-sm text-gray-900">
+            <Coins className="w-3 h-3 inline mr-1" />
+            {org.currency}
+          </div>
+          <div className="text-xs text-gray-500">{org.bank_account_name}</div>
+          <div className="text-xs text-gray-500">{org.bank_account_number}</div>
+          <div className="text-xs text-gray-500">{org.bank_branch}</div>
+        </div>
+      ),
+    },
+    {
+      key: "payroll",
+      header: "Payroll Info",
+      cell: (org) => (
+        <div className="flex flex-col">
+          <div className="text-sm text-gray-900">{org.payroll_schedule}</div>
+          <div className="text-xs text-gray-500">Pay Day: {org.default_payday}</div>
+          <div className="text-xs text-gray-500">NSSF: {org.nssf_number}</div>
+          <div className="text-xs text-gray-500">NHIF: {org.nhif_number}</div>
+        </div>
+      ),
+    },
+    {
+      key: "status",
+      header: "Status & Date",
+      cell: (org) => (
+        <div className="flex flex-col">
+          <div
+            className={`text-xs px-2 py-1 rounded-full w-fit ${
+              org.is_active
+                ? "bg-green-100 text-green-800"
+                : "bg-red-100 text-red-800"
+            }`}
+          >
+            {org.is_active ? "Active" : "Inactive"}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            <Calendar className="w-3 h-3 inline mr-1" />
+            {formatDate(org.created_at)}
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      cell: (org) => (
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => openDrawer("view", org.id)}
+            className="flex items-center gap-1 px-2 py-1 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded transition-colors"
+            title="View details"
+          >
+            <Eye className="w-3 h-3" />
+          </button>
+          <button
+            onClick={() => openDrawer("edit", org.id)}
+            className="flex items-center gap-1 px-2 py-1 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded transition-colors"
+            title="Edit organization"
+          >
+            <Edit className="w-3 h-3" />
+          </button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <button
+                className="flex items-center gap-1 px-2 py-1 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
+                title="Delete organization"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>
+                  Delete Organization
+                </AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete{" "}
+                  <strong>{org.name}</strong>? This action
+                  cannot be undone and will permanently remove
+                  all associated data including employees,
+                  payroll records, and organizational settings.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => handleDelete(org.id)}
+                  className="bg-red-600 hover:bg-red-700"
+                >
+                  {deleteConfirm.isDeleting &&
+                  deleteConfirm.organizationId === org.id
+                    ? "Deleting..."
+                    : "Delete"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <>
@@ -362,7 +464,7 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
                       placeholder="Filter by location"
                       value={locationFilter}
                       onChange={(e) => handleLocationFilter(e.target.value)}
-                      className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                      className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent w-full"
                     />
                   </div>
                 </div>
@@ -376,358 +478,35 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
                     onChange={(e) => handleStatusFilter(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
                   >
-                    <option value="">All Statuses</option>
+                    <option value="">All Status</option>
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
                   </select>
                 </div>
-
-                <div className="flex items-end">
-                  <button
-                    onClick={clearAllFilters}
-                    className="flex items-center gap-2 px-4 py-2 text-xs text-gray-600 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
-                  >
-                    <X className="w-4 h-4" />
-                    Clear Filters
-                  </button>
-                </div>
               </div>
             </div>
           )}
 
-          {/* Active Filters Display */}
-          {hasActiveFilters && (
-            <div className="mb-4 flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-gray-500">Active filters:</span>
-              {searchTerm && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-purple-100 text-purple-700 text-xs rounded-md">
-                  Name: "{searchTerm}"
-                  <button
-                    onClick={() => handleSearch("")}
-                    className="text-purple-500 hover:text-purple-700"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {locationFilter && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 text-blue-700 text-xs rounded-md">
-                  Location: "{locationFilter}"
-                  <button
-                    onClick={() => handleLocationFilter("")}
-                    className="text-blue-500 hover:text-blue-700"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {statusFilter && (
-                <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 text-green-700 text-xs rounded-md">
-                  Status:{" "}
-                  {statusFilter.charAt(0).toUpperCase() + statusFilter.slice(1)}
-                  <button
-                    onClick={() => handleStatusFilter("")}
-                    className="text-green-500 hover:text-green-700"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Table */}
-          <div className="bg-white overflow-x-auto">
-            {organizations.length === 0 ? (
-              <div className="flex items-center justify-center py-12">
-                <div className="text-center">
-                  <p className="text-gray-500 font-medium">
-                    No organizations found
-                  </p>
-                  <p className="text-gray-400 text-sm mt-1">
-                    {hasActiveFilters
-                      ? "Try adjusting your filters or create a new organization"
-                      : "Create your first organization to get started"}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <table className="w-full">
-                <thead className="border-b border-gray-200">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Organization
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Type & Registration
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Location & Contact
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Financial Details
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Payroll Info
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Status & Date
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {organizations.map((org) => (
-                    <tr key={org.id} className="hover:bg-gray-50">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <div className="text-sm font-medium text-gray-900">
-                            {org.name}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            <Globe className="w-3 h-3 inline mr-1" />
-                            {org.domain}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            KRA: {org.kra_pin}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <div className="text-sm text-gray-900">
-                            {org.legal_type}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {org.registration_number}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            Prefix: {org.payroll_number_prefix}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <div className="text-sm text-gray-900">
-                            <MapPin className="w-3 h-3 inline mr-1" />
-                            {org.location}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {org.primary_phone}
-                          </div>
-                          <div className="text-xs text-gray-500 truncate max-w-32">
-                            {org.official_email}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <div className="text-sm text-gray-900">
-                            <Coins className="w-3 h-3 inline mr-1" />
-                            {org.currency}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {org.bank_account_name}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {org.bank_account_number}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {org.bank_branch}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <div className="text-sm text-gray-900">
-                            {org.payroll_schedule}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            Pay Day: {org.default_payday}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            NSSF: {org.nssf_number}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            NHIF: {org.nhif_number}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex flex-col">
-                          <div
-                            className={`text-xs px-2 py-1 rounded-full w-fit ${
-                              org.is_active
-                                ? "bg-green-100 text-green-800"
-                                : "bg-red-100 text-red-800"
-                            }`}
-                          >
-                            {org.is_active ? "Active" : "Inactive"}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            <Calendar className="w-3 h-3 inline mr-1" />
-                            {formatDate(org.created_at)}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => openDrawer("view", org.id)}
-                            className="flex items-center gap-1 px-2 py-1 text-blue-600 hover:text-blue-900 hover:bg-blue-50 rounded transition-colors"
-                            title="View details"
-                          >
-                            <Eye className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => openDrawer("edit", org.id)}
-                            className="flex items-center gap-1 px-2 py-1 text-purple-600 hover:text-purple-900 hover:bg-purple-50 rounded transition-colors"
-                            title="Edit organization"
-                          >
-                            <Edit className="w-3 h-3" />
-                          </button>
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <button
-                                className="flex items-center gap-1 px-2 py-1 text-red-600 hover:text-red-900 hover:bg-red-50 rounded transition-colors"
-                                title="Delete organization"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>
-                                  Delete Organization
-                                </AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to delete{" "}
-                                  <strong>{org.name}</strong>? This action
-                                  cannot be undone and will permanently remove
-                                  all associated data including employees,
-                                  payroll records, and organizational settings.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => handleDelete(org.id)}
-                                  className="bg-red-600 hover:bg-red-700"
-                                >
-                                  {deleteConfirm.isDeleting &&
-                                  deleteConfirm.organizationId === org.id
-                                    ? "Deleting..."
-                                    : "Delete"}
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {/* Pagination */}
-          {organizations.length > 0 && (
-            <div className="flex items-center justify-between mt-6 px-4 py-4 bg-gray-50 rounded-lg">
-              <div className="flex items-center gap-4">
-                <span className="text-xs text-gray-700">
-                  Showing{" "}
-                  {((filters.page || 1) - 1) * (filters.limit || 10) + 1} to{" "}
-                  {Math.min(
-                    (filters.page || 1) * (filters.limit || 10),
-                    totalItems
-                  )}{" "}
-                  of {totalItems} results
-                </span>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-700">Rows per page:</span>
-                  <select
-                    value={filters.limit || 10}
-                    onChange={(e) => handleLimitChange(Number(e.target.value))}
-                    className="px-3 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent bg-white"
-                  >
-                    <option value={5}>5</option>
-                    <option value={10}>10</option>
-                    <option value={20}>20</option>
-                    <option value={25}>25</option>
-                    <option value={50}>50</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1">
-                {/* Previous Button */}
-                <button
-                  onClick={() => handlePageChange((filters.page || 1) - 1)}
-                  disabled={(filters.page || 1) === 1}
-                  className={`flex items-center gap-1 px-3 py-1 text-xs rounded-md transition-colors ${
-                    (filters.page || 1) === 1
-                      ? "text-gray-400 cursor-not-allowed"
-                      : "text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  <ChevronLeft className="w-3 h-3" />
-                  Previous
-                </button>
-
-                {/* Page Numbers */}
-                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
-                  const currentPage = filters.page || 1;
-                  let pageNumber;
-
-                  if (totalPages <= 7) {
-                    pageNumber = i + 1;
-                  } else if (currentPage <= 4) {
-                    pageNumber = i + 1;
-                  } else if (currentPage >= totalPages - 3) {
-                    pageNumber = totalPages - 6 + i;
-                  } else {
-                    pageNumber = currentPage - 3 + i;
-                  }
-
-                  return (
-                    <button
-                      key={pageNumber}
-                      onClick={() => handlePageChange(pageNumber)}
-                      className={`px-3 py-1 text-xs rounded-md transition-colors ${
-                        currentPage === pageNumber
-                          ? "bg-purple-600 text-white"
-                          : "text-gray-700 hover:bg-gray-200"
-                      }`}
-                    >
-                      {pageNumber}
-                    </button>
-                  );
-                })}
-
-                {/* Show dots if there are many pages */}
-                {totalPages > 7 && (filters.page || 1) < totalPages - 3 && (
-                  <span className="px-2 py-1 text-xs text-gray-500">...</span>
-                )}
-
-                {/* Next Button */}
-                <button
-                  onClick={() => handlePageChange((filters.page || 1) + 1)}
-                  disabled={(filters.page || 1) === totalPages}
-                  className={`flex items-center gap-1 px-3 py-1 text-xs rounded-md transition-colors ${
-                    (filters.page || 1) === totalPages
-                      ? "text-gray-400 cursor-not-allowed"
-                      : "text-gray-700 hover:bg-gray-200"
-                  }`}
-                >
-                  Next
-                  <ChevronRight className="w-3 h-3" />
-                </button>
-              </div>
-            </div>
-          )}
+          {/* Data Table */}
+          <DataTable
+            data={organizations}
+            columns={columns}
+            pagination={{
+              page: filters.page || 1,
+              limit: filters.limit || 10,
+              totalItems,
+              totalPages,
+            }}
+            onPageChange={handlePageChange}
+            onLimitChange={handleLimitChange}
+            loading={loading}
+            error={error}
+            emptyMessage={
+              hasActiveFilters
+                ? "No organizations match your filters"
+                : "No organizations found"
+            }
+          />
         </div>
       </div>
 

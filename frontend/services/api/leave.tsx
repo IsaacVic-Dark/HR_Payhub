@@ -6,7 +6,7 @@ type LeaveType = {
   status: string;
   employee_email: string | null;
   first_name: string;
-  last_name: string;
+  surname: string;
 };
 
 interface ApiResponse<T = any> {
