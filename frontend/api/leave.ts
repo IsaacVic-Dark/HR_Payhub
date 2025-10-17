@@ -3,7 +3,7 @@ export interface LeaveType {
   leave_id: string;
   employee_id: string;
   first_name: string;
-  last_name: string;
+  surname: string;
   employee_email?: string;
   leave_type: string;
   start_date: string;

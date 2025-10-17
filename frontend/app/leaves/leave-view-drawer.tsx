@@ -69,7 +69,7 @@ export function LeaveViewDrawer({
                 Leave Request Details
               </DrawerTitle>
               <DrawerDescription>
-                {leave.first_name} {leave.last_name}
+                {leave.first_name} {leave.surname}
               </DrawerDescription>
             </div>
           </div>
@@ -86,7 +86,7 @@ export function LeaveViewDrawer({
               <div>
                 <span className="text-gray-600">Full Name</span>
                 <p className="font-medium">
-                  {leave.first_name} {leave.last_name}
+                  {leave.first_name} {leave.surname}
                 </p>
               </div>
               <div>

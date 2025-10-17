@@ -10,18 +10,7 @@ use App\Controllers\PayrunController;
 use App\Controllers\PayrunDetailController;
 use App\Controllers\LeaveController;
 use App\Controllers\NotificationController;
-use App\Controllers\AuthController; // Add this line
-
-// In your routes.php, add this at the end:
-// Router::options('api/v1/{any}', function($any) {
-//     http_response_code(200);
-//     exit;
-// });
-
-// Router::options('api/v1/{any}/{id}', function($any, $id) {
-//     http_response_code(200);
-//     exit;
-// });
+use App\Controllers\AuthController;
 
 // Add authentication routes
 Router::post('api/v1/auth/login', AuthController::class . '@login');
@@ -34,9 +23,23 @@ Router::resource('api/v1/organizations/{id}/configs', OrganizationConfigControll
 Router::resource('api/v1/users', UserController::class);
 Router::resource('api/v1/organizations/{id}/employees', EmployeeController::class);
 Router::resource('api/v1/organizations/{id}/payruns', PayrunController::class);
-Router::resource('api/v1/organizations/leaves', LeaveController::class);
-Router::resource('api/v1/organizations/notifications', NotificationController::class);
 Router::resource('api/v1/payruns/{id}/details', PayrunDetailController::class);
+
+// Leave routes with full CRUD and actions
+Router::get('api/v1/leaves', LeaveController::class . '@index');                    // Get all leaves (paginated)
+Router::get('api/v1/leaves/statistics', LeaveController::class . '@statistics');    // Get leave statistics
+Router::get('api/v1/leaves/{id}', LeaveController::class . '@show');               // Get single leave
+Router::post('api/v1/leaves', LeaveController::class . '@store');                  // Create leave
+Router::put('api/v1/leaves/{id}', LeaveController::class . '@update');             // Update leave
+Router::patch('api/v1/leaves/{id}', LeaveController::class . '@update');           // Update leave (alternative)
+Router::delete('api/v1/leaves/{id}', LeaveController::class . '@destroy');         // Delete leave
+
+// Leave action routes
+Router::post('api/v1/leaves/{id}/approve', LeaveController::class . '@approve');   // Approve leave
+Router::post('api/v1/leaves/{id}/reject', LeaveController::class . '@reject');     // Reject leave
+
+// Notification routes
+Router::resource('api/v1/notifications', NotificationController::class);
 
 Router::get('/api/test', function ($d) {
     echo json_encode($d);

@@ -214,7 +214,7 @@ export function DataTablePayroll() {
           ),
           salary: parseFloat(emp.base_salary),
           status: "active" as const, // You might want to derive this from your data
-          name: `${emp.first_name} ${emp.last_name}`,
+          name: `${emp.first_name} ${emp.surname}`,
           position: emp.job_title,
           department: emp.department,
           email: emp.email,

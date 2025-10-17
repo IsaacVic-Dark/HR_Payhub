@@ -50,7 +50,7 @@ export default function Page() {
   ];
 
   const path = pathname.split("/").filter(Boolean).pop() || "Dashboard";
-  
+
   return (
     <SidebarProvider
       style={
@@ -65,6 +65,12 @@ export default function Page() {
         <SiteHeader />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
+            <div className="mt-4 mx-6 space-y-2">
+              <h1 className="text-4xl font-medium">Leaves Managment</h1>
+              <p className="text-base text-muted-foreground">
+                This page shows all leaves requests made by employees:
+              </p>
+            </div>
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
               <SectionCards details={cardDetails} />
               <LeaveTable />

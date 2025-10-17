@@ -18,7 +18,7 @@ export interface Notification {
   updated_at: string;
   employee_email: string;
   first_name: string;
-  last_name: string;
+  surname: string;
 }
 
 export interface NotificationResponse {

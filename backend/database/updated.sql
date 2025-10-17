@@ -124,14 +124,15 @@ CREATE TABLE IF NOT EXISTS `benefits` (
 
 -- Data exporting was unselected.
 
--- Dumping structure for table payhub.leaves
+-- Updated structure for table payhub.leaves
 CREATE TABLE IF NOT EXISTS `leaves` (
   `id` int NOT NULL AUTO_INCREMENT,
   `employee_id` int NOT NULL,
   `leave_type` enum('sick','casual','annual','maternity','paternity','other') NOT NULL,
   `start_date` date NOT NULL,
   `end_date` date NOT NULL,
-  `status` enum('pending','approved','rejected') DEFAULT 'pending',
+  `status` enum('pending','approved','rejected','expired') DEFAULT 'pending',
+  `reason` TEXT NULL, -- Added column for reason/description
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
