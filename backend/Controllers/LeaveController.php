@@ -22,61 +22,73 @@ class LeaveController
 
             // Optional filters
             $status = $_GET['status'] ?? null;
-            $employeeId = $_GET['employee_id'] ?? null;
+            $approverId = $_GET['approver_id'] ?? null;
+            $relieverId = $_GET['reliever_id'] ?? null;
             $leaveType = $_GET['leave_type'] ?? null;
-            $month = $_GET['month'] ?? null; // Format: 1-12
-            $year = $_GET['year'] ?? null; // Format: YYYY
-            $name = $_GET['name'] ?? null; // Search in first_name, middle_name, or surname
+            $month = $_GET['month'] ?? null;
+            $year = $_GET['year'] ?? null;
+            $name = $_GET['name'] ?? null;
 
             // Build WHERE clause
             $whereConditions = [];
-            $params = [];
+            $countParams = [];
+            $queryParams = [];
+            $statsParams = [];
 
             if ($status) {
-                $whereConditions[] = "leaves.status = :status";
-                $params[':status'] = $status;
+                $whereConditions[] = "leaves.status = :filter_status";
+                $countParams[':filter_status'] = $status;
+                $queryParams[':filter_status'] = $status;
+                $statsParams[':filter_status'] = $status;
             }
 
-            if ($employeeId) {
-                $whereConditions[] = "leaves.employee_id = :employee_id";
-                $params[':employee_id'] = $employeeId;
+            if ($approverId) {
+                $whereConditions[] = "leaves.approver_id = :filter_approver_id";
+                $countParams[':filter_approver_id'] = $approverId;
+                $queryParams[':filter_approver_id'] = $approverId;
+                $statsParams[':filter_approver_id'] = $approverId;
+            }
+
+            if ($relieverId) {
+                $whereConditions[] = "leaves.reliever_id = :filter_reliever_id";
+                $countParams[':filter_reliever_id'] = $relieverId;
+                $queryParams[':filter_reliever_id'] = $relieverId;
+                $statsParams[':filter_reliever_id'] = $relieverId;
             }
 
             if ($leaveType) {
-                $whereConditions[] = "leaves.leave_type = :leave_type";
-                $params[':leave_type'] = $leaveType;
+                $whereConditions[] = "leaves.leave_type = :filter_leave_type";
+                $countParams[':filter_leave_type'] = $leaveType;
+                $queryParams[':filter_leave_type'] = $leaveType;
+                $statsParams[':filter_leave_type'] = $leaveType;
             }
 
-            // Month and Year filter - filter by any leave that overlaps with the specified month/year
-            if ($month || $year) {
-                // Use current year if not specified
-                $targetYear = $year ? (int)$year : (int)date('Y');
-                // Use current month if not specified
-                $targetMonth = $month ? (int)$month : (int)date('m');
-                
-                // Validate month range
+            // Month filter - fixed parameter binding
+            if ($month) {
+                $targetMonth = (int)$month;
                 if ($targetMonth >= 1 && $targetMonth <= 12) {
-                    $startOfMonth = sprintf('%04d-%02d-01', $targetYear, $targetMonth);
-                    $endOfMonth = date('Y-m-t', strtotime($startOfMonth));
-                    
-                    $whereConditions[] = "(
-                        (leaves.start_date BETWEEN :month_start AND :month_end) OR
-                        (leaves.end_date BETWEEN :month_start AND :month_end) OR
-                        (leaves.start_date <= :month_start AND leaves.end_date >= :month_end)
-                    )";
-                    $params[':month_start'] = $startOfMonth;
-                    $params[':month_end'] = $endOfMonth;
+                    $whereConditions[] = "MONTH(leaves.start_date) = :filter_month";
+                    $countParams[':filter_month'] = $targetMonth;
+                    $queryParams[':filter_month'] = $targetMonth;
+                    $statsParams[':filter_month'] = $targetMonth;
                 }
             }
 
-            // Name filter - search in first_name, middle_name, or surname
+            // Year filter - fixed parameter binding
+            if ($year) {
+                $targetYear = (int)$year;
+                $whereConditions[] = "YEAR(leaves.start_date) = :filter_year";
+                $countParams[':filter_year'] = $targetYear;
+                $queryParams[':filter_year'] = $targetYear;
+                $statsParams[':filter_year'] = $targetYear;
+            }
+
+            // Name filter - CONCAT first, middle, and surname (with NULL handling)
             if ($name) {
-                $whereConditions[] = "(
-                    users.first_name LIKE :name OR 
-                    users.middle_name LIKE :name OR 
-                    users.surname LIKE :name
-                )";
-                $params[':name'] = '%' . $name . '%';
+                $whereConditions[] = "CONCAT(emp_users.first_name, ' ', COALESCE(emp_users.middle_name, ''), ' ', emp_users.surname) LIKE :filter_name";
+                $countParams[':filter_name'] = '%' . $name . '%';
+                $queryParams[':filter_name'] = '%' . $name . '%';
+                $statsParams[':filter_name'] = '%' . $name . '%';
             }
 
             $whereClause = !empty($whereConditions) ? "WHERE " . implode(" AND ", $whereConditions) : "";
@@ -86,18 +98,80 @@ class LeaveController
                 SELECT COUNT(*) as total
                 FROM leaves
                 INNER JOIN employees ON leaves.employee_id = employees.id
-                INNER JOIN users ON employees.user_id = users.id
+                INNER JOIN users emp_users ON employees.user_id = emp_users.id
                 $whereClause
             ";
-            
-            $countResult = DB::raw($countQuery, $params);
+
+            $countResult = DB::raw($countQuery, $countParams);
             $total = $countResult[0]->total ?? 0;
 
-            // Fetch paginated data
+            // Check if any leaves exist
+            if ($total === 0) {
+                // Build filter message for better context
+                $filterMessages = [];
+                if ($status) $filterMessages[] = "status: $status";
+                if ($approverId) $filterMessages[] = "approver ID: $approverId";
+                if ($relieverId) $filterMessages[] = "reliever ID: $relieverId";
+                if ($leaveType) $filterMessages[] = "leave type: $leaveType";
+                if ($month) $filterMessages[] = "month: $month";
+                if ($year) $filterMessages[] = "year: $year";
+                if ($name) $filterMessages[] = "name: $name";
+
+                $filterInfo = !empty($filterMessages) ? " with filters: " . implode(", ", $filterMessages) : "";
+
+                return responseJson(
+                    success: false,
+                    data: [
+                        'leaves' => [],
+                        'statistics' => [
+                            'total_leaves' => 0,                            
+                            'sick' => 0,
+                            'casual' => 0,
+                            'annual' => 0,
+                            'maternity' => 0,
+                            'paternity' => 0,
+                            'other' => 0                            
+                        ],
+                        'pagination' => [
+                            'current_page' => $page,
+                            'per_page' => $perPage,
+                            'total' => 0,
+                            'total_pages' => 0,
+                            'has_next' => false,
+                            'has_prev' => false
+                        ]
+                    ],
+                    message: "No leaves found{$filterInfo}",
+                    code: 404
+                );
+            }
+
+            // Get statistics for leave types (removed by_status)
+            $statsQuery = "
+                SELECT 
+                    COUNT(*) as total_leaves,
+                    SUM(CASE WHEN leave_type = 'sick' THEN 1 ELSE 0 END) as sick_leaves,
+                    SUM(CASE WHEN leave_type = 'casual' THEN 1 ELSE 0 END) as casual_leaves,
+                    SUM(CASE WHEN leave_type = 'annual' THEN 1 ELSE 0 END) as annual_leaves,
+                    SUM(CASE WHEN leave_type = 'maternity' THEN 1 ELSE 0 END) as maternity_leaves,
+                    SUM(CASE WHEN leave_type = 'paternity' THEN 1 ELSE 0 END) as paternity_leaves,
+                    SUM(CASE WHEN leave_type = 'other' THEN 1 ELSE 0 END) as other_leaves
+                FROM leaves
+                INNER JOIN employees ON leaves.employee_id = employees.id
+                INNER JOIN users emp_users ON employees.user_id = emp_users.id
+                $whereClause
+            ";
+
+            $statsResult = DB::raw($statsQuery, $statsParams);
+            $stats = $statsResult[0] ?? null;
+
+            // Fetch paginated data with approver and reliever info
             $query = "
                 SELECT 
                     leaves.id AS leave_id,
                     leaves.employee_id,
+                    leaves.approver_id,
+                    leaves.reliever_id,
                     leaves.leave_type,
                     leaves.start_date,
                     leaves.end_date,
@@ -105,23 +179,47 @@ class LeaveController
                     leaves.reason,
                     leaves.created_at,
                     leaves.updated_at,
+                    
+                    -- Employee details
                     employees.email AS employee_email,
-                    employees.id AS employee_id,
-                    users.first_name,
-                    users.middle_name,
-                    users.surname
+                    emp_users.first_name AS employee_first_name,
+                    emp_users.middle_name AS employee_middle_name,
+                    emp_users.surname AS employee_surname,
+                    CONCAT(emp_users.first_name, ' ', COALESCE(emp_users.middle_name, ''), ' ', emp_users.surname) AS employee_full_name,
+                    
+                    -- Approver details
+                    approver_emp.email AS approver_email,
+                    approver_users.first_name AS approver_first_name,
+                    approver_users.middle_name AS approver_middle_name,
+                    approver_users.surname AS approver_surname,
+                    CONCAT(approver_users.first_name, ' ', COALESCE(approver_users.middle_name, ''), ' ', approver_users.surname) AS approver_full_name,
+                    
+                    -- Reliever details
+                    reliever_emp.email AS reliever_email,
+                    reliever_users.first_name AS reliever_first_name,
+                    reliever_users.middle_name AS reliever_middle_name,
+                    reliever_users.surname AS reliever_surname,
+                    CONCAT(reliever_users.first_name, ' ', COALESCE(reliever_users.middle_name, ''), ' ', reliever_users.surname) AS reliever_full_name
+                    
                 FROM leaves
                 INNER JOIN employees ON leaves.employee_id = employees.id
-                INNER JOIN users ON employees.user_id = users.id
+                INNER JOIN users emp_users ON employees.user_id = emp_users.id
+                
+                LEFT JOIN employees approver_emp ON leaves.approver_id = approver_emp.id
+                LEFT JOIN users approver_users ON approver_emp.user_id = approver_users.id
+                
+                LEFT JOIN employees reliever_emp ON leaves.reliever_id = reliever_emp.id
+                LEFT JOIN users reliever_users ON reliever_emp.user_id = reliever_users.id
+                
                 $whereClause
                 ORDER BY leaves.created_at DESC
-                LIMIT :limit OFFSET :offset
+                LIMIT :pagination_limit OFFSET :pagination_offset
             ";
 
-            $params[':limit'] = $perPage;
-            $params[':offset'] = $offset;
+            $queryParams[':pagination_limit'] = $perPage;
+            $queryParams[':pagination_offset'] = $offset;
 
-            $leaves = DB::raw($query, $params);
+            $leaves = DB::raw($query, $queryParams);
 
             // Calculate pagination metadata
             $totalPages = ceil($total / $perPage);
@@ -130,6 +228,15 @@ class LeaveController
                 success: true,
                 data: [
                     'leaves' => $leaves,
+                    'statistics' => [
+                        'total_leaves' => (int)($stats->total_leaves ?? 0),
+                        'sick' => (int)($stats->sick_leaves ?? 0),
+                        'casual' => (int)($stats->casual_leaves ?? 0),
+                        'annual' => (int)($stats->annual_leaves ?? 0),
+                        'maternity' => (int)($stats->maternity_leaves ?? 0),
+                        'paternity' => (int)($stats->paternity_leaves ?? 0),
+                        'other' => (int)($stats->other_leaves ?? 0)                        
+                    ],
                     'pagination' => [
                         'current_page' => $page,
                         'per_page' => $perPage,
@@ -141,13 +248,12 @@ class LeaveController
                 ],
                 message: "Fetched Leaves Successfully"
             );
-
         } catch (\Exception $e) {
             return responseJson(
                 success: false,
                 data: null,
                 message: "Failed to fetch leaves: " . $e->getMessage(),
-                statusCode: 500
+                code: 500
             );
         }
     }
@@ -162,6 +268,8 @@ class LeaveController
                 SELECT 
                     leaves.id AS leave_id,
                     leaves.employee_id,
+                    leaves.approver_id,
+                    leaves.reliever_id,
                     leaves.leave_type,
                     leaves.start_date,
                     leaves.end_date,
@@ -169,13 +277,38 @@ class LeaveController
                     leaves.reason,
                     leaves.created_at,
                     leaves.updated_at,
+                    
+                    -- Employee details
                     employees.email AS employee_email,
-                    users.first_name,
-                    users.middle_name,
-                    users.surname
+                    emp_users.first_name AS employee_first_name,
+                    emp_users.middle_name AS employee_middle_name,
+                    emp_users.surname AS employee_surname,
+                    CONCAT(emp_users.first_name, ' ', COALESCE(emp_users.middle_name, ''), ' ', emp_users.surname) AS employee_full_name,
+                    
+                    -- Approver details
+                    approver_emp.email AS approver_email,
+                    approver_users.first_name AS approver_first_name,
+                    approver_users.middle_name AS approver_middle_name,
+                    approver_users.surname AS approver_surname,
+                    CONCAT(approver_users.first_name, ' ', COALESCE(approver_users.middle_name, ''), ' ', approver_users.surname) AS approver_full_name,
+                    
+                    -- Reliever details
+                    reliever_emp.email AS reliever_email,
+                    reliever_users.first_name AS reliever_first_name,
+                    reliever_users.middle_name AS reliever_middle_name,
+                    reliever_users.surname AS reliever_surname,
+                    CONCAT(reliever_users.first_name, ' ', COALESCE(reliever_users.middle_name, ''), ' ', reliever_users.surname) AS reliever_full_name
+                    
                 FROM leaves
                 INNER JOIN employees ON leaves.employee_id = employees.id
-                INNER JOIN users ON employees.user_id = users.id
+                INNER JOIN users emp_users ON employees.user_id = emp_users.id
+                
+                LEFT JOIN employees approver_emp ON leaves.approver_id = approver_emp.id
+                LEFT JOIN users approver_users ON approver_emp.user_id = approver_users.id
+                
+                LEFT JOIN employees reliever_emp ON leaves.reliever_id = reliever_emp.id
+                LEFT JOIN users reliever_users ON reliever_emp.user_id = reliever_users.id
+                
                 WHERE leaves.id = :id
             ";
 
@@ -186,7 +319,7 @@ class LeaveController
                     success: false,
                     data: null,
                     message: "Leave not found",
-                    statusCode: 404
+                    code: 404
                 );
             }
 
@@ -195,13 +328,12 @@ class LeaveController
                 data: $leave[0],
                 message: "Leave fetched successfully"
             );
-
         } catch (\Exception $e) {
             return responseJson(
                 success: false,
                 data: null,
                 message: "Failed to fetch leave: " . $e->getMessage(),
-                statusCode: 500
+                code: 500
             );
         }
     }
@@ -222,7 +354,7 @@ class LeaveController
                         success: false,
                         data: null,
                         message: "Field '$field' is required",
-                        statusCode: 400
+                        code: 400
                     );
                 }
             }
@@ -233,50 +365,83 @@ class LeaveController
                     success: false,
                     data: null,
                     message: "Start date must be before end date",
-                    statusCode: 400
+                    code: 400
                 );
             }
 
             // Check if employee exists
-            $employeeCheck = DB::raw("SELECT id FROM employees WHERE id = :id", [':id' => $data['employee_id']]);
+            $employeeCheck = DB::table('employees')
+                ->where(['id' => $data['employee_id']])
+                ->get();
+
             if (empty($employeeCheck)) {
                 return responseJson(
                     success: false,
                     data: null,
                     message: "Employee not found",
-                    statusCode: 404
+                    code: 404
                 );
             }
 
-            $query = "
-                INSERT INTO leaves (employee_id, leave_type, start_date, end_date, reason, status, created_at)
-                VALUES (:employee_id, :leave_type, :start_date, :end_date, :reason, 'pending', NOW())
-            ";
+            // Check if approver exists (if provided)
+            if (!empty($data['approver_id'])) {
+                $approverCheck = DB::table('employees')
+                    ->where(['id' => $data['approver_id']])
+                    ->get();
 
-            $params = [
-                ':employee_id' => $data['employee_id'],
-                ':leave_type' => $data['leave_type'],
-                ':start_date' => $data['start_date'],
-                ':end_date' => $data['end_date'],
-                ':reason' => $data['reason'] ?? null
+                if (empty($approverCheck)) {
+                    return responseJson(
+                        success: false,
+                        data: null,
+                        message: "Approver not found",
+                        code: 404
+                    );
+                }
+            }
+
+            // Check if reliever exists (if provided)
+            if (!empty($data['reliever_id'])) {
+                $relieverCheck = DB::table('employees')
+                    ->where(['id' => $data['reliever_id']])
+                    ->get();
+
+                if (empty($relieverCheck)) {
+                    return responseJson(
+                        success: false,
+                        data: null,
+                        message: "Reliever not found",
+                        code: 404
+                    );
+                }
+            }
+
+            // Prepare insert data
+            $insertData = [
+                'employee_id' => $data['employee_id'],
+                'leave_type' => $data['leave_type'],
+                'start_date' => $data['start_date'],
+                'end_date' => $data['end_date'],
+                'status' => 'pending',
+                'reason' => $data['reason'] ?? null,
+                'approver_id' => $data['approver_id'] ?? null,
+                'reliever_id' => $data['reliever_id'] ?? null
             ];
 
-            DB::raw($query, $params);
+            DB::table('leaves')->insert($insertData);
             $leaveId = DB::lastInsertId();
 
             return responseJson(
                 success: true,
                 data: ['id' => $leaveId],
                 message: "Leave application created successfully",
-                statusCode: 201
+                code: 201
             );
-
         } catch (\Exception $e) {
             return responseJson(
                 success: false,
                 data: null,
                 message: "Failed to create leave: " . $e->getMessage(),
-                statusCode: 500
+                code: 500
             );
         }
     }
@@ -290,75 +455,123 @@ class LeaveController
             $data = json_decode(file_get_contents('php://input'), true);
 
             // Check if leave exists
-            $existingLeave = DB::raw("SELECT * FROM leaves WHERE id = :id", [':id' => $id]);
+            $existingLeave = DB::table('leaves')
+                ->where(['id' => $id])
+                ->get();
+
             if (empty($existingLeave)) {
                 return responseJson(
                     success: false,
                     data: null,
                     message: "Leave not found",
-                    statusCode: 404
+                    code: 404
                 );
             }
 
+            $leave = $existingLeave[0];
+
             // Don't allow updating approved/rejected leaves
-            if (in_array($existingLeave[0]['status'], ['approved', 'rejected'])) {
+            if (in_array($leave->status, ['approved', 'rejected'])) {
                 return responseJson(
                     success: false,
                     data: null,
                     message: "Cannot update a leave that has been approved or rejected",
-                    statusCode: 400
+                    code: 400
                 );
             }
 
-            $updateFields = [];
-            $params = [':id' => $id];
+            $updateData = [];
 
+            // Build update data
             if (isset($data['leave_type'])) {
-                $updateFields[] = "leave_type = :leave_type";
-                $params[':leave_type'] = $data['leave_type'];
+                $updateData['leave_type'] = $data['leave_type'];
             }
 
             if (isset($data['start_date'])) {
-                $updateFields[] = "start_date = :start_date";
-                $params[':start_date'] = $data['start_date'];
+                $updateData['start_date'] = $data['start_date'];
             }
 
             if (isset($data['end_date'])) {
-                $updateFields[] = "end_date = :end_date";
-                $params[':end_date'] = $data['end_date'];
+                $updateData['end_date'] = $data['end_date'];
             }
 
             if (isset($data['reason'])) {
-                $updateFields[] = "reason = :reason";
-                $params[':reason'] = $data['reason'];
+                $updateData['reason'] = $data['reason'];
             }
 
-            if (empty($updateFields)) {
+            if (isset($data['approver_id'])) {
+                // Validate approver exists
+                if ($data['approver_id'] !== null) {
+                    $approverCheck = DB::table('employees')
+                        ->where(['id' => $data['approver_id']])
+                        ->get();
+
+                    if (empty($approverCheck)) {
+                        return responseJson(
+                            success: false,
+                            data: null,
+                            message: "Approver not found",
+                            code: 404
+                        );
+                    }
+                }
+                $updateData['approver_id'] = $data['approver_id'];
+            }
+
+            if (isset($data['reliever_id'])) {
+                // Validate reliever exists
+                if ($data['reliever_id'] !== null) {
+                    $relieverCheck = DB::table('employees')
+                        ->where(['id' => $data['reliever_id']])
+                        ->get();
+
+                    if (empty($relieverCheck)) {
+                        return responseJson(
+                            success: false,
+                            data: null,
+                            message: "Reliever not found",
+                            code: 404
+                        );
+                    }
+                }
+                $updateData['reliever_id'] = $data['reliever_id'];
+            }
+
+            if (empty($updateData)) {
                 return responseJson(
                     success: false,
                     data: null,
                     message: "No fields to update",
-                    statusCode: 400
+                    code: 400
                 );
             }
 
-            $updateFields[] = "updated_at = NOW()";
+            // Validate dates if both are being updated or one is being updated
+            $startDate = $updateData['start_date'] ?? $leave->start_date;
+            $endDate = $updateData['end_date'] ?? $leave->end_date;
 
-            $query = "UPDATE leaves SET " . implode(", ", $updateFields) . " WHERE id = :id";
+            if (strtotime($startDate) > strtotime($endDate)) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Start date must be before end date",
+                    code: 400
+                );
+            }
 
-            DB::raw($query, $params);
+            DB::table('leaves')->update($updateData, 'id', $id);
+
             return responseJson(
                 success: true,
                 data: null,
                 message: "Leave updated successfully"
             );
-
         } catch (\Exception $e) {
             return responseJson(
                 success: false,
                 data: null,
                 message: "Failed to update leave: " . $e->getMessage(),
-                statusCode: 500
+                code: 500
             );
         }
     }
@@ -370,41 +583,44 @@ class LeaveController
     {
         try {
             // Check if leave exists
-            $existingLeave = DB::raw("SELECT * FROM leaves WHERE id = :id", [':id' => $id]);
+            $existingLeave = DB::table('leaves')
+                ->where(['id' => $id])
+                ->get();
+
             if (empty($existingLeave)) {
                 return responseJson(
                     success: false,
                     data: null,
                     message: "Leave not found",
-                    statusCode: 404
+                    code: 404
                 );
             }
 
+            $leave = $existingLeave[0];
+
             // Only allow deleting pending leaves
-            if ($existingLeave[0]['status'] !== 'pending') {
+            if ($leave->status !== 'pending') {
                 return responseJson(
                     success: false,
                     data: null,
                     message: "Only pending leaves can be deleted",
-                    statusCode: 400
+                    code: 400
                 );
             }
 
-            $query = "DELETE FROM leaves WHERE id = :id";
+            DB::table('leaves')->delete('id', $id);
 
-            DB::raw($query, [':id' => $id]);
             return responseJson(
                 success: true,
                 data: null,
                 message: "Leave deleted successfully"
             );
-
         } catch (\Exception $e) {
             return responseJson(
                 success: false,
                 data: null,
                 message: "Failed to delete leave: " . $e->getMessage(),
-                statusCode: 500
+                code: 500
             );
         }
     }
@@ -414,7 +630,10 @@ class LeaveController
      */
     public function approve($id)
     {
-        return $this->updateLeaveStatus($id, 'approved');
+        $data = json_decode(file_get_contents('php://input'), true);
+        $approverId = $data['approver_id'] ?? null;
+
+        return $this->updateLeaveStatus($id, 'approved', null, $approverId);
     }
 
     /**
@@ -424,61 +643,149 @@ class LeaveController
     {
         $data = json_decode(file_get_contents('php://input'), true);
         $rejectionReason = $data['rejection_reason'] ?? null;
+        $approverId = $data['approver_id'] ?? null;
 
-        return $this->updateLeaveStatus($id, 'rejected', $rejectionReason);
+        return $this->updateLeaveStatus($id, 'rejected', $rejectionReason, $approverId);
     }
 
     /**
-     * Helper method to update leave status
+     * Assign or update reliever for a leave
      */
-    private function updateLeaveStatus($id, $status, $rejectionReason = null)
+    public function assignReliever($id)
     {
         try {
+            $data = json_decode(file_get_contents('php://input'), true);
+
+            if (empty($data['reliever_id'])) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Reliever ID is required",
+                    code: 400
+                );
+            }
+
             // Check if leave exists
-            $existingLeave = DB::raw("SELECT * FROM leaves WHERE id = :id", [':id' => $id]);
+            $existingLeave = DB::table('leaves')
+                ->where(['id' => $id])
+                ->get();
+
             if (empty($existingLeave)) {
                 return responseJson(
                     success: false,
                     data: null,
                     message: "Leave not found",
-                    statusCode: 404
+                    code: 404
                 );
             }
 
-            // Check if leave is already processed
-            if (in_array($existingLeave[0]->status, ['approved', 'rejected'])) {
+            // Check if reliever exists
+            $relieverCheck = DB::table('employees')
+                ->where(['id' => $data['reliever_id']])
+                ->get();
+
+            if (empty($relieverCheck)) {
                 return responseJson(
                     success: false,
                     data: null,
-                    message: "Leave has already been " . $existingLeave[0]->status,
-                    statusCode: 400
+                    message: "Reliever not found",
+                    code: 404
                 );
             }
 
-            $query = "UPDATE leaves SET status = :status, updated_at = NOW()";
-            $params = [':status' => $status, ':id' => $id];
+            DB::table('leaves')->update(
+                ['reliever_id' => $data['reliever_id']],
+                'id',
+                $id
+            );
 
-            if ($rejectionReason && $status === 'rejected') {
-                // Assuming you have a rejection_reason column
-                $query .= ", rejection_reason = :rejection_reason";
-                $params[':rejection_reason'] = $rejectionReason;
+            return responseJson(
+                success: true,
+                data: null,
+                message: "Reliever assigned successfully"
+            );
+        } catch (\Exception $e) {
+            return responseJson(
+                success: false,
+                data: null,
+                message: "Failed to assign reliever: " . $e->getMessage(),
+                code: 500
+            );
+        }
+    }
+
+    /**
+     * Helper method to update leave status
+     */
+    private function updateLeaveStatus($id, $status, $rejectionReason = null, $approverId = null)
+    {
+        try {
+            // Check if leave exists
+            $existingLeave = DB::table('leaves')
+                ->where(['id' => $id])
+                ->get();
+
+            if (empty($existingLeave)) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Leave not found",
+                    code: 404
+                );
             }
 
-            $query .= " WHERE id = :id";
+            $leave = $existingLeave[0];
 
-            DB::raw($query, $params);
+            // Check if leave is already processed
+            if (in_array($leave->status, ['approved', 'rejected'])) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Leave has already been " . $leave->status,
+                    code: 400
+                );
+            }
+
+            // Validate approver if provided
+            if ($approverId !== null) {
+                $approverCheck = DB::table('employees')
+                    ->where(['id' => $approverId])
+                    ->get();
+
+                if (empty($approverCheck)) {
+                    return responseJson(
+                        success: false,
+                        data: null,
+                        message: "Approver not found",
+                        code: 404
+                    );
+                }
+            }
+
+            $updateData = ['status' => $status];
+
+            if ($approverId !== null) {
+                $updateData['approver_id'] = $approverId;
+            }
+
+            // Add rejection reason if provided and status is rejected
+            if ($rejectionReason && $status === 'rejected') {
+                $updateData['reason'] = $rejectionReason;
+            }
+
+            DB::table('leaves')->update($updateData, 'id', $id);
+
             return responseJson(
                 success: true,
                 data: null,
                 message: "Leave " . $status . " successfully"
             );
-
         } catch (\Exception $e) {
             return responseJson(
                 success: false,
                 data: null,
                 message: "Failed to update leave status: " . $e->getMessage(),
-                statusCode: 500
+                code: 500
             );
         }
     }
@@ -498,7 +805,6 @@ class LeaveController
         try {
             DB::raw($query);
         } catch (\Exception $e) {
-            // Log error but don't fail the request
             error_log("Failed to auto-expire leaves: " . $e->getMessage());
         }
     }
@@ -509,9 +815,8 @@ class LeaveController
     public function statistics($employeeId = null)
     {
         try {
-            // Allow employee_id as query parameter or route parameter
             $requestEmployeeId = $_GET['employee_id'] ?? $employeeId;
-            
+
             $whereClause = $requestEmployeeId ? "WHERE employee_id = :employee_id" : "";
             $params = $requestEmployeeId ? [':employee_id' => $requestEmployeeId] : [];
 
@@ -533,15 +838,104 @@ class LeaveController
                 data: $stats[0] ?? [],
                 message: "Leave statistics fetched successfully"
             );
-
         } catch (\Exception $e) {
             return responseJson(
                 success: false,
                 data: null,
                 message: "Failed to fetch leave statistics: " . $e->getMessage(),
-                statusCode: 500
+                code: 500
             );
         }
     }
 
+    /**
+     * Get leaves where current employee is the approver
+     */
+    public function getPendingApprovals($approverId)
+    {
+        try {
+            $query = "
+                SELECT 
+                    leaves.id AS leave_id,
+                    leaves.employee_id,
+                    leaves.leave_type,
+                    leaves.start_date,
+                    leaves.end_date,
+                    leaves.status,
+                    leaves.reason,
+                    leaves.created_at,
+                    
+                    -- Employee details
+                    employees.email AS employee_email,
+                    CONCAT(users.first_name, ' ', COALESCE(users.middle_name, ''), ' ', users.surname) AS employee_full_name
+                    
+                FROM leaves
+                INNER JOIN employees ON leaves.employee_id = employees.id
+                INNER JOIN users ON employees.user_id = users.id
+                
+                WHERE leaves.approver_id = :approver_id AND leaves.status = 'pending'
+                ORDER BY leaves.created_at DESC
+            ";
+
+            $leaves = DB::raw($query, [':approver_id' => $approverId]);
+
+            return responseJson(
+                success: true,
+                data: $leaves,
+                message: "Pending approvals fetched successfully"
+            );
+        } catch (\Exception $e) {
+            return responseJson(
+                success: false,
+                data: null,
+                message: "Failed to fetch pending approvals: " . $e->getMessage(),
+                code: 500
+            );
+        }
+    }
+
+    /**
+     * Get leaves where current employee is the reliever
+     */
+    public function getRelievingDuties($relieverId)
+    {
+        try {
+            $query = "
+                SELECT 
+                    leaves.id AS leave_id,
+                    leaves.employee_id,
+                    leaves.leave_type,
+                    leaves.start_date,
+                    leaves.end_date,
+                    leaves.status,
+                    leaves.reason,
+                    
+                    -- Employee details
+                    employees.email AS employee_email,
+                    CONCAT(users.first_name, ' ', COALESCE(users.middle_name, ''), ' ', users.surname) AS employee_full_name
+                    
+                FROM leaves
+                INNER JOIN employees ON leaves.employee_id = employees.id
+                INNER JOIN users ON employees.user_id = users.id
+                
+                WHERE leaves.reliever_id = :reliever_id AND leaves.status = 'approved'
+                ORDER BY leaves.start_date ASC
+            ";
+
+            $leaves = DB::raw($query, [':reliever_id' => $relieverId]);
+
+            return responseJson(
+                success: true,
+                data: $leaves,
+                message: "Relieving duties fetched successfully"
+            );
+        } catch (\Exception $e) {
+            return responseJson(
+                success: false,
+                data: null,
+                message: "Failed to fetch relieving duties: " . $e->getMessage(),
+                code: 500
+            );
+        }
+    }
 }

@@ -58,7 +58,11 @@ export function LeaveViewDrawer({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
-      <DrawerContent className="h-full min-w-xl ml-auto bg-white">
+      <DrawerContent 
+        className="h-full min-w-xl ml-auto bg-white"
+        onInteractOutside={() => onOpenChange(false)}
+        onEscapeKeyDown={() => onOpenChange(false)}
+      >
         <DrawerHeader className="border-b">
           <div className="flex items-center space-x-3">
             <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -176,7 +180,7 @@ export function LeaveViewDrawer({
 
         <DrawerFooter className="border-t p-6">
           <DrawerClose asChild>
-            <Button variant="outline">Close</Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>

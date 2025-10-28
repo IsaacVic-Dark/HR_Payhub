@@ -318,6 +318,20 @@ final class DB
     }
 
     /**
+     * Get the last inserted ID
+     *
+     * @return string
+     */
+    public static function lastInsertId()
+    {
+        $instance = self::$instance ?? self::getInstance(null);
+        if ($instance->pdo === null) {
+            throw new \Exception("No PDO connection available");
+        }
+        return $instance->pdo->lastInsertId();
+    }
+
+    /**
      * Join two tables
      *
      * @param string $table2 Second table

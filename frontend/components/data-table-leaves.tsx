@@ -31,13 +31,14 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
   // Filter states
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedLeaveType, setSelectedLeaveType] = useState<string>('');
-  const [startDateFilter, setStartDateFilter] = useState<string>('');
-  const [endDateFilter, setEndDateFilter] = useState<string>('');
+  const [selectedStatus, setSelectedStatus] = useState<string>('');
+  const [selectedMonth, setSelectedMonth] = useState<string>('');
+  const [selectedYear, setSelectedYear] = useState<string>('');
   const [showFilters, setShowFilters] = useState(false);
 
   const [filters, setFilters] = useState<LeaveFilters>({
     page: 1,
-    limit: 10,
+    per_page: 10,
   });
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
@@ -45,71 +46,83 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
   const fetchLeaves = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await leaveAPI.getLeaves(filters);
+      setError(null);
+      
+      const apiFilters: LeaveFilters = {
+        ...filters,
+        name: searchTerm || undefined,
+        leave_type: selectedLeaveType || undefined,
+        status: selectedStatus || undefined,
+        month: selectedMonth || undefined,
+        year: selectedYear || undefined,
+      };
+
+      const response = await leaveAPI.getLeaves(apiFilters);
+
+      console.log({response});
+      console.log("Response success: ", response.success);
+      console.log("Response data: ", response.data);
+      // console.log("Response data leaves: ", response.data.data.leaves);
+
 
       if (response.success && response.data) {
-        setLeaves(response.data.data);
-        if (response.data.metadata) {
-          setTotalItems(response.data.metadata.total || response.data.data.length);
-          setTotalPages(
-            response.data.metadata.totalPages ||
-              Math.ceil(response.data.data.length / (filters.limit || 10))
-          );
-        }
+        // Access the data directly from response.data (not response.data.data)
+        const leavesData = response.data.data.leaves || [];
+        const paginationData = response.data.pagination;
+        
+        setLeaves(leavesData);
+        setTotalItems(paginationData?.total || 0);
+        setTotalPages(paginationData?.total_pages || 0);
       } else {
-        setError(response.error || 'Failed to fetch leaves');
+        // Handle "not found" scenario
+        if (response.message?.includes('No leaves found')) {
+          setLeaves([]);
+          setTotalItems(0);
+          setTotalPages(0);
+          setError(response.message);
+        } else {
+          setError(response.error || 'Failed to fetch leaves');
+          setLeaves([]);
+          setTotalItems(0);
+          setTotalPages(0);
+        }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'An error occurred');
+      const errorMessage = err instanceof Error ? err.message : 'An error occurred';
+      setError(errorMessage);
+      setLeaves([]);
+      setTotalItems(0);
+      setTotalPages(0);
     } finally {
       setLoading(false);
     }
-  }, [filters]);
+  }, [filters, searchTerm, selectedLeaveType, selectedStatus, selectedMonth, selectedYear]);
 
   useEffect(() => {
     fetchLeaves();
   }, [fetchLeaves]);
 
-  // Filter leaves locally
-  const filteredLeaves = leaves.filter((leave) => {
-    const matchesSearch =
-      searchTerm === '' ||
-      `${leave.first_name} ${leave.surname}`
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      leave.employee_email?.toLowerCase().includes(searchTerm.toLowerCase());
-
-    const matchesLeaveType =
-      selectedLeaveType === '' || leave.leave_type === selectedLeaveType;
-
-    const matchesStartDate =
-      startDateFilter === '' ||
-      new Date(leave.start_date) >= new Date(startDateFilter);
-
-    const matchesEndDate =
-      endDateFilter === '' ||
-      new Date(leave.end_date) <= new Date(endDateFilter);
-
-    return matchesSearch && matchesLeaveType && matchesStartDate && matchesEndDate;
-  });
-
   const formatDateRange = (startDate: string, endDate: string) => {
-    const start = new Date(startDate);
-    const end = new Date(endDate);
+    try {
+      const start = new Date(startDate);
+      const end = new Date(endDate);
 
-    const startFormatted = start.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+      const startFormatted = start.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
 
-    const endFormatted = end.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    });
+      const endFormatted = end.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+      });
 
-    return `${startFormatted} — ${endFormatted}`;
+      return `${startFormatted} — ${endFormatted}`;
+    } catch (error) {
+      return 'Invalid date';
+    }
   };
 
   const getStatusBadge = (status: string) => {
@@ -125,6 +138,10 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
       rejected: {
         color: 'bg-red-100 text-red-800',
         label: 'Rejected',
+      },
+      expired: {
+        color: 'bg-gray-100 text-gray-800',
+        label: 'Expired',
       },
     };
 
@@ -187,22 +204,27 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
   };
 
   const handleLimitChange = (newLimit: number) => {
-    setFilters((prev) => ({ ...prev, limit: newLimit, page: 1 }));
+    setFilters((prev) => ({ ...prev, per_page: newLimit, page: 1 }));
   };
 
   const clearFilters = () => {
     setSearchTerm('');
     setSelectedLeaveType('');
-    setStartDateFilter('');
-    setEndDateFilter('');
+    setSelectedStatus('');
+    setSelectedMonth('');
+    setSelectedYear('');
+    setFilters({ page: 1, per_page: 10 });
   };
+
+  // Check if any filters are active
+  const hasActiveFilters = searchTerm || selectedLeaveType || selectedStatus || selectedMonth || selectedYear;
 
   // Table columns configuration
   const columns: ColumnDef<LeaveType>[] = [
     {
       key: 'employee',
       header: 'Employee',
-      cell: (leave) => `${leave.first_name} ${leave.surname}`,
+      cell: (leave) => leave.employee_full_name || `${leave.employee_first_name} ${leave.employee_surname}`,
     },
     {
       key: 'leave_type',
@@ -269,14 +291,14 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
           {/* Header */}
           <div className="flex items-center justify-between mb-6">
             <h1 className="text-xl font-semibold text-gray-900">
-              Leave Management
+              Leaves
             </h1>
             <div className="flex items-center gap-3">
               <div className="relative">
                 <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
-                  placeholder="Search by name or email"
+                  placeholder="Search by employee name"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -299,7 +321,7 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
           {/* Filters Panel */}
           {showFilters && (
             <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
                     Leave Type
@@ -312,30 +334,57 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
                     <option value="">All Types</option>
                     <option value="annual">Annual</option>
                     <option value="sick">Sick</option>
+                    <option value="casual">Casual</option>
                     <option value="maternity">Maternity</option>
                     <option value="paternity">Paternity</option>
-                    <option value="unpaid">Unpaid</option>
+                    <option value="other">Other</option>
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Start Date From
+                    Status
                   </label>
-                  <input
-                    type="date"
-                    value={startDateFilter}
-                    onChange={(e) => setStartDateFilter(e.target.value)}
+                  <select
+                    value={selectedStatus}
+                    onChange={(e) => setSelectedStatus(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                  />
+                  >
+                    <option value="">All Status</option>
+                    <option value="pending">Pending</option>
+                    <option value="approved">Approved</option>
+                    <option value="rejected">Rejected</option>
+                    <option value="expired">Expired</option>
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">
-                    End Date To
+                    Month
+                  </label>
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="">All Months</option>
+                    {Array.from({ length: 12 }, (_, i) => {
+                      const month = i + 1;
+                      return (
+                        <option key={month} value={month.toString().padStart(2, '0')}>
+                          {new Date(2000, i).toLocaleString('default', { month: 'long' })}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Year
                   </label>
                   <input
-                    type="date"
-                    value={endDateFilter}
-                    onChange={(e) => setEndDateFilter(e.target.value)}
+                    type="number"
+                    placeholder="e.g., 2025"
+                    value={selectedYear}
+                    onChange={(e) => setSelectedYear(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   />
                 </div>
@@ -353,11 +402,11 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
 
           {/* Data Table */}
           <DataTable
-            data={filteredLeaves}
+            data={leaves}
             columns={columns}
             pagination={{
               page: filters.page || 1,
-              limit: filters.limit || 10,
+              limit: filters.per_page || 10,
               totalItems,
               totalPages,
             }}
@@ -366,7 +415,7 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
             loading={loading}
             error={error}
             emptyMessage={
-              searchTerm || selectedLeaveType || startDateFilter || endDateFilter
+              hasActiveFilters
                 ? 'No leaves match your filters'
                 : 'No leaves found'
             }
@@ -386,7 +435,7 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
         }
         employeeName={
           selectedLeave
-            ? `${selectedLeave.first_name} ${selectedLeave.surname}`
+            ? selectedLeave.employee_full_name
             : ''
         }
         onConfirm={handleConfirmAction}
@@ -396,7 +445,7 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
       {/* View Drawer */}
       <LeaveViewDrawer
         open={drawerOpen}
-        onOpenChange={setDrawerOpen}
+        onOpenChange={setDialogOpen}
         leave={viewLeave}
       />
     </>

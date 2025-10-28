@@ -126,19 +126,26 @@ CREATE TABLE IF NOT EXISTS `benefits` (
 
 -- Updated structure for table payhub.leaves
 CREATE TABLE IF NOT EXISTS `leaves` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `employee_id` int NOT NULL,
-  `leave_type` enum('sick','casual','annual','maternity','paternity','other') NOT NULL,
-  `start_date` date NOT NULL,
-  `end_date` date NOT NULL,
-  `status` enum('pending','approved','rejected','expired') DEFAULT 'pending',
-  `reason` TEXT NULL, -- Added column for reason/description
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `employee_id` INT NOT NULL,
+  `approver_id` INT DEFAULT NULL,     -- Employee who approves the leave
+  `reliever_id` INT DEFAULT NULL,     -- Employee who takes the workload
+  `leave_type` ENUM('sick','casual','annual','maternity','paternity','other') NOT NULL,
+  `start_date` DATE NOT NULL,
+  `end_date` DATE NOT NULL,
+  `status` ENUM('pending','approved','rejected','expired') DEFAULT 'pending',
+  `reason` TEXT NULL,
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `employee_id` (`employee_id`),
-  CONSTRAINT `leaves_ibfk_1` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE
+  KEY `approver_id` (`approver_id`),
+  KEY `reliever_id` (`reliever_id`),
+  CONSTRAINT `leaves_employee_fk` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `leaves_approver_fk` FOREIGN KEY (`approver_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `leaves_reliever_fk` FOREIGN KEY (`reliever_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 
 -- Data exporting was unselected.
 
