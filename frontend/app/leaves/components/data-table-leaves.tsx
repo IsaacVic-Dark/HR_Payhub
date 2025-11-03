@@ -198,6 +198,7 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
   };
 
   const handlePageChange = (newPage: number) => {
+    console.log("New page :", newPage);
     if (newPage > 0 && newPage <= totalPages) {
       setFilters((prev) => ({ ...prev, page: newPage }));
     }

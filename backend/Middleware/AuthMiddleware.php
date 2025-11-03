@@ -1,56 +1,53 @@
 <?php
-// app/Middleware/AuthMiddleware.php
 
 namespace App\Middleware;
 
 use App\Services\JWTService;
-use App\Services\Response;
 
 class AuthMiddleware
 {
-    public static function handle()
+    public static function handle($requiredRoles = [])
     {
-        $jwtService = new JWTService();
-        
-        // Get token from request
-        $token = self::getTokenFromRequest();
+        $token = self::getBearerToken();
         
         if (!$token) {
-            return Response::json([
-                'success' => false,
-                'message' => 'Authentication required'
-            ], 401);
+            http_response_code(401);
+            echo json_encode(['error' => 'Authentication token required']);
+            exit;
         }
 
-        // Verify token
-        $payload = $jwtService->decode($token);
+        $userData = JWTService::validateToken($token);
         
-        if (!$payload || (isset($payload['exp']) && $payload['exp'] < time())) {
-            return Response::json([
-                'success' => false,
-                'message' => 'Invalid or expired token'
-            ], 401);
+        if (!$userData) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid or expired token']);
+            exit;
         }
 
-        // Store user in request for later use
-        $GLOBALS['auth_user'] = $payload;
-        
-        return true;
+        // Check role-based access
+        if (!empty($requiredRoles)) {
+            if (!in_array($userData['user_type'], $requiredRoles)) {
+                http_response_code(403);
+                echo json_encode(['error' => 'Insufficient permissions']);
+                exit;
+            }
+        }
+
+        return $userData;
     }
 
-    private static function getTokenFromRequest()
+    private static function getBearerToken()
     {
-        // Check cookie first
-        if (isset($_COOKIE['auth_token'])) {
-            return $_COOKIE['auth_token'];
-        }
-
-        // Check Authorization header
-        $headers = apache_request_headers();
+        $headers = getallheaders();
         if (isset($headers['Authorization'])) {
-            if (preg_match('/Bearer\s+(.*)$/i', $headers['Authorization'], $matches)) {
+            if (preg_match('/Bearer\s(\S+)/', $headers['Authorization'], $matches)) {
                 return $matches[1];
             }
+        }
+        
+        // Also check cookies
+        if (isset($_COOKIE['access_token'])) {
+            return $_COOKIE['access_token'];
         }
 
         return null;

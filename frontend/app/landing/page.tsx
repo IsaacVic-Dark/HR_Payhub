@@ -23,6 +23,11 @@ const PayrollLanding = () => {
     window.location.href = '/login';
   };
 
+  const navigateToRegister = () => {
+    window.location.href = '/register';
+  };
+
+
   const features = [
     {
       icon: <Users className="w-8 h-8 text-[#895bf5]" />,
@@ -107,9 +112,15 @@ const PayrollLanding = () => {
             <Button onClick={navigateToLogin} className="bg-[#895bf5] hover:bg-[#7c4ee0] text-white">
               Login
             </Button>
+            <Button onClick={navigateToRegister} className="bg-[#895bf5] hover:bg-[#7c4ee0] text-white">
+              Register
+            </Button>
           </nav>
           <Button onClick={navigateToLogin} className="md:hidden bg-[#895bf5] hover:bg-[#7c4ee0] text-white">
             Login
+          </Button>
+          <Button onClick={navigateToRegister} className="md:hidden bg-[#895bf5] hover:bg-[#7c4ee0] text-white">
+            Register
           </Button>
         </div>
       </header>

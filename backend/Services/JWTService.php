@@ -1,65 +1,78 @@
 <?php
-// app/Services/JWTService.php
 
 namespace App\Services;
 
+use Firebase\JWT\JWT;
+use Firebase\JWT\Key;
+use Exception;
+
 class JWTService
 {
-    private $secretKey;
-    private $algorithm = 'HS256';
+    private static $secretKey;
+    private static $algorithm = 'HS256';
 
-    public function __construct()
+    public static function init()
     {
-        // Use a secure secret key from environment or config
-        $this->secretKey = getenv('JWT_SECRET') ?: 'your-secret-key-change-in-production';
+        self::$secretKey = $_ENV['JWT_SECRET'] ?? 'your-default-secret-key-change-in-production';
     }
 
-    public function encode($payload)
+    public static function generateToken($payload)
     {
-        $header = json_encode(['typ' => 'JWT', 'alg' => $this->algorithm]);
-        $payload = json_encode($payload);
+        self::init();
         
-        $base64UrlHeader = $this->base64UrlEncode($header);
-        $base64UrlPayload = $this->base64UrlEncode($payload);
-        
-        $signature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $this->secretKey, true);
-        $base64UrlSignature = $this->base64UrlEncode($signature);
-        
-        return $base64UrlHeader . "." . $base64UrlPayload . "." . $base64UrlSignature;
+        $issuedAt = time();
+        $expirationTime = $issuedAt + (60 * 60); // 1 hour
+        $refreshExpiration = $issuedAt + (7 * 24 * 60 * 60); // 7 days
+
+        $tokenPayload = [
+            'iss' => $_ENV['APP_URL'] ?? 'http://localhost',
+            'aud' => $_ENV['APP_URL'] ?? 'http://localhost',
+            'iat' => $issuedAt,
+            'exp' => $expirationTime,
+            'data' => $payload
+        ];
+
+        $refreshPayload = [
+            'iss' => $_ENV['APP_URL'] ?? 'http://localhost',
+            'aud' => $_ENV['APP_URL'] ?? 'http://localhost',
+            'iat' => $issuedAt,
+            'exp' => $refreshExpiration,
+            'data' => ['user_id' => $payload['user_id'], 'type' => 'refresh']
+        ];
+
+        return [
+            'access_token' => JWT::encode($tokenPayload, self::$secretKey, self::$algorithm),
+            'refresh_token' => JWT::encode($refreshPayload, self::$secretKey, self::$algorithm),
+            'expires_in' => $expirationTime
+        ];
     }
 
-    public function decode($jwt)
+    public static function validateToken($token)
     {
-        $tokenParts = explode('.', $jwt);
-        if (count($tokenParts) !== 3) {
+        self::init();
+        
+        try {
+            $decoded = JWT::decode($token, new Key(self::$secretKey, self::$algorithm));
+            return (array) $decoded->data;
+        } catch (Exception $e) {
             return false;
         }
+    }
+
+    public static function validateRefreshToken($token)
+    {
+        self::init();
         
-        list($header, $payload, $signatureProvided) = $tokenParts;
-        
-        $headerDecoded = $this->base64UrlDecode($header);
-        $payloadDecoded = $this->base64UrlDecode($payload);
-        
-        $base64UrlHeader = $this->base64UrlEncode($headerDecoded);
-        $base64UrlPayload = $this->base64UrlEncode($payloadDecoded);
-        
-        $signature = hash_hmac('sha256', $base64UrlHeader . "." . $base64UrlPayload, $this->secretKey, true);
-        $base64UrlSignature = $this->base64UrlEncode($signature);
-        
-        if ($base64UrlSignature !== $signatureProvided) {
+        try {
+            $decoded = JWT::decode($token, new Key(self::$secretKey, self::$algorithm));
+            $data = (array) $decoded->data;
+            
+            if (isset($data['type']) && $data['type'] === 'refresh') {
+                return $data;
+            }
+            return false;
+        } catch (Exception $e) {
             return false;
         }
-        
-        return json_decode($payloadDecoded, true);
-    }
-
-    private function base64UrlEncode($data)
-    {
-        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
-    }
-
-    private function base64UrlDecode($data)
-    {
-        return base64_decode(strtr($data, '-_', '+/'));
     }
 }

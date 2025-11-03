@@ -9,7 +9,7 @@ import {
   SidebarInset,
   SidebarProvider,
 } from "@/components/ui/sidebar"
-import LeaveTable from "@/components/data-table-leaves";
+import LeaveTable from "@/app/leaves/components/data-table-leaves";
 
 export default function Page() {
   const pathname = usePathname();

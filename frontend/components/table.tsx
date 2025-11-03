@@ -76,6 +76,13 @@ export function DataTable<T>({
     }
   };
 
+  console.log('Table debug:', {
+    hasPagination: !!pagination,
+    hasData: data.length > 0,
+    totalPages: pagination?.totalPages,
+    onPageChange: !!onPageChange
+  });
+
   return (
     <div className={`w-full mx-auto p-4 bg-white ${className}`}>
       <div className="">

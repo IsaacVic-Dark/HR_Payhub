@@ -1,184 +1,505 @@
 <?php
-// app/Controllers/AuthController.php
 
 namespace App\Controllers;
 
 use App\Models\User;
 use App\Services\JWTService;
-use App\Services\Response;
+use App\Services\DB;
 
 class AuthController
 {
-    private $jwtService;
-    
-    public function __construct()
-    {
-        $this->jwtService = new JWTService();
-    }
-
-    /**
-     * Login user and return JWT token
-     */
     public function login()
     {
-        // Get JSON input
-        $input = json_decode(file_get_contents('php://input'), true);
-        
-        // Validate input
-        if (!isset($input['email']) || !isset($input['password'])) {
-            return Response::json([
-                'success' => false,
-                'message' => 'Email and password are required'
-            ], 400);
+        header('Content-Type: application/json');
+
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        if (!isset($data['email']) || !isset($data['password'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Email and password are required']);
+            return;
         }
 
-        $email = $input['email'];
-        $password = $input['password'];
+        $user = User::findByEmail($data['email']);
 
-        // Find user by email (you'll need to implement this in your User model)
-        $user = User::findByEmail($email);
-        
-        if (!$user || !password_verify($password, $user['password'])) {
-            return Response::json([
-                'success' => false,
-                'message' => 'Invalid credentials'
-            ], 401);
+        if (!$user || !password_verify($data['password'], $user['password_hash'])) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid credentials']);
+            return;
         }
 
-        // Generate JWT token
+        // Check if user is active
+        $employee = $this->getEmployeeByUserId($user['id']);
+        if (!$employee || $employee['status'] !== 'active') {
+            http_response_code(403);
+            echo json_encode(['error' => 'Account is not active']);
+            return;
+        }
+
         $payload = [
             'user_id' => $user['id'],
             'email' => $user['email'],
-            'exp' => time() + (60 * 60) // 1 hour expiration
+            'user_type' => $user['user_type'],
+            'organization_id' => $user['organization_id'],
+            'employee_id' => $employee['id'] ?? null
         ];
-        
-        $token = $this->jwtService->encode($payload);
 
+        $tokens = JWTService::generateToken($payload);
 
-        // Get the origin from request to set proper cookie domain
-        $origin = $_SERVER['HTTP_ORIGIN'] ?? 'http://localhost:3000';
-        $domain = parse_url($origin, PHP_URL_HOST);
-
-        // Set HTTP-only cookie with proper settings for localhost
-        setcookie('auth_token', $token, [
-            'expires' => time() + (60 * 60),
-            'path' => '/',
-            'domain' => $domain === 'localhost' ? 'localhost' : $domain,
-            'secure' => false, // false for localhost, true in production
-            'httponly' => true,
-            'samesite' => 'Lax' // Use 'None' if you need cross-site but requires Secure=true
-        ]);
-
-        return Response::json([
-            'success' => true,
+        echo json_encode([
             'message' => 'Login successful',
             'user' => [
                 'id' => $user['id'],
                 'email' => $user['email'],
-                'name' => $user['name']
+                'first_name' => $user['first_name'],
+                'surname' => $user['surname'],
+                'user_type' => $user['user_type'],
+                'organization_id' => $user['organization_id']
+            ],
+            'tokens' => $tokens
+        ]);
+    }
+
+    public function register()
+    {
+        header('Content-Type: application/json');
+
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        // Validate required fields
+        $required = ['email', 'password', 'first_name', 'surname', 'organization_name'];
+        foreach ($required as $field) {
+            if (!isset($data[$field]) || empty(trim($data[$field]))) {
+                http_response_code(400);
+                echo json_encode(['error' => "Field {$field} is required"]);
+                return;
+            }
+        }
+
+        // Validate email format
+        if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid email format']);
+            return;
+        }
+
+        // Validate password strength
+        if (strlen($data['password']) < 8) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Password must be at least 8 characters long']);
+            return;
+        }
+
+        $db = DB::getInstance();
+
+        try {
+            $db->beginTransaction();
+
+            // Check if user already exists
+            $existingUser = User::findByEmail($data['email']);
+            if ($existingUser) {
+                http_response_code(409);
+                echo json_encode(['error' => 'User with this email already exists']);
+                return;
+            }
+
+            // Create organization first
+            $organizationStmt = $db->prepare("
+                INSERT INTO organizations 
+                (name, legal_type, official_email, currency, payroll_schedule, is_active) 
+                VALUES 
+                (:name, :legal_type, :official_email, :currency, :payroll_schedule, :is_active)
+            ");
+
+            $organizationData = [
+                ':name' => $data['organization_name'],
+                ':legal_type' => $data['legal_type'] ?? 'LTD',
+                ':official_email' => $data['email'],
+                ':currency' => $data['currency'] ?? 'KES',
+                ':payroll_schedule' => $data['payroll_schedule'] ?? 'Monthly',
+                ':is_active' => 1
+            ];
+
+            $organizationStmt->execute($organizationData);
+            $organizationId = $db->lastInsertId();
+
+            // Create user
+            $userStmt = $db->prepare("
+                INSERT INTO users 
+                (organization_id, username, first_name, middle_name, surname, password_hash, email, user_type) 
+                VALUES 
+                (:organization_id, :username, :first_name, :middle_name, :surname, :password_hash, :email, :user_type)
+            ");
+
+            $username = $this->generateUsername($data['first_name'], $data['surname'], $db);
+            $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
+
+            // First user of organization becomes admin
+            $userType = 'admin';
+
+            $userStmt->execute([
+                ':organization_id' => $organizationId,
+                ':username' => $username,
+                ':first_name' => $data['first_name'],
+                ':middle_name' => $data['middle_name'] ?? null,
+                ':surname' => $data['surname'],
+                ':password_hash' => $passwordHash,
+                ':email' => $data['email'],
+                ':user_type' => $userType
+            ]);
+
+            $userId = $db->lastInsertId();
+
+            // Update organization with primary administrator
+            $updateOrgStmt = $db->prepare("
+                UPDATE organizations SET primary_administrator_id = :admin_id WHERE id = :org_id
+            ");
+            $updateOrgStmt->execute([
+                ':admin_id' => $userId,
+                ':org_id' => $organizationId
+            ]);
+
+            // Create employee record for the admin
+            $employeeStmt = $db->prepare("
+                INSERT INTO employees 
+                (organization_id, user_id, email, phone, hire_date, job_title, department, base_salary, status, employment_type, work_location) 
+                VALUES 
+                (:organization_id, :user_id, :email, :phone, :hire_date, :job_title, :department, :base_salary, :status, :employment_type, :work_location)
+            ");
+
+            $employeeStmt->execute([
+                ':organization_id' => $organizationId,
+                ':user_id' => $userId,
+                ':email' => $data['email'],
+                ':phone' => $data['phone'] ?? null,
+                ':hire_date' => date('Y-m-d'),
+                ':job_title' => $data['job_title'] ?? 'Administrator',
+                ':department' => $data['department'] ?? 'Management',
+                ':base_salary' => $data['base_salary'] ?? 0,
+                ':status' => 'active',
+                ':employment_type' => $data['employment_type'] ?? 'full_time',
+                ':work_location' => $data['work_location'] ?? 'on-site'
+            ]);
+
+            $db->commit();
+
+            // Generate tokens for automatic login after registration
+            $payload = [
+                'user_id' => $userId,
+                'email' => $data['email'],
+                'user_type' => $userType,
+                'organization_id' => $organizationId,
+                'employee_id' => $db->lastInsertId()
+            ];
+
+            $tokens = JWTService::generateToken($payload);
+
+            http_response_code(201);
+            echo json_encode([
+                'message' => 'Registration successful',
+                'user' => [
+                    'id' => $userId,
+                    'email' => $data['email'],
+                    'first_name' => $data['first_name'],
+                    'surname' => $data['surname'],
+                    'user_type' => $userType,
+                    'organization_id' => $organizationId,
+                    'organization_name' => $data['organization_name']
+                ],
+                'tokens' => $tokens
+            ]);
+        } catch (\Exception $e) {
+            $db->rollBack();
+            error_log('Registration error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => 'Registration failed. Please try again.']);
+        }
+    }
+
+    public function registerEmployee()
+    {
+        header('Content-Type: application/json');
+
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        // Validate required fields for employee registration
+        $required = ['email', 'password', 'first_name', 'surname', 'organization_id', 'job_title', 'department', 'base_salary'];
+        foreach ($required as $field) {
+            if (!isset($data[$field]) || empty(trim($data[$field]))) {
+                http_response_code(400);
+                echo json_encode(['error' => "Field {$field} is required"]);
+                return;
+            }
+        }
+
+        // Validate email format
+        if (!filter_var($data['email'], FILTER_VALIDATE_EMAIL)) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Invalid email format']);
+            return;
+        }
+
+        // Validate password strength
+        if (strlen($data['password']) < 8) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Password must be at least 8 characters long']);
+            return;
+        }
+
+        $db = DB::getInstance();
+
+        try {
+            $db->beginTransaction();
+
+            // Check if user already exists
+            $existingUser = User::findByEmail($data['email']);
+            if ($existingUser) {
+                http_response_code(409);
+                echo json_encode(['error' => 'User with this email already exists']);
+                return;
+            }
+
+            // Verify organization exists
+            $orgStmt = $db->prepare("SELECT id FROM organizations WHERE id = :org_id AND is_active = 1");
+            $orgStmt->execute([':org_id' => $data['organization_id']]);
+            $organization = $orgStmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$organization) {
+                http_response_code(404);
+                echo json_encode(['error' => 'Organization not found or inactive']);
+                return;
+            }
+
+            // Create user
+            $userStmt = $db->prepare("
+                INSERT INTO users 
+                (organization_id, username, first_name, middle_name, surname, password_hash, email, user_type) 
+                VALUES 
+                (:organization_id, :username, :first_name, :middle_name, :surname, :password_hash, :email, :user_type)
+            ");
+
+            $username = $this->generateUsername($data['first_name'], $data['surname'], $db);
+            $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
+            $userType = 'employee';
+
+            $userStmt->execute([
+                ':organization_id' => $data['organization_id'],
+                ':username' => $username,
+                ':first_name' => $data['first_name'],
+                ':middle_name' => $data['middle_name'] ?? null,
+                ':surname' => $data['surname'],
+                ':password_hash' => $passwordHash,
+                ':email' => $data['email'],
+                ':user_type' => $userType
+            ]);
+
+            $userId = $db->lastInsertId();
+
+            // Create employee record
+            $employeeStmt = $db->prepare("
+                INSERT INTO employees 
+                (organization_id, user_id, email, phone, hire_date, job_title, department, base_salary, status, employment_type, work_location, reports_to) 
+                VALUES 
+                (:organization_id, :user_id, :email, :phone, :hire_date, :job_title, :department, :base_salary, :status, :employment_type, :work_location, :reports_to)
+            ");
+
+            $employeeStmt->execute([
+                ':organization_id' => $data['organization_id'],
+                ':user_id' => $userId,
+                ':email' => $data['email'],
+                ':phone' => $data['phone'] ?? null,
+                ':hire_date' => $data['hire_date'] ?? date('Y-m-d'),
+                ':job_title' => $data['job_title'],
+                ':department' => $data['department'],
+                ':base_salary' => $data['base_salary'],
+                ':status' => $data['status'] ?? 'active',
+                ':employment_type' => $data['employment_type'] ?? 'full_time',
+                ':work_location' => $data['work_location'] ?? 'on-site',
+                ':reports_to' => $data['reports_to'] ?? null
+            ]);
+
+            $employeeId = $db->lastInsertId();
+
+            $db->commit();
+
+            http_response_code(201);
+            echo json_encode([
+                'message' => 'Employee registered successfully',
+                'employee' => [
+                    'id' => $employeeId,
+                    'user_id' => $userId,
+                    'email' => $data['email'],
+                    'first_name' => $data['first_name'],
+                    'surname' => $data['surname'],
+                    'job_title' => $data['job_title'],
+                    'department' => $data['department']
+                ]
+            ]);
+        } catch (\Exception $e) {
+            $db->rollBack();
+            error_log('Employee registration error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['error' => 'Employee registration failed. Please try again.']);
+        }
+    }
+
+    public function checkEmail()
+    {
+        header('Content-Type: application/json');
+
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        if (!isset($data['email'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Email is required']);
+            return;
+        }
+
+        $user = User::findByEmail($data['email']);
+
+        echo json_encode([
+            'exists' => !!$user,
+            'available' => !$user
+        ]);
+    }
+
+    private function generateUsername($firstName, $lastName, $db)
+    {
+        $baseUsername = strtolower($firstName[0] . $lastName);
+        $baseUsername = preg_replace('/[^a-z0-9]/', '', $baseUsername);
+
+        $username = $baseUsername;
+        $counter = 1;
+
+        // Check if username exists and find available one
+        while (true) {
+            $stmt = $db->prepare("SELECT id FROM users WHERE username = :username");
+            $stmt->execute([':username' => $username]);
+            $existing = $stmt->fetch(\PDO::FETCH_ASSOC);
+
+            if (!$existing) {
+                break;
+            }
+
+            $username = $baseUsername . $counter;
+            $counter++;
+        }
+
+        return $username;
+    }
+
+    public function refreshToken()
+    {
+        header('Content-Type: application/json');
+
+        $data = json_decode(file_get_contents('php://input'), true);
+
+        if (!isset($data['refresh_token'])) {
+            http_response_code(400);
+            echo json_encode(['error' => 'Refresh token is required']);
+            return;
+        }
+
+        $refreshData = JWTService::validateRefreshToken($data['refresh_token']);
+
+        if (!$refreshData) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid refresh token']);
+            return;
+        }
+
+        $user = User::find($refreshData['user_id']);
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['error' => 'User not found']);
+            return;
+        }
+
+        $employee = $this->getEmployeeByUserId($user['id']);
+
+        $payload = [
+            'user_id' => $user['id'],
+            'email' => $user['email'],
+            'user_type' => $user['user_type'],
+            'organization_id' => $user['organization_id'],
+            'employee_id' => $employee['id'] ?? null
+        ];
+
+        $tokens = JWTService::generateToken($payload);
+
+        echo json_encode([
+            'message' => 'Token refreshed successfully',
+            'tokens' => $tokens
+        ]);
+    }
+
+    public function logout()
+    {
+        header('Content-Type: application/json');
+        echo json_encode(['message' => 'Logout successful']);
+    }
+
+    public function me()
+    {
+        header('Content-Type: application/json');
+
+        $token = $this->getBearerToken();
+        if (!$token) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Token not provided']);
+            return;
+        }
+
+        $userData = JWTService::validateToken($token);
+        if (!$userData) {
+            http_response_code(401);
+            echo json_encode(['error' => 'Invalid token']);
+            return;
+        }
+
+        $user = User::find($userData['user_id']);
+        if (!$user) {
+            http_response_code(404);
+            echo json_encode(['error' => 'User not found']);
+            return;
+        }
+
+        $employee = $this->getEmployeeByUserId($user['id']);
+
+        echo json_encode([
+            'user' => [
+                'id' => $user['id'],
+                'email' => $user['email'],
+                'first_name' => $user['first_name'],
+                'surname' => $user['surname'],
+                'user_type' => $user['user_type'],
+                'organization_id' => $user['organization_id'],
+                'employee' => $employee
             ]
         ]);
     }
 
-    /**
-     * Get authenticated user
-     */
-    public function user()
+    private function getBearerToken()
     {
-        try {
-            $token = $this->getTokenFromRequest();
-            
-            if (!$token) {
-                return Response::json([
-                    'success' => false,
-                    'message' => 'Authentication required'
-                ], 401);
-            }
-
-            $payload = $this->jwtService->decode($token);
-            
-            if (!$payload) {
-                return Response::json([
-                    'success' => false,
-                    'message' => 'Invalid token'
-                ], 401);
-            }
-
-            // Check if token is expired
-            if (isset($payload['exp']) && $payload['exp'] < time()) {
-                return Response::json([
-                    'success' => false,
-                    'message' => 'Token expired'
-                ], 401);
-            }
-
-            // Get user from database
-            $user = User::find($payload['user_id']);
-            
-            if (!$user) {
-                return Response::json([
-                    'success' => false,
-                    'message' => 'User not found'
-                ], 404);
-            }
-
-            return Response::json([
-                'success' => true,
-                'user' => [
-                    'id' => $user['id'],
-                    'email' => $user['email'],
-                    'name' => $user['name']
-                ]
-            ]);
-
-        } catch (\Exception $e) {
-            return Response::json([
-                'success' => false,
-                'message' => 'Authentication error'
-            ], 500);
-        }
-    }
-
-    /**
-     * Logout user
-     */
-    public function logout()
-    {
-        // Clear the auth cookie
-        setcookie('auth_token', '', [
-            'expires' => time() - 3600,
-            'path' => '/',
-            'domain' => $_SERVER['HTTP_HOST'],
-            'secure' => isset($_SERVER['HTTPS']),
-            'httponly' => true,
-            'samesite' => 'Lax'
-        ]);
-
-        return Response::json([
-            'success' => true,
-            'message' => 'Logout successful'
-        ]);
-    }
-
-    /**
-     * Extract token from request
-     */
-    private function getTokenFromRequest()
-    {
-        // Check for token in cookie first
-        if (isset($_COOKIE['auth_token'])) {
-            return $_COOKIE['auth_token'];
-        }
-
-        // Fallback to Authorization header
-        $headers = apache_request_headers();
+        $headers = getallheaders();
         if (isset($headers['Authorization'])) {
-            $authHeader = $headers['Authorization'];
-            if (preg_match('/Bearer\s+(.*)$/i', $authHeader, $matches)) {
+            if (preg_match('/Bearer\s(\S+)/', $headers['Authorization'], $matches)) {
                 return $matches[1];
             }
         }
-
         return null;
+    }
+
+    private function getEmployeeByUserId($userId)
+    {
+        $db = DB::getInstance();
+        $stmt = $db->prepare("
+            SELECT e.*, o.name as organization_name 
+            FROM employees e 
+            LEFT JOIN organizations o ON e.organization_id = o.id 
+            WHERE e.user_id = :user_id
+        ");
+        $stmt->execute([':user_id' => $userId]);
+        return $stmt->fetch(\PDO::FETCH_ASSOC);
     }
 }

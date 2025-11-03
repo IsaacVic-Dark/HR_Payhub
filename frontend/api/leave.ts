@@ -187,7 +187,6 @@ export const leaveAPI = {
     leaveId: string,
     status: 'approved' | 'rejected'
   ): Promise<{ success: boolean; error?: string; data?: LeaveType }> => {
-    // Route to appropriate endpoint
     if (status === 'approved') {
       return leaveAPI.approveLeave(leaveId);
     } else {

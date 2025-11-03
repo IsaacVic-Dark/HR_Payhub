@@ -13,9 +13,30 @@ use App\Controllers\NotificationController;
 use App\Controllers\AuthController;
 
 // Add authentication routes
-Router::post('api/v1/auth/login', AuthController::class . '@login');
-Router::post('api/v1/auth/logout', AuthController::class . '@logout');
-Router::get('api/v1/auth/user', AuthController::class . '@user');
+// Router::post('api/v1/auth/login', AuthController::class . '@login');
+// Router::post('api/v1/auth/logout', AuthController::class . '@logout');
+// Router::get('api/v1/auth/user', AuthController::class . '@user');
+
+// $router->post('/auth/register', 'AuthController@register');
+// $router->post('/auth/register/employee', 'AuthController@registerEmployee');
+// $router->post('/auth/check-email', 'AuthController@checkEmail');
+// $router->post('/auth/login', 'AuthController@login');
+// $router->post('/auth/refresh', 'AuthController@refreshToken');
+// $router->post('/auth/logout', 'AuthController@logout');
+// $router->get('/auth/me', 'AuthController@me');
+
+
+// Authentication routes
+Router::get('/auth/me', AuthController::class . '@me');                     
+Router::post('/auth/register', AuthController::class . '@register');                  
+Router::post('/auth/register/employee', AuthController::class . '@registerEmployee');                  
+Router::post('/auth/check-email', AuthController::class . '@checkEmail');                  
+Router::post('/auth/login', AuthController::class . '@login');                  
+Router::post('/auth/refresh', AuthController::class . '@refreshToken');                  
+Router::post('/auth/logout', AuthController::class . '@logout');                  
+// Router::put('api/v1/organizations/leaves/{id}', LeaveController::class . '@update');             
+// Router::patch('api/v1/organizations/leaves/{id}', LeaveController::class . '@update');      
+// Router::delete('api/v1/organizations/leaves/{id}', LeaveController::class . '@destroy'); 
 
 // Your existing routes
 Router::resource('api/v1/organizations', OrganizationController::class);
