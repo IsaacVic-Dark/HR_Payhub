@@ -1,9 +1,9 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
 const authAPI = axios.create({
-    baseURL: `${API_BASE_URL}/auth`,
+    baseURL: `${API_BASE_URL}`, // ✅ FIXED: Remove /auth/login from base URL
     withCredentials: true,
 });
 
@@ -33,7 +33,7 @@ authAPI.interceptors.response.use(
             try {
                 const refreshToken = getCookie('refresh_token');
                 if (refreshToken) {
-                    const response = await authAPI.post('/refresh', {
+                    const response = await authAPI.post('/auth/refresh', { // ✅ FIXED: Correct endpoint
                         refresh_token: refreshToken,
                     });
 
@@ -58,7 +58,7 @@ authAPI.interceptors.response.use(
 
 export const authService = {
     async login(credentials) {
-        const response = await authAPI.post('/login', credentials);
+        const response = await authAPI.post('/auth/login', credentials); // ✅ Now this becomes /api/v1/auth/login
 
         if (response.data.tokens) {
             setAuthCookies(
@@ -71,7 +71,7 @@ export const authService = {
     },
 
     async register(userData) {
-        const response = await authAPI.post('/register', userData);
+        const response = await authAPI.post('/auth/register', userData);
 
         if (response.data.tokens) {
             setAuthCookies(
@@ -84,23 +84,23 @@ export const authService = {
     },
 
     async registerEmployee(employeeData) {
-        const response = await authAPI.post('/register/employee', employeeData);
+        const response = await authAPI.post('/auth/register/employee', employeeData);
         return response.data;
     },
 
     async checkEmail(email) {
-        const response = await authAPI.post('/check-email', { email });
+        const response = await authAPI.post('/auth/check-email', { email });
         return response.data;
     },
 
     async logout() {
-        const response = await authAPI.post('/logout');
+        const response = await authAPI.post('/auth/logout');
         clearAuthCookies();
         return response.data;
     },
 
     async getCurrentUser() {
-        const response = await authAPI.get('/me');
+        const response = await authAPI.get('/auth/me');
         return response.data;
     },
 
@@ -110,7 +110,7 @@ export const authService = {
             throw new Error('No refresh token available');
         }
 
-        const response = await authAPI.post('/refresh', {
+        const response = await authAPI.post('/auth/refresh', {
             refresh_token: refreshToken,
         });
 
@@ -125,7 +125,7 @@ export const authService = {
     },
 };
 
-// Cookie helpers
+// Cookie helpers (keep these the same)
 function setAuthCookies(accessToken, refreshToken) {
     const isProduction = process.env.NODE_ENV === 'production';
 

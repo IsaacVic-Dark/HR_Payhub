@@ -90,12 +90,8 @@ class AuthController
             return;
         }
 
-        $db = DB::getInstance();
-
         try {
-            $db->beginTransaction();
-
-            // Check if user already exists
+            // Check if user already exists (before starting transaction)
             $existingUser = User::findByEmail($data['email']);
             if ($existingUser) {
                 http_response_code(409);
@@ -103,93 +99,81 @@ class AuthController
                 return;
             }
 
-            // Create organization first
-            $organizationStmt = $db->prepare("
-                INSERT INTO organizations 
-                (name, legal_type, official_email, currency, payroll_schedule, is_active) 
-                VALUES 
-                (:name, :legal_type, :official_email, :currency, :payroll_schedule, :is_active)
-            ");
+            // Use DB::transaction for the entire registration process
+            $result = DB::transaction(function () use ($data) {
 
-            $organizationData = [
-                ':name' => $data['organization_name'],
-                ':legal_type' => $data['legal_type'] ?? 'LTD',
-                ':official_email' => $data['email'],
-                ':currency' => $data['currency'] ?? 'KES',
-                ':payroll_schedule' => $data['payroll_schedule'] ?? 'Monthly',
-                ':is_active' => 1
-            ];
+                // Create organization first
+                $organizationData = [
+                    'name' => $data['organization_name'],
+                    'legal_type' => $data['legal_type'] ?? 'LTD',
+                    'official_email' => $data['email'],
+                    'currency' => $data['currency'] ?? 'KES',
+                    'payroll_schedule' => $data['payroll_schedule'] ?? 'Monthly',
+                    'is_active' => 1
+                ];
 
-            $organizationStmt->execute($organizationData);
-            $organizationId = $db->lastInsertId();
+                DB::table('organizations')->insert($organizationData);
+                $organizationId = DB::lastInsertId();
 
-            // Create user
-            $userStmt = $db->prepare("
-                INSERT INTO users 
-                (organization_id, username, first_name, middle_name, surname, password_hash, email, user_type) 
-                VALUES 
-                (:organization_id, :username, :first_name, :middle_name, :surname, :password_hash, :email, :user_type)
-            ");
+                // Create user
+                $username = $this->generateUsername($data['first_name'], $data['surname']);
+                $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
+                $userType = 'admin'; // First user of organization becomes admin
 
-            $username = $this->generateUsername($data['first_name'], $data['surname'], $db);
-            $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
+                $userData = [
+                    'organization_id' => $organizationId,
+                    'username' => $username,
+                    'first_name' => $data['first_name'],
+                    'middle_name' => $data['middle_name'] ?? null,
+                    'surname' => $data['surname'],
+                    'password_hash' => $passwordHash,
+                    'email' => $data['email'],
+                    'user_type' => $userType
+                ];
 
-            // First user of organization becomes admin
-            $userType = 'admin';
+                DB::table('users')->insert($userData);
+                $userId = DB::lastInsertId();
 
-            $userStmt->execute([
-                ':organization_id' => $organizationId,
-                ':username' => $username,
-                ':first_name' => $data['first_name'],
-                ':middle_name' => $data['middle_name'] ?? null,
-                ':surname' => $data['surname'],
-                ':password_hash' => $passwordHash,
-                ':email' => $data['email'],
-                ':user_type' => $userType
-            ]);
+                // Update organization with primary administrator
+                DB::table('organizations')->update(
+                    ['primary_administrator_id' => $userId],
+                    'id',
+                    $organizationId
+                );
 
-            $userId = $db->lastInsertId();
+                // Create employee record for the admin
+                $employeeData = [
+                    'organization_id' => $organizationId,
+                    'user_id' => $userId,
+                    'email' => $data['email'],
+                    'phone' => $data['phone'] ?? null,
+                    'hire_date' => date('Y-m-d'),
+                    'job_title' => $data['job_title'] ?? 'Administrator',
+                    'department' => $data['department'] ?? 'Management',
+                    'base_salary' => $data['base_salary'] ?? 0,
+                    'status' => 'active',
+                    'employment_type' => $data['employment_type'] ?? 'full_time',
+                    'work_location' => $data['work_location'] ?? 'on-site'
+                ];
 
-            // Update organization with primary administrator
-            $updateOrgStmt = $db->prepare("
-                UPDATE organizations SET primary_administrator_id = :admin_id WHERE id = :org_id
-            ");
-            $updateOrgStmt->execute([
-                ':admin_id' => $userId,
-                ':org_id' => $organizationId
-            ]);
+                DB::table('employees')->insert($employeeData);
+                $employeeId = DB::lastInsertId();
 
-            // Create employee record for the admin
-            $employeeStmt = $db->prepare("
-                INSERT INTO employees 
-                (organization_id, user_id, email, phone, hire_date, job_title, department, base_salary, status, employment_type, work_location) 
-                VALUES 
-                (:organization_id, :user_id, :email, :phone, :hire_date, :job_title, :department, :base_salary, :status, :employment_type, :work_location)
-            ");
-
-            $employeeStmt->execute([
-                ':organization_id' => $organizationId,
-                ':user_id' => $userId,
-                ':email' => $data['email'],
-                ':phone' => $data['phone'] ?? null,
-                ':hire_date' => date('Y-m-d'),
-                ':job_title' => $data['job_title'] ?? 'Administrator',
-                ':department' => $data['department'] ?? 'Management',
-                ':base_salary' => $data['base_salary'] ?? 0,
-                ':status' => 'active',
-                ':employment_type' => $data['employment_type'] ?? 'full_time',
-                ':work_location' => $data['work_location'] ?? 'on-site'
-            ]);
-
-            $db->commit();
+                return [
+                    'userId' => $userId,
+                    'organizationId' => $organizationId,
+                    'employeeId' => $employeeId,
+                    'userType' => $userType
+                ];
+            });
 
             // Generate tokens for automatic login after registration
             $payload = [
-                'user_id' => $userId,
+                'user_id' => $result['userId'],
                 'email' => $data['email'],
-                'user_type' => $userType,
-                'organization_id' => $organizationId,
-                'employee_id' => $db->lastInsertId()
+                'user_type' => $result['userType'],
+                'organization_id' => $result['organizationId'],
+                'employee_id' => $result['employeeId']
             ];
 
             $tokens = JWTService::generateToken($payload);
@@ -198,18 +182,17 @@ class AuthController
             echo json_encode([
                 'message' => 'Registration successful',
                 'user' => [
-                    'id' => $userId,
+                    'id' => $result['userId'],
                     'email' => $data['email'],
                     'first_name' => $data['first_name'],
                     'surname' => $data['surname'],
-                    'user_type' => $userType,
-                    'organization_id' => $organizationId,
+                    'user_type' => $result['userType'],
+                    'organization_id' => $result['organizationId'],
                     'organization_name' => $data['organization_name']
                 ],
                 'tokens' => $tokens
             ]);
         } catch (\Exception $e) {
-            $db->rollBack();
             error_log('Registration error: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['error' => 'Registration failed. Please try again.']);
@@ -363,7 +346,7 @@ class AuthController
         ]);
     }
 
-    private function generateUsername($firstName, $lastName, $db)
+    private function generateUsername($firstName, $lastName)
     {
         $baseUsername = strtolower($firstName[0] . $lastName);
         $baseUsername = preg_replace('/[^a-z0-9]/', '', $baseUsername);
@@ -373,11 +356,11 @@ class AuthController
 
         // Check if username exists and find available one
         while (true) {
-            $stmt = $db->prepare("SELECT id FROM users WHERE username = :username");
-            $stmt->execute([':username' => $username]);
-            $existing = $stmt->fetch(\PDO::FETCH_ASSOC);
+            $result = DB::table('users')
+                ->where(['username' => $username])
+                ->get(['id']);
 
-            if (!$existing) {
+            if (empty($result)) {
                 break;
             }
 

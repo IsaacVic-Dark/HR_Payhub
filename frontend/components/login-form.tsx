@@ -20,16 +20,24 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
+      console.log('Attempting login with:', { email, password });
+      
       const result = await login({ email, password });
       
+      console.log('Login result:', result);
+      
       if (result.success) {
+        console.log('Login successful, redirecting to dashboard');
         router.push('/dashboard');
       } else {
-        // Handle error (show toast notification)
-        console.error('Login error:', result.error);
+        console.error('Login failed:', result.error);
+        // Show error to user
+        alert(`Login failed: ${result.error}`);
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Login exception:', error);
+      // console.error('Error response:', error.response);
+      // alert('Login error: ' + (error.response?.data?.error || error.message));
     } finally {
       setIsLoading(false);
     }
