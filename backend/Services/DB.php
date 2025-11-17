@@ -188,6 +188,7 @@ final class DB
      * @param string $condition Operator (default: =)
      * @return this
      */
+    
     // Add to your DB class
     public function orderBy(string $column, string $direction = 'ASC'): DB
     {

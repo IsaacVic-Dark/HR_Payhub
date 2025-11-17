@@ -1,5 +1,4 @@
 <?php
-// routes.php
 
 use App\Services\Router;
 use App\Controllers\OrganizationController;
@@ -13,13 +12,13 @@ use App\Controllers\NotificationController;
 use App\Controllers\AuthController;
 
 // Authentication routes - ALL with consistent /api/v1 prefix
-Router::post('/api/v1/auth/login', AuthController::class . '@login');
+Router::post('/api/v1/auth/login', [AuthController::getInstance(), 'login']);
 Router::post('/api/v1/auth/register', AuthController::class . '@register');
 Router::post('/api/v1/auth/register/employee', AuthController::class . '@registerEmployee');
 Router::post('/api/v1/auth/check-email', AuthController::class . '@checkEmail');
 Router::post('/api/v1/auth/refresh', AuthController::class . '@refreshToken');
-Router::post('/api/v1/auth/logout', AuthController::class . '@logout');
-Router::get('/api/v1/auth/me', AuthController::class . '@me');
+Router::post('/api/v1/auth/logout',  [AuthController::getInstance(), 'logout']);
+Router::get('/api/v1/auth/me', [AuthController::getInstance(), 'me']);
 
 // Your existing routes
 Router::resource('api/v1/organizations', OrganizationController::class);

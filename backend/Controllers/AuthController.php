@@ -8,56 +8,98 @@ use App\Services\DB;
 
 class AuthController
 {
+    private static $instance = null;
+
+    private function __construct()
+    {
+        // Private constructor to prevent direct instantiation
+    }
+
+    public static function getInstance()
+    {
+        if (self::$instance === null) {
+            self::$instance = new self();
+        }
+        return self::$instance;
+    }
+
+    // Prevent cloning
+    private function __clone() {}
+
+    // Prevent unserialization
+    public function __wakeup() {}
+
     public function login()
     {
         header('Content-Type: application/json');
 
-        $data = json_decode(file_get_contents('php://input'), true);
+        try {
+            $data = json_decode(file_get_contents('php://input'), true);
 
-        if (!isset($data['email']) || !isset($data['password'])) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Email and password are required']);
-            return;
-        }
+            if (!isset($data['email']) || !isset($data['password'])) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Email and password are required'
+                ]);
+                return;
+            }
 
-        $user = User::findByEmail($data['email']);
+            $user = User::findByEmail($data['email']);
 
-        if (!$user || !password_verify($data['password'], $user['password_hash'])) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Invalid credentials']);
-            return;
-        }
+            if (!$user || !password_verify($data['password'], $user['password_hash'])) {
+                http_response_code(401);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Invalid credentials'
+                ]);
+                return;
+            }
 
-        // Check if user is active
-        $employee = $this->getEmployeeByUserId($user['id']);
-        if (!$employee || $employee['status'] !== 'active') {
-            http_response_code(403);
-            echo json_encode(['error' => 'Account is not active']);
-            return;
-        }
+            // Check if user is active
+            $employee = $this->getEmployeeByUserId($user['id']);
 
-        $payload = [
-            'user_id' => $user['id'],
-            'email' => $user['email'],
-            'user_type' => $user['user_type'],
-            'organization_id' => $user['organization_id'],
-            'employee_id' => $employee['id'] ?? null
-        ];
+            if (!$employee || $employee['status'] !== 'active') {
+                http_response_code(403);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Account is not active'
+                ]);
+                return;
+            }
 
-        $tokens = JWTService::generateToken($payload);
-
-        echo json_encode([
-            'message' => 'Login successful',
-            'user' => [
-                'id' => $user['id'],
+            $payload = [
+                'user_id' => $user['id'],
                 'email' => $user['email'],
-                'first_name' => $user['first_name'],
-                'surname' => $user['surname'],
                 'user_type' => $user['user_type'],
-                'organization_id' => $user['organization_id']
-            ],
-            'tokens' => $tokens
-        ]);
+                'organization_id' => $user['organization_id'],
+                'employee_id' => $employee['id'] ?? null
+            ];
+
+            $tokens = JWTService::generateToken($payload);
+
+            http_response_code(200);
+            echo json_encode([
+                'success' => true,
+                'message' => 'Login successful',
+                'user' => [
+                    'id' => $user['id'],
+                    'email' => $user['email'],
+                    'first_name' => $user['first_name'],
+                    'surname' => $user['surname'],
+                    'user_type' => $user['user_type'],
+                    'organization_id' => $user['organization_id']
+                ],
+                'tokens' => $tokens
+            ]);
+        } catch (\Exception $e) {
+            error_log('Login error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Login failed. Please try again.'
+            ]);
+        }
     }
 
     public function register()
@@ -375,91 +417,147 @@ class AuthController
     {
         header('Content-Type: application/json');
 
-        $data = json_decode(file_get_contents('php://input'), true);
+        try {
+            $data = json_decode(file_get_contents('php://input'), true);
 
-        if (!isset($data['refresh_token'])) {
-            http_response_code(400);
-            echo json_encode(['error' => 'Refresh token is required']);
-            return;
+            if (!isset($data['refresh_token'])) {
+                http_response_code(400);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Refresh token is required'
+                ]);
+                return;
+            }
+
+            $refreshData = JWTService::validateRefreshToken($data['refresh_token']);
+
+            if (!$refreshData) {
+                http_response_code(401);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Invalid refresh token'
+                ]);
+                return;
+            }
+
+            $user = User::find($refreshData['user_id']);
+            if (!$user) {
+                http_response_code(401);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'User not found'
+                ]);
+                return;
+            }
+
+            $employee = $this->getEmployeeByUserId($user['id']);
+
+            $payload = [
+                'user_id' => $user['id'],
+                'email' => $user['email'],
+                'user_type' => $user['user_type'],
+                'organization_id' => $user['organization_id'],
+                'employee_id' => $employee['id'] ?? null
+            ];
+
+            $tokens = JWTService::generateToken($payload);
+
+            http_response_code(200);
+            echo json_encode([
+                'success' => true,
+                'message' => 'Token refreshed successfully',
+                'tokens' => $tokens
+            ]);
+        } catch (\Exception $e) {
+            error_log('Refresh token error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Token refresh failed'
+            ]);
         }
-
-        $refreshData = JWTService::validateRefreshToken($data['refresh_token']);
-
-        if (!$refreshData) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Invalid refresh token']);
-            return;
-        }
-
-        $user = User::find($refreshData['user_id']);
-        if (!$user) {
-            http_response_code(401);
-            echo json_encode(['error' => 'User not found']);
-            return;
-        }
-
-        $employee = $this->getEmployeeByUserId($user['id']);
-
-        $payload = [
-            'user_id' => $user['id'],
-            'email' => $user['email'],
-            'user_type' => $user['user_type'],
-            'organization_id' => $user['organization_id'],
-            'employee_id' => $employee['id'] ?? null
-        ];
-
-        $tokens = JWTService::generateToken($payload);
-
-        echo json_encode([
-            'message' => 'Token refreshed successfully',
-            'tokens' => $tokens
-        ]);
     }
 
     public function logout()
     {
         header('Content-Type: application/json');
-        echo json_encode(['message' => 'Logout successful']);
+
+        try {
+            // Your logout logic here (clearing tokens, blacklisting, etc.)
+
+            http_response_code(200);
+            echo json_encode([
+                'success' => true,
+                'message' => 'Logout successful'
+            ]);
+        } catch (\Exception $e) {
+            error_log('Logout error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Logout failed'
+            ]);
+        }
     }
 
     public function me()
     {
         header('Content-Type: application/json');
 
-        $token = $this->getBearerToken();
-        if (!$token) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Token not provided']);
-            return;
+        try {
+            $token = $this->getBearerToken();
+            if (!$token) {
+                http_response_code(401);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Token not provided'
+                ]);
+                return;
+            }
+
+            $userData = JWTService::validateToken($token);
+            if (!$userData) {
+                http_response_code(401);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'Invalid token'
+                ]);
+                return;
+            }
+
+            $user = User::find($userData['user_id']);
+            if (!$user) {
+                http_response_code(404);
+                echo json_encode([
+                    'success' => false,
+                    'error' => 'User not found'
+                ]);
+                return;
+            }
+
+            $employee = $this->getEmployeeByUserId($user['id']);
+
+            http_response_code(200);
+            echo json_encode([
+                'success' => true,
+                'user' => [
+                    'id' => $user['id'],
+                    'email' => $user['email'],
+                    'first_name' => $user['first_name'],
+                    'surname' => $user['surname'],
+                    'user_type' => $user['user_type'],
+                    'organization_id' => $user['organization_id'],
+                    'employee' => $employee
+                ]
+            ]);
+        } catch (\Exception $e) {
+            error_log('Me endpoint error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode([
+                'success' => false,
+                'error' => 'Internal server error'
+            ]);
         }
-
-        $userData = JWTService::validateToken($token);
-        if (!$userData) {
-            http_response_code(401);
-            echo json_encode(['error' => 'Invalid token']);
-            return;
-        }
-
-        $user = User::find($userData['user_id']);
-        if (!$user) {
-            http_response_code(404);
-            echo json_encode(['error' => 'User not found']);
-            return;
-        }
-
-        $employee = $this->getEmployeeByUserId($user['id']);
-
-        echo json_encode([
-            'user' => [
-                'id' => $user['id'],
-                'email' => $user['email'],
-                'first_name' => $user['first_name'],
-                'surname' => $user['surname'],
-                'user_type' => $user['user_type'],
-                'organization_id' => $user['organization_id'],
-                'employee' => $employee
-            ]
-        ]);
     }
 
     private function getBearerToken()
@@ -475,14 +573,11 @@ class AuthController
 
     private function getEmployeeByUserId($userId)
     {
-        $db = DB::getInstance();
-        $stmt = $db->prepare("
-            SELECT e.*, o.name as organization_name 
-            FROM employees e 
-            LEFT JOIN organizations o ON e.organization_id = o.id 
-            WHERE e.user_id = :user_id
-        ");
-        $stmt->execute([':user_id' => $userId]);
-        return $stmt->fetch(\PDO::FETCH_ASSOC);
+        $result = DB::table('employees')
+            ->where(['user_id' => $userId])
+            ->get(['*']);
+
+        // Convert stdClass object to associative array
+        return $result[0] ? json_decode(json_encode($result[0]), true) : null;
     }
 }

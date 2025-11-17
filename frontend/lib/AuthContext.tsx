@@ -1,13 +1,16 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import Cookies from 'js-cookie';
 import { useRouter } from "next/navigation";
-
+import { authService } from '@/services/api/auth'; // Adjust path as needed
 
 interface User {
   id: number;
   email: string;
+  first_name: string;
+  surname: string;
+  user_type: string;
+  organization_id: number;
 }
 
 interface AuthContextType {
@@ -20,7 +23,6 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
-
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
@@ -41,16 +43,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     checkAuthStatus();
   }, []);
 
-  // Similarly update logout and checkAuthStatus
-const checkAuthStatus = async () => {
-  try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/auth/user`, {
-      credentials: 'include',
-    });
-    
-      if (response.ok) {
-        const data = await response.json();
-        setUser(data.data);
+  const checkAuthStatus = async () => {
+    try {
+      const response = await authService.getCurrentUser();
+      if (response.success && response.user) {
+        setUser(response.user);
       } else {
         setUser(null);
       }
@@ -60,43 +57,31 @@ const checkAuthStatus = async () => {
     } finally {
       setIsLoading(false);
     }
-  }
-  
+  };
 
   const login = async (email: string, password: string): Promise<boolean> => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/auth/login`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-        credentials: 'include', // Important for cookies
-      });
-
-            if (response.ok) {
-          await checkAuthStatus();
-           router.push('/dashboard');
-          return true;
-        } else {
-          return false;
-        }
-      } catch (error) {
-        console.error('Login failed:', error);
-        return false;
+      const response = await authService.login({ email, password });
+      if (response.success) {
+        await checkAuthStatus();
+        router.push('/dashboard');
+        return true;
       }
+      return false;
+    } catch (error) {
+      console.error('Login failed:', error);
+      return false;
+    }
   };
 
   const logout = async (): Promise<void> => {
     try {
-      await fetch('http://localhost/backend/logout.php', {
-        credentials: 'include',
-      });
+      await authService.logout();
     } catch (error) {
       console.error('Logout failed:', error);
     } finally {
       setUser(null);
-      Cookies.remove('auth_token');
+      router.push('/login');
     }
   };
 

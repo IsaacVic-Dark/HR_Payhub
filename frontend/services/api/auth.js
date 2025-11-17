@@ -3,7 +3,7 @@ import axios from 'axios';
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
 const authAPI = axios.create({
-    baseURL: `${API_BASE_URL}`, // ✅ FIXED: Remove /auth/login from base URL
+    baseURL: `${API_BASE_URL}`, 
     withCredentials: true,
 });
 
@@ -11,6 +11,7 @@ const authAPI = axios.create({
 authAPI.interceptors.request.use(
     (config) => {
         const token = getCookie('access_token');
+        console.log('Current token:', token); // Debug log
         if (token) {
             config.headers.Authorization = `Bearer ${token}`;
         }
@@ -21,66 +22,35 @@ authAPI.interceptors.request.use(
     }
 );
 
-// Response interceptor to handle token refresh
-authAPI.interceptors.response.use(
-    (response) => response,
-    async (error) => {
-        const originalRequest = error.config;
-
-        if (error.response?.status === 401 && !originalRequest._retry) {
-            originalRequest._retry = true;
-
-            try {
-                const refreshToken = getCookie('refresh_token');
-                if (refreshToken) {
-                    const response = await authAPI.post('/auth/refresh', { // ✅ FIXED: Correct endpoint
-                        refresh_token: refreshToken,
-                    });
-
-                    const { access_token, refresh_token } = response.data.tokens;
-                    setAuthCookies(access_token, refresh_token);
-
-                    // Retry original request
-                    originalRequest.headers.Authorization = `Bearer ${access_token}`;
-                    return axios(originalRequest);
-                }
-            } catch (refreshError) {
-                // If refresh fails, logout user
-                clearAuthCookies();
-                window.location.href = '/login';
-                return Promise.reject(refreshError);
-            }
-        }
-
-        return Promise.reject(error);
-    }
-);
-
 export const authService = {
     async login(credentials) {
-        const response = await authAPI.post('/auth/login', credentials); // ✅ Now this becomes /api/v1/auth/login
+        const response = await authAPI.post('/auth/login', credentials);
+        const data = response.data;
 
-        if (response.data.tokens) {
+        console.log('Login API response:', data);
+
+        if (data.tokens) {
             setAuthCookies(
-                response.data.tokens.access_token,
-                response.data.tokens.refresh_token
+                data.tokens.access_token,
+                data.tokens.refresh_token
             );
         }
 
-        return response.data;
+        return data;
     },
 
     async register(userData) {
         const response = await authAPI.post('/auth/register', userData);
+        const data = response.data;
 
-        if (response.data.tokens) {
+        if (data.tokens) {
             setAuthCookies(
-                response.data.tokens.access_token,
-                response.data.tokens.refresh_token
+                data.tokens.access_token,
+                data.tokens.refresh_token
             );
         }
 
-        return response.data;
+        return data;
     },
 
     async registerEmployee(employeeData) {
@@ -100,42 +70,46 @@ export const authService = {
     },
 
     async getCurrentUser() {
-        const response = await authAPI.get('/auth/me');
-        return response.data;
+        try {
+            console.log('Cookies before request:', document.cookie);
+            const response = await authAPI.get('/auth/me');
+            console.log('Auth me response:', response.data);
+            return response.data;
+        } catch (error) {
+            console.error('Get current user failed:', error);
+            console.error('Error details:', error.response?.data);
+            return { success: false, error: 'Failed to get user' };
+        }
     },
 
     async refreshToken() {
-        const refreshToken = getCookie('refresh_token');
-        if (!refreshToken) {
-            throw new Error('No refresh token available');
-        }
-
-        const response = await authAPI.post('/auth/refresh', {
-            refresh_token: refreshToken,
-        });
-
-        if (response.data.tokens) {
+        const response = await authAPI.post('/auth/refresh');
+        const data = response.data;
+        
+        if (data.tokens) {
             setAuthCookies(
-                response.data.tokens.access_token,
-                response.data.tokens.refresh_token
+                data.tokens.access_token,
+                data.tokens.refresh_token
             );
         }
 
-        return response.data;
+        return data;
     },
 };
 
-// Cookie helpers (keep these the same)
+// Cookie helpers
 function setAuthCookies(accessToken, refreshToken) {
     const isProduction = process.env.NODE_ENV === 'production';
+    const sameSite = isProduction ? 'None' : 'Lax';
+    const secureFlag = isProduction ? 'Secure;' : '';
 
-    // Access token - 1 hour
-    document.cookie = `access_token=${accessToken}; path=/; max-age=3600; ${isProduction ? 'Secure; SameSite=Strict' : ''
-        }`;
+    // Access token
+    document.cookie = `access_token=${accessToken}; path=/; max-age=3600; ${secureFlag} SameSite=${sameSite}`;
 
-    // Refresh token - 7 days
-    document.cookie = `refresh_token=${refreshToken}; path=/; max-age=604800; ${isProduction ? 'Secure; SameSite=Strict' : ''
-        }`;
+    // Refresh token
+    document.cookie = `refresh_token=${refreshToken}; path=/; max-age=604800; ${secureFlag} SameSite=${sameSite}`;
+
+    console.log('Cookies after setting:', document.cookie);
 }
 
 function clearAuthCookies() {
