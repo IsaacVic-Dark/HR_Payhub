@@ -9,7 +9,7 @@ class LeaveController
     /**
      * Get all leaves with pagination and auto-expire old leaves
      */
-    public function index()
+    public function index($org_id = null)
     {
         try {
             // Auto-expire leaves that have passed their end date
@@ -35,6 +35,15 @@ class LeaveController
             $queryParams = [];
             $statsParams = [];
 
+            // Add organization filter - REQUIRED
+            if ($org_id) {
+                $whereConditions[] = "emp_users.organization_id = :org_id";
+                $countParams[':org_id'] = $org_id;
+                $queryParams[':org_id'] = $org_id;
+                $statsParams[':org_id'] = $org_id;
+            }
+
+            // Existing filters...
             if ($status) {
                 $whereConditions[] = "leaves.status = :filter_status";
                 $countParams[':filter_status'] = $status;
@@ -63,7 +72,7 @@ class LeaveController
                 $statsParams[':filter_leave_type'] = $leaveType;
             }
 
-            // Month filter - fixed parameter binding
+            // Month filter
             if ($month) {
                 $targetMonth = (int)$month;
                 if ($targetMonth >= 1 && $targetMonth <= 12) {
@@ -74,7 +83,7 @@ class LeaveController
                 }
             }
 
-            // Year filter - fixed parameter binding
+            // Year filter
             if ($year) {
                 $targetYear = (int)$year;
                 $whereConditions[] = "YEAR(leaves.start_date) = :filter_year";
@@ -83,7 +92,7 @@ class LeaveController
                 $statsParams[':filter_year'] = $targetYear;
             }
 
-            // Name filter - CONCAT first, middle, and surname (with NULL handling)
+            // Name filter
             if ($name) {
                 $whereConditions[] = "CONCAT(emp_users.first_name, ' ', COALESCE(emp_users.middle_name, ''), ' ', emp_users.surname) LIKE :filter_name";
                 $countParams[':filter_name'] = '%' . $name . '%';
@@ -95,12 +104,12 @@ class LeaveController
 
             // Count total records
             $countQuery = "
-                SELECT COUNT(*) as total
-                FROM leaves
-                INNER JOIN employees ON leaves.employee_id = employees.id
-                INNER JOIN users emp_users ON employees.user_id = emp_users.id
-                $whereClause
-            ";
+            SELECT COUNT(*) as total
+            FROM leaves
+            INNER JOIN employees ON leaves.employee_id = employees.id
+            INNER JOIN users emp_users ON employees.user_id = emp_users.id
+            $whereClause
+        ";
 
             $countResult = DB::raw($countQuery, $countParams);
             $total = $countResult[0]->total ?? 0;
@@ -109,6 +118,7 @@ class LeaveController
             if ($total === 0) {
                 // Build filter message for better context
                 $filterMessages = [];
+                if ($org_id) $filterMessages[] = "organization ID: $org_id";
                 if ($status) $filterMessages[] = "status: $status";
                 if ($approverId) $filterMessages[] = "approver ID: $approverId";
                 if ($relieverId) $filterMessages[] = "reliever ID: $relieverId";
@@ -124,13 +134,13 @@ class LeaveController
                     data: [
                         'leaves' => [],
                         'statistics' => [
-                            'total_leaves' => 0,                            
+                            'total_leaves' => 0,
                             'sick' => 0,
                             'casual' => 0,
                             'annual' => 0,
                             'maternity' => 0,
                             'paternity' => 0,
-                            'other' => 0                            
+                            'other' => 0
                         ],
                         'pagination' => [
                             'current_page' => $page,
@@ -146,75 +156,76 @@ class LeaveController
                 );
             }
 
-            // Get statistics for leave types (removed by_status)
+            // Get statistics for leave types
             $statsQuery = "
-                SELECT 
-                    COUNT(*) as total_leaves,
-                    SUM(CASE WHEN leave_type = 'sick' THEN 1 ELSE 0 END) as sick_leaves,
-                    SUM(CASE WHEN leave_type = 'casual' THEN 1 ELSE 0 END) as casual_leaves,
-                    SUM(CASE WHEN leave_type = 'annual' THEN 1 ELSE 0 END) as annual_leaves,
-                    SUM(CASE WHEN leave_type = 'maternity' THEN 1 ELSE 0 END) as maternity_leaves,
-                    SUM(CASE WHEN leave_type = 'paternity' THEN 1 ELSE 0 END) as paternity_leaves,
-                    SUM(CASE WHEN leave_type = 'other' THEN 1 ELSE 0 END) as other_leaves
-                FROM leaves
-                INNER JOIN employees ON leaves.employee_id = employees.id
-                INNER JOIN users emp_users ON employees.user_id = emp_users.id
-                $whereClause
-            ";
+            SELECT 
+                COUNT(*) as total_leaves,
+                SUM(CASE WHEN leave_type = 'sick' THEN 1 ELSE 0 END) as sick_leaves,
+                SUM(CASE WHEN leave_type = 'casual' THEN 1 ELSE 0 END) as casual_leaves,
+                SUM(CASE WHEN leave_type = 'annual' THEN 1 ELSE 0 END) as annual_leaves,
+                SUM(CASE WHEN leave_type = 'maternity' THEN 1 ELSE 0 END) as maternity_leaves,
+                SUM(CASE WHEN leave_type = 'paternity' THEN 1 ELSE 0 END) as paternity_leaves,
+                SUM(CASE WHEN leave_type = 'other' THEN 1 ELSE 0 END) as other_leaves
+            FROM leaves
+            INNER JOIN employees ON leaves.employee_id = employees.id
+            INNER JOIN users emp_users ON employees.user_id = emp_users.id
+            $whereClause
+        ";
 
             $statsResult = DB::raw($statsQuery, $statsParams);
             $stats = $statsResult[0] ?? null;
 
             // Fetch paginated data with approver and reliever info
             $query = "
-                SELECT 
-                    leaves.id AS leave_id,
-                    leaves.employee_id,
-                    leaves.approver_id,
-                    leaves.reliever_id,
-                    leaves.leave_type,
-                    leaves.start_date,
-                    leaves.end_date,
-                    leaves.status,
-                    leaves.reason,
-                    leaves.created_at,
-                    leaves.updated_at,
-                    
-                    -- Employee details
-                    employees.email AS employee_email,
-                    emp_users.first_name AS employee_first_name,
-                    emp_users.middle_name AS employee_middle_name,
-                    emp_users.surname AS employee_surname,
-                    CONCAT(emp_users.first_name, ' ', COALESCE(emp_users.middle_name, ''), ' ', emp_users.surname) AS employee_full_name,
-                    
-                    -- Approver details
-                    approver_emp.email AS approver_email,
-                    approver_users.first_name AS approver_first_name,
-                    approver_users.middle_name AS approver_middle_name,
-                    approver_users.surname AS approver_surname,
-                    CONCAT(approver_users.first_name, ' ', COALESCE(approver_users.middle_name, ''), ' ', approver_users.surname) AS approver_full_name,
-                    
-                    -- Reliever details
-                    reliever_emp.email AS reliever_email,
-                    reliever_users.first_name AS reliever_first_name,
-                    reliever_users.middle_name AS reliever_middle_name,
-                    reliever_users.surname AS reliever_surname,
-                    CONCAT(reliever_users.first_name, ' ', COALESCE(reliever_users.middle_name, ''), ' ', reliever_users.surname) AS reliever_full_name
-                    
-                FROM leaves
-                INNER JOIN employees ON leaves.employee_id = employees.id
-                INNER JOIN users emp_users ON employees.user_id = emp_users.id
+            SELECT 
+                leaves.id AS leave_id,
+                leaves.employee_id,
+                leaves.approver_id,
+                leaves.reliever_id,
+                leaves.leave_type,
+                leaves.start_date,
+                leaves.end_date,
+                leaves.status,
+                leaves.reason,
+                leaves.created_at,
+                leaves.updated_at,
                 
-                LEFT JOIN employees approver_emp ON leaves.approver_id = approver_emp.id
-                LEFT JOIN users approver_users ON approver_emp.user_id = approver_users.id
+                -- Employee details
+                employees.email AS employee_email,
+                emp_users.first_name AS employee_first_name,
+                emp_users.middle_name AS employee_middle_name,
+                emp_users.surname AS employee_surname,
+                emp_users.organization_id AS organization_id,
+                CONCAT(emp_users.first_name, ' ', COALESCE(emp_users.middle_name, ''), ' ', emp_users.surname) AS employee_full_name,
                 
-                LEFT JOIN employees reliever_emp ON leaves.reliever_id = reliever_emp.id
-                LEFT JOIN users reliever_users ON reliever_emp.user_id = reliever_users.id
+                -- Approver details
+                approver_emp.email AS approver_email,
+                approver_users.first_name AS approver_first_name,
+                approver_users.middle_name AS approver_middle_name,
+                approver_users.surname AS approver_surname,
+                CONCAT(approver_users.first_name, ' ', COALESCE(approver_users.middle_name, ''), ' ', approver_users.surname) AS approver_full_name,
                 
-                $whereClause
-                ORDER BY leaves.created_at DESC
-                LIMIT :pagination_limit OFFSET :pagination_offset
-            ";
+                -- Reliever details
+                reliever_emp.email AS reliever_email,
+                reliever_users.first_name AS reliever_first_name,
+                reliever_users.middle_name AS reliever_middle_name,
+                reliever_users.surname AS reliever_surname,
+                CONCAT(reliever_users.first_name, ' ', COALESCE(reliever_users.middle_name, ''), ' ', reliever_users.surname) AS reliever_full_name
+                
+            FROM leaves
+            INNER JOIN employees ON leaves.employee_id = employees.id
+            INNER JOIN users emp_users ON employees.user_id = emp_users.id
+            
+            LEFT JOIN employees approver_emp ON leaves.approver_id = approver_emp.id
+            LEFT JOIN users approver_users ON approver_emp.user_id = approver_users.id
+            
+            LEFT JOIN employees reliever_emp ON leaves.reliever_id = reliever_emp.id
+            LEFT JOIN users reliever_users ON reliever_emp.user_id = reliever_users.id
+            
+            $whereClause
+            ORDER BY leaves.created_at DESC
+            LIMIT :pagination_limit OFFSET :pagination_offset
+        ";
 
             $queryParams[':pagination_limit'] = $perPage;
             $queryParams[':pagination_offset'] = $offset;
@@ -235,7 +246,7 @@ class LeaveController
                         'annual' => (int)($stats->annual_leaves ?? 0),
                         'maternity' => (int)($stats->maternity_leaves ?? 0),
                         'paternity' => (int)($stats->paternity_leaves ?? 0),
-                        'other' => (int)($stats->other_leaves ?? 0)                        
+                        'other' => (int)($stats->other_leaves ?? 0)
                     ],
                     'pagination' => [
                         'current_page' => $page,

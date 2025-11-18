@@ -28,18 +28,18 @@ Router::resource('api/v1/organizations/{id}/employees', EmployeeController::clas
 Router::resource('api/v1/organizations/{id}/payruns', PayrunController::class);
 Router::resource('api/v1/payruns/{id}/details', PayrunDetailController::class);
 
-// Leave routes with full CRUD and actions
-Router::get('api/v1/organizations/leaves', LeaveController::class . '@index');
-Router::get('api/v1/organizations/leaves/statistics', LeaveController::class . '@statistics');
-Router::get('api/v1/organizations/leaves/{id}', LeaveController::class . '@show');
-Router::post('api/v1/organizations/leaves', LeaveController::class . '@store');
-Router::put('api/v1/organizations/leaves/{id}', LeaveController::class . '@update');
-Router::patch('api/v1/organizations/leaves/{id}', LeaveController::class . '@update');
-Router::delete('api/v1/organizations/leaves/{id}', LeaveController::class . '@destroy');
+// Leave routes with organization context
+Router::get('api/v1/organizations/{org_id}/leaves', LeaveController::class . '@index');
+Router::get('api/v1/organizations/{org_id}/leaves/statistics', LeaveController::class . '@statistics');
+Router::get('api/v1/organizations/{org_id}/leaves/{id}', LeaveController::class . '@show');
+Router::post('api/v1/organizations/{org_id}/leaves', LeaveController::class . '@store');
+Router::put('api/v1/organizations/{org_id}/leaves/{id}', LeaveController::class . '@update');
+Router::patch('api/v1/organizations/{org_id}/leaves/{id}', LeaveController::class . '@update');
+Router::delete('api/v1/organizations/{org_id}/leaves/{id}', LeaveController::class . '@destroy');
 
-// Leave action routes
-Router::post('api/v1/organizations/leaves/{id}/approve', LeaveController::class . '@approve');
-Router::post('api/v1/organizations/leaves/{id}/reject', LeaveController::class . '@reject');
+// Leave action routes with organization context
+Router::post('api/v1/organizations/{org_id}/leaves/{id}/approve', LeaveController::class . '@approve');
+Router::post('api/v1/organizations/{org_id}/leaves/{id}/reject', LeaveController::class . '@reject');
 
 // Notification routes
 Router::resource('api/v1/notifications', NotificationController::class);
