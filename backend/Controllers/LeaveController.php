@@ -12,6 +12,7 @@ class LeaveController
     public function index($org_id = null)
     {
         try {
+                        $filters = $this->applyRoleBasedFilters($org_id);
             // Auto-expire leaves that have passed their end date
             $this->autoExpireLeaves();
 
@@ -20,6 +21,23 @@ class LeaveController
             $perPage = isset($_GET['per_page']) ? max(1, min(100, (int)$_GET['per_page'])) : 10;
             $offset = ($page - 1) * $perPage;
 
+            // Build WHERE clause with role-based filters
+            $whereConditions = ["emp_users.organization_id = :org_id"];
+            $params = [':org_id' => $org_id];
+
+            // Apply employee filter for regular employees
+            if (isset($filters['employee_id'])) {
+                $whereConditions[] = "leaves.employee_id = :employee_id";
+                $params[':employee_id'] = $filters['employee_id'];
+            }
+
+            // Apply team filter for managers
+            if (isset($filters['team_employees']) && !empty($filters['team_employees'])) {
+                $placeholders = implode(',', array_fill(0, count($filters['team_employees']), '?'));
+                $whereConditions[] = "leaves.employee_id IN ($placeholders)";
+                $params = array_merge($params, $filters['team_employees']);
+            }
+            
             // Optional filters
             $status = $_GET['status'] ?? null;
             $approverId = $_GET['approver_id'] ?? null;
@@ -947,6 +965,59 @@ class LeaveController
                 message: "Failed to fetch relieving duties: " . $e->getMessage(),
                 code: 500
             );
+        }
+    }
+
+     private function applyRoleBasedFilters($org_id)
+    {
+        $user = \App\Middleware\AuthMiddleware::getCurrentUser();
+        $employee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
+
+        if (!$user || !$employee) {
+            throw new \Exception('User not authenticated');
+        }
+
+        $filters = [];
+
+        switch ($user['user_type']) {
+            case 'admin':
+                // Admins see all leaves in organization
+                $filters['organization'] = $org_id;
+                break;
+
+            case 'manager':
+                // Managers see their team's leaves
+                $filters['organization'] = $org_id;
+                $filters['team_employees'] = $this->getTeamEmployeeIds($employee['id']);
+                break;
+
+            case 'employee':
+                // Employees only see their own leaves
+                $filters['organization'] = $org_id;
+                $filters['employee_id'] = $employee['id'];
+                break;
+
+            default:
+                throw new \Exception('Unknown user role');
+        }
+
+        return $filters;
+    }
+    private function getTeamEmployeeIds($managerId)
+    {
+        try {
+            $query = "
+                SELECT id 
+                FROM employees 
+                WHERE reports_to = :manager_id 
+                AND status = 'active'
+            ";
+            
+            $result = DB::raw($query, [':manager_id' => $managerId]);
+            return array_column($result, 'id');
+        } catch (\Exception $e) {
+            error_log('Team employee fetch error: ' . $e->getMessage());
+            return [];
         }
     }
 }
