@@ -5,29 +5,21 @@ import { usePathname } from "next/navigation";
 
 import * as React from "react";
 import {
-  IconCamera,
   IconChartBar,
   IconDashboard,
-  IconDatabase,
-  IconFileAi,
-  IconFileDescription,
-  IconFileWord,
-  IconFolder,
-  IconHelp,
-  IconInnerShadowTop,
-  IconListDetails,
-  IconReport,
-  IconSearch,
-  IconSettings,
   IconUsers,
   IconBuilding,
   IconCash,
   IconCalendar,
+  IconInnerShadowTop,
+  IconSettings,
+  IconHelp,
+  IconFileText,
+  IconReceipt,
+  IconChevronDown,
+  IconChevronRight,
 } from "@tabler/icons-react";
 
-import { NavDocuments } from "@/components/nav-documents";
-import { NavMain } from "@/components/nav-main";
-import { NavSecondary } from "@/components/nav-secondary";
 import { NavUser } from "@/components/nav-user";
 import {
   Sidebar,
@@ -37,8 +29,15 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import { usePermissions } from "@/hooks/usePermissions";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 const data = {
   user: {
@@ -46,179 +45,215 @@ const data = {
     email: "m@example.com",
     avatar: "/../../../images/profile.jpg",
   },
-  // Updated navMain with proper icons and role permissions
-  navMain: [
+  // Core navigation items
+  coreNav: [
     {
       title: "Dashboard",
       url: "/dashboard",
       icon: IconDashboard,
-      roles: ['super_admin', 'admin', 'employee'], // ✅ All roles can access dashboard
+      roles: ['super_admin', 'admin', 'employee'],
     },
-    {
-      title: "Employees",
-      url: "/employees",
-      icon: IconUsers,
-      roles: ['super_admin', 'admin'], // ✅ Only admins and super_admins
-    },
-    {
-      title: "Leaves",
-      url: "/leaves",
-      icon: IconCalendar, // ✅ Better icon for leaves
-      roles: ['super_admin', 'admin', 'employee'], // ✅ All roles can access leaves
-    },
-    {
-      title: "Organization",
-      url: "/organization",
-      icon: IconBuilding, // ✅ Better icon for organization
-      roles: ['super_admin'], // ✅ Only super_admin can access organization
-    },
-    {
-      title: "Payments",
-      url: "/payments",
-      icon: IconCash, // ✅ Better icon for payments
-      roles: ['super_admin', 'admin'], // ✅ Only admins and super_admins
-    },
+  ],
+  // Payroll Management section
+  payrollSection: [
     {
       title: "Payrun",
       url: "/payrun",
       icon: IconChartBar,
-      roles: ['super_admin', 'admin'], // ✅ Only admins and super_admins
+      roles: ['super_admin', 'admin'],
+      hasDropdown: true,
+      items: [
+        {
+          title: "Active Payruns",
+          url: "/payrun/active",
+        },
+        {
+          title: "Payrun History",
+          url: "/payrun/history",
+        },
+      ],
+    },
+    {
+      title: "Payments",
+      url: "/payments",
+      icon: IconCash,
+      roles: ['super_admin', 'admin'],
+      hasDropdown: true,
+      items: [
+        {
+          title: "Payment Records",
+          url: "/payments/records",
+        },
+        {
+          title: "Pending Payments",
+          url: "/payments/pending",
+        },
+      ],
+    },
+    {
+      title: "P9 Forms",
+      url: "/p9-forms",
+      icon: IconFileText,
+      roles: ['super_admin', 'admin'],
+    },
+    {
+      title: "Tax Reports",
+      url: "/tax-reports",
+      icon: IconReceipt,
+      roles: ['super_admin', 'admin'],
+    },
+  ],
+  // Employee Management section
+  employeeSection: [
+    {
+      title: "Employees",
+      url: "/employees",
+      icon: IconUsers,
+      roles: ['super_admin', 'admin'],
+      hasDropdown: true,
+      items: [
+        {
+          title: "Employee List",
+          url: "/employees/list",
+        },
+        {
+          title: "Departments",
+          url: "/employees/departments",
+        },
+      ],
+    },
+    {
+      title: "Leaves",
+      url: "/leaves",
+      icon: IconCalendar,
+      roles: ['super_admin', 'admin', 'employee'],
+    },
+  ],
+  // System section
+  systemSection: [
+    {
+      title: "Organization",
+      url: "/organization",
+      icon: IconBuilding,
+      roles: ['super_admin'],
     },
     {
       title: "Analytics",
-      url: "#",
+      url: "/analytics",
       icon: IconChartBar,
-      roles: ['super_admin', 'admin'], // ✅ Only admins and super_admins
-    },
-    {
-      title: "Projects",
-      url: "#",
-      icon: IconFolder,
-      roles: ['super_admin', 'admin', 'employee'], // ✅ All roles can access projects
-    },
-    {
-      title: "Team",
-      url: "#",
-      icon: IconUsers,
-      roles: ['super_admin', 'admin', 'employee'], // ✅ All roles can access team
+      roles: ['super_admin', 'admin'],
     },
   ],
-  navClouds: [
-    {
-      title: "Capture",
-      icon: IconCamera,
-      isActive: true,
-      url: "#",
-      roles: ['super_admin', 'admin'], // ✅ Only admins and super_admins
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Proposal",
-      icon: IconFileDescription,
-      url: "#",
-      roles: ['super_admin', 'admin'], // ✅ Only admins and super_admins
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-    {
-      title: "Prompts",
-      icon: IconFileAi,
-      url: "#",
-      roles: ['super_admin', 'admin'], // ✅ Only admins and super_admins
-      items: [
-        {
-          title: "Active Proposals",
-          url: "#",
-        },
-        {
-          title: "Archived",
-          url: "#",
-        },
-      ],
-    },
-  ],
-  navSecondary: [
+  // Others section
+  othersSection: [
     {
       title: "Settings",
-      url: "#",
+      url: "/settings",
       icon: IconSettings,
-      roles: ['super_admin'], // ✅ Only super_admin can access settings
+      roles: ['super_admin'],
     },
     {
       title: "Get Help",
-      url: "#",
+      url: "/help",
       icon: IconHelp,
-      roles: ['super_admin', 'admin', 'employee'], // ✅ All roles can get help
-    },
-    {
-      title: "Search",
-      url: "#",
-      icon: IconSearch,
-      roles: ['super_admin', 'admin', 'employee'], // ✅ All roles can search
-    },
-  ],
-  documents: [
-    {
-      name: "Data Library",
-      url: "#",
-      icon: IconDatabase,
-      roles: ['super_admin', 'admin'], // ✅ Only admins and super_admins
-    },
-    {
-      name: "Reports",
-      url: "#",
-      icon: IconReport,
-      roles: ['super_admin', 'admin'], // ✅ Only admins and super_admins
-    },
-    {
-      name: "Word Assistant",
-      url: "#",
-      icon: IconFileWord,
-      roles: ['super_admin', 'admin', 'employee'], // ✅ All roles can use word assistant
+      roles: ['super_admin', 'admin', 'employee'],
     },
   ],
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
-  const { hasRole } = usePermissions(); // ✅ Get permission check function
+  const { hasRole } = usePermissions();
+  const [openDropdowns, setOpenDropdowns] = React.useState<string[]>([]);
 
-  // ✅ Filter navigation items based on user role
-  const filteredNavMain = data.navMain.filter(item => 
+  const toggleDropdown = (title: string) => {
+    setOpenDropdowns((prev) =>
+      prev.includes(title)
+        ? prev.filter((item) => item !== title)
+        : [...prev, title]
+    );
+  };
+
+  // Filter navigation items based on user role
+  const filteredCoreNav = data.coreNav.filter((item) => hasRole(item.roles));
+  const filteredPayrollSection = data.payrollSection.filter((item) =>
+    hasRole(item.roles)
+  );
+  const filteredEmployeeSection = data.employeeSection.filter((item) =>
+    hasRole(item.roles)
+  );
+  const filteredSystemSection = data.systemSection.filter((item) =>
+    hasRole(item.roles)
+  );
+  const filteredOthersSection = data.othersSection.filter((item) =>
     hasRole(item.roles)
   );
 
-  const filteredNavSecondary = data.navSecondary.filter(item =>
-    hasRole(item.roles)
-  );
+  const renderNavItem = (item: any) => {
+    const isActive = pathname === item.url || pathname.startsWith(item.url + "/");
+    const isOpen = openDropdowns.includes(item.title);
 
-  const filteredDocuments = data.documents.filter(item =>
-    hasRole(item.roles)
-  );
+    if (item.hasDropdown && item.items) {
+      return (
+        <Collapsible key={item.title} open={isOpen} onOpenChange={() => toggleDropdown(item.title)}>
+          <SidebarMenuItem>
+            <CollapsibleTrigger asChild>
+              <SidebarMenuButton
+                isActive={isActive}
+                className="hover:bg-[#be2ed6] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff]"
+              >
+                <item.icon className="h-4 w-4" />
+                <span>{item.title}</span>
+                {isOpen ? (
+                  <IconChevronDown className="ml-auto h-4 w-4" />
+                ) : (
+                  <IconChevronRight className="ml-auto h-4 w-4" />
+                )}
+              </SidebarMenuButton>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="border-l-2 border-gray-200 ml-4 pl-2 mt-1">
+                <SidebarMenuSub>
+                  {item.items.map((subItem: any) => {
+                    const isSubActive = pathname === subItem.url;
+                    return (
+                      <SidebarMenuSubItem key={subItem.title}>
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={isSubActive}
+                          className="hover:bg-[#be2ed6] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff]"
+                        >
+                          <Link href={subItem.url}>{subItem.title}</Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    );
+                  })}
+                </SidebarMenuSub>
+              </div>
+            </CollapsibleContent>
+          </SidebarMenuItem>
+        </Collapsible>
+      );
+    }
 
-  const filteredNavClouds = data.navClouds.filter(item =>
-    hasRole(item.roles)
-  );
+    return (
+      <SidebarMenuItem key={item.title}>
+        <SidebarMenuButton
+          asChild
+          isActive={isActive}
+          className="hover:bg-[#be2ed6] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff]"
+        >
+          <Link href={item.url}>
+            <item.icon className="h-4 w-4" />
+            <span>{item.title}</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
 
   return (
-    <Sidebar collapsible="offcanvas" {...props}>
+    <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
@@ -234,36 +269,74 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarHeader>
-      <SidebarContent>
-        <SidebarMenu>
-          {filteredNavMain.map((item) => {
-            const isActive = pathname === item.url;
-            return (
-              <SidebarMenuItem key={item.title}>
-                <SidebarMenuButton asChild isActive={isActive}>
-                  <Link href={item.url}>
-                    <item.icon className="mr-2" />
-                    <span>{item.title}</span>
-                  </Link>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            );
-          })}
-        </SidebarMenu>
-        
-        {/* Render other navigation sections only if they have items */}
-        {filteredNavClouds.length > 0 && (
-          <NavMain items={filteredNavClouds} />
+
+      <SidebarContent className="overflow-y-auto overflow-x-hidden scrollbar-hide">
+        {/* Core Navigation */}
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {filteredCoreNav.map((item) => renderNavItem(item))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+
+        {/* Payroll Management */}
+        {filteredPayrollSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Payroll Management
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredPayrollSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
         )}
-        
-        {filteredDocuments.length > 0 && (
-          <NavDocuments items={filteredDocuments} />
+
+        {/* Employee Management */}
+        {filteredEmployeeSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Employee Management
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredEmployeeSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
         )}
-        
-        {filteredNavSecondary.length > 0 && (
-          <NavSecondary items={filteredNavSecondary} className="mt-auto" />
+
+        {/* System */}
+        {filteredSystemSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              System
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredSystemSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Others */}
+        {filteredOthersSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Others
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredOthersSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
         )}
       </SidebarContent>
+
       <SidebarFooter>
         <NavUser />
       </SidebarFooter>
