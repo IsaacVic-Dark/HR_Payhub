@@ -379,7 +379,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `password_hash` varchar(255) NOT NULL,
   `email` varchar(100) NOT NULL,
   `personal_email` varchar(100) DEFAULT NULL,
-  `user_type` enum('employee','admin','super_admin') DEFAULT 'employee',
+  `user_type` enum('super_admin','admin','hr_manager','hr_officer','payroll_manager','payroll_officer','finance_manager','auditor','department_manager','employee') DEFAULT 'employee',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),

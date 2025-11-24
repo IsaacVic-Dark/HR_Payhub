@@ -7,24 +7,26 @@ use App\Services\DB;
 class EmployeeController {
     public function index($orgId) {
         $startTime = microtime(true);
-        $filters = [
-            'department' => $_GET['department'] ?? null,
-            'job_title' => $_GET['job_title'] ?? null,
-        ];
+        
         // Validate organization ID
         if (!is_numeric($orgId)) {
             return responseJson(null, "Invalid organization ID", 400);
         }
-        // cleanup filters
-        // to shorten this, but am n confused aboutit as the order matters
-        // otherwise we are fuuuucked!
-        array_walk($filters, function (&$value) {
+
+        // Apply role-based filters FIRST
+        $roleFilters = $this->applyRoleBasedFilters($orgId);
+        
+        // Then apply user-provided filters
+        $userFilters = [
+            'department' => $_GET['department'] ?? null,
+            'job_title' => $_GET['job_title'] ?? null,
+        ];
+        
+        // Cleanup user filters
+        array_walk($userFilters, function (&$value) {
             if (is_string($value)) {
-                // URL decode if needed
                 $value = urldecode($value);
-                // Trim whitespace and special characters as before
                 $value = trim($value, " \t\n\r\0\x0B");
-                // Remove surrounding quotes only (if they exist)
                 if (
                     (str_starts_with($value, '"') && str_ends_with($value, '"')) ||
                     (str_starts_with($value, "'") && str_ends_with($value, "'"))
@@ -34,46 +36,60 @@ class EmployeeController {
             }
         });
 
-        $query = "SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
-                  FROM employees e 
-                  LEFT JOIN users u ON e.user_id = u.id 
-                  WHERE e.organization_id = {$orgId}";
+        // Build base query with role-based filtering
+        $queryData = $this->buildRoleBasedQuery($orgId, $roleFilters);
+        $query = $queryData['query'];
+        $params = $queryData['params'];
 
-        if (!empty($filters['department'])) {
-            $query .= " AND e.department = '{$filters['department']}'";
+        // Apply user filters
+        if (!empty($userFilters['department'])) {
+            $query .= " AND e.department = :department";
+            $params[':department'] = $userFilters['department'];
         }
 
-        if (!empty($filters['job_title'])) {
-            $query .= " AND e.job_title = '{$filters['job_title']}'";
+        if (!empty($userFilters['job_title'])) {
+            $query .= " AND e.job_title = :job_title";
+            $params[':job_title'] = $userFilters['job_title'];
         }
 
-        $employees = DB::raw($query);
+        // Execute query with parameters to prevent SQL injection
+        $employees = empty($params) ? DB::raw($query) : DB::raw($query, $params);
 
+        // Apply sorting
+        $userFilters['sort_by'] = $_GET['sort_by'] ?? null;
+        $userFilters['sort_order'] = $_GET['sort_order'] ?? null;
 
-        // Sort employees if sort parameters are provided, use php for now
-        // as implementing sorting in SQL would require dynamic query building
-        // which i do not have the time for right 
-
-        //but lets add it to filters
-        $filters['sort_by'] = $_GET['sort_by'] ?? null;
-        $filters['sort_order'] = $_GET['sort_order'] ?? null;
-
-        if (isset($filters['sort_by']) && isset($filters['sort_order'])) {
-            $sortBy = $filters['sort_by'];
-            $sortOrder = strtolower($filters['sort_order']) === 'desc' ? SORT_DESC : SORT_ASC;
+        if (isset($userFilters['sort_by']) && isset($userFilters['sort_order'])) {
+            $sortBy = $userFilters['sort_by'];
+            $sortOrder = strtolower($userFilters['sort_order']) === 'desc' ? SORT_DESC : SORT_ASC;
             usort($employees, function ($a, $b) use ($sortBy, $sortOrder) {
                 return $sortOrder === SORT_DESC ? $b->$sortBy <=> $a->$sortBy : $a->$sortBy <=> $b->$sortBy;
             });
         }
+
+        // Apply field-level security based on role
+        $employees = $this->applyFieldLevelSecurity($employees, $roleFilters);
+
         return responseJson(
             data: array_values($employees),
             message: empty($employees) ? "No employees found" : "successfully fetched " . count($employees) . " employees",
-            metadata: ['dev_mode' => true, 'filters' => $filters, 'total' => count($employees), 'duration' => (microtime(true) - $startTime)],
+            metadata: [
+                'dev_mode' => true, 
+                'filters' => array_merge($userFilters, ['role_filters' => $roleFilters]), 
+                'total' => count($employees), 
+                'duration' => (microtime(true) - $startTime)
+            ],
             code: empty($employees) ? 404 : 200
         );
     }
     
     public function store($orgId) {
+        // Check if user has permission to create employees
+        $user = \App\Middleware\AuthMiddleware::getCurrentUser();
+        if (!in_array($user['user_type'], ['admin', 'hr_manager'])) {
+            return responseJson(null, "Not permitted to create employees", 403);
+        }
+
         $data = validate([
             'user_id' => 'numeric',
             'first_name' => 'required,string',
@@ -89,6 +105,8 @@ class EmployeeController {
             'bank_account_number' => 'string',
             'tax_id' => 'string'
         ]);
+
+        // echo $data['first_name'] . ' ' . $data['middle_name'] . ' ' . $data['surname'];
 
         if (!empty($data['user_id'])) {
             $user = DB::table('users')->selectAllWhereID($data['user_id']);
@@ -107,7 +125,7 @@ class EmployeeController {
         //convert hire_date to MySQL format
         $data['hire_date'] = date('Y-m-d', strtotime($data['hire_date']));
 
-        $default_password = password_hash('default_password', PASSWORD_BCRYPT);
+        $default_password = password_hash('password', PASSWORD_BCRYPT);
 
         try {
             DB::transaction(function () use ($data, $orgId, &$inserted, $default_password) {
@@ -192,6 +210,17 @@ class EmployeeController {
     }
     
     public function show($orgId, $id) {
+        // First check if user has access to this employee
+        $roleFilters = $this->applyRoleBasedFilters($orgId);
+        
+        if (isset($roleFilters['employee_id']) && $roleFilters['employee_id'] != $id) {
+            return responseJson(null, "Access denied to this employee", 403);
+        }
+        
+        if (isset($roleFilters['team_employees']) && !in_array($id, $roleFilters['team_employees'])) {
+            return responseJson(null, "Access denied to this employee", 403);
+        }
+
         $query = "SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
                   FROM employees e 
                   LEFT JOIN users u ON e.user_id = u.id 
@@ -202,6 +231,10 @@ class EmployeeController {
         if (!$employee || empty($employee)) {
             return responseJson(null, "Employee not found", 404);
         }
+        
+        // Apply field-level security
+        $employee = $this->applyFieldLevelSecurity($employee, $roleFilters);
+        
         return responseJson(
             data: $employee[0],
             message: "Employee fetched successfully",
@@ -215,10 +248,44 @@ class EmployeeController {
      * @param int $orgId Organization ID
      * @param int $id Employee ID
      * @return JSON response
-     * 
-     * @todo - update to use the create's logic
      */
     public function update($orgId, $id) {
+        // First check if user has access to update this employee
+        $roleFilters = $this->applyRoleBasedFilters($orgId);
+        
+        if (isset($roleFilters['employee_id']) && $roleFilters['employee_id'] != $id) {
+            return responseJson(null, "Access denied to update this employee", 403);
+        }
+        
+        if (isset($roleFilters['team_employees']) && !in_array($id, $roleFilters['team_employees'])) {
+            return responseJson(null, "Access denied to update this employee", 403);
+        }
+
+        // Check if user has permission to update based on role
+        $user = \App\Middleware\AuthMiddleware::getCurrentUser();
+        $allowedRoles = ['admin', 'hr_manager'];
+        
+        // Employees can only update their own basic info
+        if ($user['user_type'] === 'employee') {
+            $allowedFields = ['phone', 'personal_email'];
+        } 
+        // Managers can update team members' basic info but not financial data
+        elseif ($user['user_type'] === 'department_manager') {
+            $allowedFields = ['phone', 'job_title', 'department'];
+        }
+        // Payroll can only update payroll-related fields
+        elseif (in_array($user['user_type'], ['payroll_manager', 'payroll_officer'])) {
+            $allowedFields = ['base_salary', 'bank_account_number', 'tax_id'];
+        }
+        // Finance can only update financial fields
+        elseif (in_array($user['user_type'], ['accountant', 'finance_manager'])) {
+            $allowedFields = ['bank_account_number', 'tax_id'];
+        }
+        // Auditors have no update permissions
+        elseif (in_array($user['user_type'], ['auditor', 'compliance_officer'])) {
+            return responseJson(null, "Read-only access - cannot update employees", 403);
+        }
+
         $data = validate([
             'user_id' => 'numeric',
             'first_name' => 'string',
@@ -235,6 +302,14 @@ class EmployeeController {
             'bank_account_number' => 'string',
             'tax_id' => 'string'
         ]);
+        
+        // Filter data based on user role permissions
+        if (isset($allowedFields)) {
+            $data = array_intersect_key($data, array_flip($allowedFields));
+            if (empty($data)) {
+                return responseJson(null, "No permitted fields provided for update", 400);
+            }
+        }
         
         // Separate employee data from user data
         $employeeData = array_filter([
@@ -305,6 +380,9 @@ class EmployeeController {
         
         $updatedEmployee = DB::raw($query);
         
+        // Apply field-level security
+        $updatedEmployee = $this->applyFieldLevelSecurity($updatedEmployee, $roleFilters);
+        
         return responseJson(
             data: $updatedEmployee[0],
             message: "Employee updated successfully",
@@ -317,10 +395,14 @@ class EmployeeController {
      * @param int $orgId Organization ID
      * @param int $id Employee ID
      * @return JSON response
-     * 
-     * @todo - add soft delete functionality
      */
     public function delete($orgId, $id) {
+        // Check if user has permission to delete employees
+        $user = \App\Middleware\AuthMiddleware::getCurrentUser();
+        if (!in_array($user['user_type'], ['admin', 'hr_manager'])) {
+            return responseJson(null, "Insufficient permissions to delete employees", 403);
+        }
+
         $employee = DB::table('employees')->selectAllWhere('organization_id', $orgId);
         $employee = array_filter($employee, fn($e) => $e->id == $id);
         if (!$employee) {
@@ -335,6 +417,153 @@ class EmployeeController {
             );
         } else {
             return responseJson(null, "Failed to delete employee", 500);
+        }
+    }
+
+    private function buildRoleBasedQuery($orgId, $roleFilters)
+    {
+        $baseFields = "e.id, e.organization_id, e.user_id, e.phone, e.hire_date, e.job_title, e.department, e.reports_to, e.status, e.created_at";
+        
+        // Field-level security based on role
+        if (isset($roleFilters['payroll_access']) || isset($roleFilters['financial_access'])) {
+            // Payroll/Finance roles can see financial data
+            $baseFields .= ", e.base_salary, e.bank_account_number, e.tax_id";
+        }
+        
+        if (isset($roleFilters['full_access']) || in_array($roleFilters['user_type'] ?? '', ['admin', 'hr_manager'])) {
+            // Full access roles can see all fields
+            $baseFields = "e.*";
+        }
+
+        $query = "SELECT {$baseFields}, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
+                  FROM employees e 
+                  LEFT JOIN users u ON e.user_id = u.id 
+                  WHERE e.organization_id = :org_id";
+        $params = [':org_id' => $orgId];
+
+        // Apply role-based WHERE conditions
+        if (isset($roleFilters['employee_id'])) {
+            $query .= " AND e.id = :employee_id";
+            $params[':employee_id'] = $roleFilters['employee_id'];
+        }
+
+        if (isset($roleFilters['team_employees']) && !empty($roleFilters['team_employees'])) {
+            $placeholders = implode(',', array_fill(0, count($roleFilters['team_employees']), '?'));
+            $query .= " AND e.id IN ($placeholders)";
+            $params = array_merge($params, $roleFilters['team_employees']);
+        }
+
+        return ['query' => $query, 'params' => $params];
+    }
+
+    private function applyFieldLevelSecurity($employees, $roleFilters)
+    {
+        $sensitiveFields = ['base_salary', 'bank_account_number', 'tax_id', 'personal_email'];
+        
+        foreach ($employees as $employee) {
+            // Remove sensitive fields based on role
+            if (isset($roleFilters['employee_id'])) {
+                // Employees can see all their own data
+                continue;
+            }
+            
+            if (isset($roleFilters['team_employees'])) {
+                // Managers cannot see sensitive financial data of team members
+                foreach ($sensitiveFields as $field) {
+                    if (isset($employee->$field)) {
+                        unset($employee->$field);
+                    }
+                }
+            }
+            
+            if (isset($roleFilters['read_only'])) {
+                // Auditors can see financial data but not personal contact info
+                if (isset($employee->personal_email)) {
+                    unset($employee->personal_email);
+                }
+                if (isset($employee->phone)) {
+                    unset($employee->phone);
+                }
+            }
+        }
+        
+        return $employees;
+    }
+
+    private function applyRoleBasedFilters($orgId)
+    {
+        $user = \App\Middleware\AuthMiddleware::getCurrentUser();
+        $employee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
+
+        if (!$user || !$employee) {
+            throw new \Exception('User not authenticated');
+        }
+
+        $filters = ['user_type' => $user['user_type']];
+
+        switch ($user['user_type']) {
+            case 'admin':
+            case 'hr_manager':
+                // Full access to all employees
+                $filters['organization'] = $orgId;
+                $filters['full_access'] = true;
+                break;
+
+            case 'payroll_manager':
+            case 'payroll_officer':
+                // Access to all employees but with payroll field restrictions
+                $filters['organization'] = $orgId;
+                $filters['payroll_access'] = true;
+                break;
+
+            case 'department_manager':
+                // Access to team members only
+                $filters['organization'] = $orgId;
+                $filters['team_employees'] = $this->getTeamEmployeeIds($employee['id']);
+                break;
+
+            case 'accountant':
+            case 'finance_manager':
+                // Access to financial data only
+                $filters['organization'] = $orgId;
+                $filters['financial_access'] = true;
+                break;
+
+            case 'auditor':
+            case 'compliance_officer':
+                // Read-only access to all employees
+                $filters['organization'] = $orgId;
+                $filters['read_only'] = true;
+                break;
+
+            case 'employee':
+                // Access to own data only
+                $filters['organization'] = $orgId;
+                $filters['employee_id'] = $employee['id'];
+                break;
+
+            default:
+                throw new \Exception('Unknown user role: ' . $user['user_type']);
+        }
+
+        return $filters;
+    }
+
+    private function getTeamEmployeeIds($managerId)
+    {
+        try {
+            $query = "
+                SELECT id 
+                FROM employees 
+                WHERE reports_to = :manager_id 
+                AND status = 'active'
+            ";
+            
+            $result = DB::raw($query, [':manager_id' => $managerId]);
+            return array_column($result, 'id');
+        } catch (\Exception $e) {
+            error_log('Team employee fetch error: ' . $e->getMessage());
+            return [];
         }
     }
 }

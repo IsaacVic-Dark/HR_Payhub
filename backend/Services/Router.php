@@ -106,13 +106,18 @@ final class Router
             trigger_error("Class {$controller} does not exist!", E_USER_ERROR);
         }
 
-        $controller = new $controller;
-
-        if (!method_exists($controller, $action)) {
-            trigger_error("Method {$action} does not exist on the " . get_class($controller) . " class", E_USER_ERROR);
+        // Check if controller uses Singleton pattern
+        if (method_exists($controller, 'getInstance')) {
+            $controllerInstance = $controller::getInstance();
+        } else {
+            $controllerInstance = new $controller;
         }
 
-        return $controller->$action(...$params);
+        if (!method_exists($controllerInstance, $action)) {
+            trigger_error("Method {$action} does not exist on the " . get_class($controllerInstance) . " class", E_USER_ERROR);
+        }
+
+        return $controllerInstance->$action(...$params);
     }
 
     public static function route(string $method, string $uri, $controller, $middleware = [])

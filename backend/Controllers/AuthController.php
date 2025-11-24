@@ -59,14 +59,14 @@ class AuthController
             // Check if user is active
             $employee = $this->getEmployeeByUserId($user['id']);
 
-            if (!$employee || $employee['status'] !== 'active') {
-                http_response_code(403);
-                echo json_encode([
-                    'success' => false,
-                    'error' => 'Account is not active'
-                ]);
-                return;
-            }
+            // if (!$employee || $employee['status'] !== 'active') {
+            //     http_response_code(403);
+            //     echo json_encode([
+            //         'success' => false,
+            //         'error' => 'Account is not active'
+            //     ]);
+            //     return;
+            // }
 
             $payload = [
                 'user_id' => $user['id'],

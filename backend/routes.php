@@ -25,15 +25,52 @@ Router::get('/api/v1/auth/me', [AuthController::getInstance(), 'me'], ['AuthMidd
 
 // Organization routes with authentication
 Router::resource('api/v1/organizations', OrganizationController::class, ['AuthMiddleware']);
+Router::put('api/v1/organizations/{id}', OrganizationController::class . '@update');
 Router::resource('api/v1/organizations/{id}/configs', OrganizationConfigController::class, ['AuthMiddleware']);
 
 // User routes with authentication
 Router::resource('api/v1/users', UserController::class, ['AuthMiddleware']);
 
-// Employee routes with authentication and organization access control
-Router::resource('api/v1/organizations/{id}/employees', EmployeeController::class, [
-    ['AuthMiddleware', ['admin', 'manager']],
-    'LeaveAuthorizationMiddleware'
+// Employee routes with comprehensive authentication and authorization
+Router::get('api/v1/organizations/{org_id}/employees', EmployeeController::class . '@index', [
+    'AuthMiddleware',
+    'EmployeeAuthorizationMiddleware'
+]);
+
+Router::get('api/v1/organizations/{org_id}/employees/{id}', EmployeeController::class . '@show', [
+    'AuthMiddleware',
+    'EmployeeAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/employees', EmployeeController::class . '@store', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'EmployeeAuthorizationMiddleware'
+]);
+
+Router::put('api/v1/organizations/{org_id}/employees/{id}', EmployeeController::class . '@update', [
+    'AuthMiddleware',
+    'EmployeeAuthorizationMiddleware'
+]);
+
+Router::patch('api/v1/organizations/{org_id}/employees/{id}', EmployeeController::class . '@update', [
+    'AuthMiddleware',
+    'EmployeeAuthorizationMiddleware'
+]);
+
+Router::delete('api/v1/organizations/{org_id}/employees/{id}', EmployeeController::class . '@delete', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'EmployeeAuthorizationMiddleware'
+]);
+
+// Special employee data access routes
+Router::get('api/v1/organizations/{org_id}/employees/{id}/payroll-data', EmployeeController::class . '@getPayrollData', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager', 'payroll_officer']],
+    'EmployeeAuthorizationMiddleware'
+]);
+
+Router::get('api/v1/organizations/{org_id}/employees/{id}/financial-data', EmployeeController::class . '@getFinancialData', [
+    ['AuthMiddleware', ['admin', 'finance_manager', 'accountant', 'auditor']],
+    'EmployeeAuthorizationMiddleware'
 ]);
 
 // Payrun routes with authentication
