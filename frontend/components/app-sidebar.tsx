@@ -212,7 +212,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               </SidebarMenuButton>
             </CollapsibleTrigger>
             <CollapsibleContent>
-              <div className="border-l-2 border-gray-200 ml-4 pl-2 mt-1">
+              <div className="ml-4 pl-2 mt-1">
                 <SidebarMenuSub>
                   {item.items.map((subItem: any) => {
                     const isSubActive = pathname === subItem.url;
