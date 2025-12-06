@@ -8,12 +8,10 @@ import { LeaveActionDialog } from '@/app/leaves/leave-action-dialog';
 import { LeaveViewDrawer } from '@/app/leaves/leave-view-drawer';
 import { toast } from 'sonner';
 import { DataTable, ColumnDef } from '@/components/table';
+import { useAuth } from '@/lib/AuthContext';
 
-interface LeaveTableProps {
-  organizationId: string;
-}
-
-const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
+const LeaveTable: React.FC = () => {
+  const { user } = useAuth(); // Get user from auth context
   const [leaves, setLeaves] = useState<LeaveType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +42,13 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
   const [totalPages, setTotalPages] = useState(0);
 
   const fetchLeaves = useCallback(async () => {
+    // Check if organization_id exists
+    if (!user?.organization_id) {
+      setError('No organization ID found. Please log in again.');
+      setLoading(false);
+      return;
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -57,16 +62,14 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
         year: selectedYear || undefined,
       };
 
-      const response = await leaveAPI.getLeaves(apiFilters);
+      const response = await leaveAPI.getLeaves(user.organization_id, apiFilters);
 
       console.log({response});
       console.log("Response success: ", response.success);
       console.log("Response data: ", response.data);
-      // console.log("Response data leaves: ", response.data.data.leaves);
-
 
       if (response.success && response.data) {
-        // Access the data directly from response.data (not response.data.data)
+        // Access the data directly from response.data
         const leavesData = response.data.data.leaves || [];
         const paginationData = response.data.pagination;
         
@@ -96,11 +99,13 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
     } finally {
       setLoading(false);
     }
-  }, [filters, searchTerm, selectedLeaveType, selectedStatus, selectedMonth, selectedYear]);
+  }, [filters, searchTerm, selectedLeaveType, selectedStatus, selectedMonth, selectedYear, user?.organization_id]);
 
   useEffect(() => {
-    fetchLeaves();
-  }, [fetchLeaves]);
+    if (user?.organization_id) {
+      fetchLeaves();
+    }
+  }, [fetchLeaves, user?.organization_id]);
 
   const formatDateRange = (startDate: string, endDate: string) => {
     try {
@@ -171,12 +176,13 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
   };
 
   const handleConfirmAction = async () => {
-    if (!selectedLeave) return;
+    if (!selectedLeave || !user?.organization_id) return;
 
     setActionLoading(true);
     try {
       const newStatus = actionType === 'approve' ? 'approved' : 'rejected';
       const response = await leaveAPI.updateLeaveStatus(
+        user.organization_id,
         selectedLeave.leave_id,
         newStatus
       );
@@ -219,6 +225,19 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
 
   // Check if any filters are active
   const hasActiveFilters = searchTerm || selectedLeaveType || selectedStatus || selectedMonth || selectedYear;
+
+  // Show loading state while user is being fetched
+  if (!user) {
+    return (
+      <div className="w-full mx-auto p-4 bg-white">
+        <div className="rounded-lg shadow-sm border p-4">
+          <div className="flex items-center justify-center py-8">
+            <div className="text-gray-500">Loading user information...</div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Table columns configuration
   const columns: ColumnDef<LeaveType>[] = [
@@ -446,7 +465,7 @@ const LeaveTable: React.FC<LeaveTableProps> = ({ organizationId }) => {
       {/* View Drawer */}
       <LeaveViewDrawer
         open={drawerOpen}
-        onOpenChange={setDialogOpen}
+        onOpenChange={setDrawerOpen}
         leave={viewLeave}
       />
     </>

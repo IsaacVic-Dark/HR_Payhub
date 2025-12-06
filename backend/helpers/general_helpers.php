@@ -1,10 +1,12 @@
 <?php
 
-function is_dev(): bool {
+function is_dev(): bool
+{
     return isset($_ENV['APP_ENVIRONMENT']) && $_ENV['APP_ENVIRONMENT'] === 'Development';
 }
 
-function request_uri(): string {
+function request_uri(): string
+{
     if (!isset($_SERVER['REQUEST_URI'])) {
         return '';
     }
@@ -15,17 +17,20 @@ function request_uri(): string {
 
     return trim($path, '/');
 }
-function request_method(): string {
+function request_method(): string
+{
     return $_SERVER['REQUEST_METHOD'];
 }
 
-function subtract_date(int $days_to_subtract) {
+function subtract_date(int $days_to_subtract)
+{
     $date = date_create(date('Y-m-d H:i:s', time()));
     date_sub($date, date_interval_create_from_date_string("$days_to_subtract days"));
     return date_format($date, 'Y-m-d H:i:s');
 }
 
-function slug($string) {
+function slug($string)
+{
     return strtolower(trim(preg_replace('/[^A-Za-z0-9-]+/', '-', $string)));
 }
 
@@ -45,7 +50,8 @@ function slug($string) {
  *
  * @return object An instance of the anonymous cache class.
  */
-function cache() {
+function cache()
+{
 
     return new class() {
 
@@ -58,7 +64,8 @@ function cache() {
         /**
          * Creates the cache file if it doesn't exist and loads existing cache data.
          */
-        public function __construct() {
+        public function __construct()
+        {
             if (!file_exists($this->file)) {
                 touch($this->file);
                 // hide in windows
@@ -77,7 +84,8 @@ function cache() {
          * @param int        $expiryInSeconds Time until cache expires
          * @return void
          */
-        public function put($key, $value, $expiryInSeconds) {
+        public function put($key, $value, $expiryInSeconds)
+        {
             $this->data[$key] = [
                 'value' => $value,
                 'expiry' => time() + $expiryInSeconds
@@ -91,7 +99,8 @@ function cache() {
          * @param string|int $key The key of the item to retrieve.
          * @return mixed|null The cached value if found and not expired, null otherwise.
          */
-        public function get($key) {
+        public function get($key)
+        {
             if (!isset($this->data[$key])) {
                 return null;
             }
@@ -113,7 +122,8 @@ function cache() {
          * @param callable   $callback The function to generate the value if not found in cache.
          * @return mixed The cached or newly generated value.
          */
-        public function remember($key, $seconds, $callback) {
+        public function remember($key, $seconds, $callback)
+        {
             $value = $this->get($key);
             if ($value === null) {
                 $value = $callback();
@@ -128,7 +138,8 @@ function cache() {
          * @param string|int $key The key of the item to remove.
          * @return void
          */
-        public function forget($key) {
+        public function forget($key)
+        {
             unset($this->data[$key]);
             $this->save();
         }
@@ -138,7 +149,8 @@ function cache() {
          *
          * @return void
          */
-        private function save() {
+        private function save()
+        {
             // Use exclusive lock to prevent corruption during concurrent writes
             file_put_contents($this->file, serialize($this->data), LOCK_EX);
         }
@@ -148,7 +160,8 @@ function cache() {
          *
          * @return void
          */
-        private function load() {
+        private function load()
+        {
             if (file_exists($this->file) && filesize($this->file) > 0 && is_readable($this->file)) {
                 $content = file_get_contents($this->file);
                 // ensure we don't try to unserialize empty content
@@ -174,7 +187,8 @@ function cache() {
  * 
  * @return string plural 
  */
-function pluralize($phrase, $value) {
+function pluralize($phrase, $value)
+{
     $plural = '';
     if ($value > 1) {
         for ($i = 0; $i < strlen($phrase); $i++) {
@@ -199,7 +213,8 @@ function pluralize($phrase, $value) {
  * @return string plural 
  */
 
-function singularize($word) {
+function singularize($word)
+{
     $singular = array(
         '/(quiz)zes$/i' => '\1',
         '/(matr)ices$/i' => '\1ix',
@@ -258,11 +273,13 @@ function singularize($word) {
 
     return $word;
 }
-function truncate(string $text, int $limit) {
+function truncate(string $text, int $limit)
+{
     return mb_strlen($text, 'UTF-8') > $limit ? mb_substr($text, 0, $limit, 'UTF-8') . "…" : $text;
 }
 
-function time_ago($datetime, $full = false) {
+function time_ago($datetime, $full = false)
+{
     $now = new \DateTime;
     $ago = new \DateTime($datetime);
     $diff = $now->diff($ago);
@@ -296,7 +313,7 @@ function responseJson(
     string $message,
     int $code = 200,
     array $metadata = [],
-    bool $success = null
+    ? bool $success = null
 ) {
     // Decide success if not explicitly set
     if ($success === null) {
@@ -314,7 +331,8 @@ function responseJson(
     exit(0);
 }
 
-function getInputData(): array {
+function getInputData(): array
+{
     $input = file_get_contents('php://input');
     $json = json_decode($input, true);
 
@@ -331,7 +349,8 @@ function getInputData(): array {
 }
 
 
-function validate(array $rules): array {
+function validate(array $rules): array
+{
     $input = array_merge($_GET, $_POST, getInputData());
     $errors = [];
     $sanitized = [];
@@ -407,7 +426,8 @@ function validate(array $rules): array {
 }
 
 
-function handleFileUpload(string $key, string $uploadDir = BASE_PATH . 'uploads/'): ?string {
+function handleFileUpload(string $key, string $uploadDir = BASE_PATH . 'uploads/'): ?string
+{
     if (!isset($_FILES[$key]) || $_FILES[$key]['error'] !== UPLOAD_ERR_OK) {
         return null;
     }
@@ -435,7 +455,8 @@ function handleFileUpload(string $key, string $uploadDir = BASE_PATH . 'uploads/
 //misc helpers
 
 
-function paginate(array $data, int $per_page = 10, int $page = 1): array {
+function paginate(array $data, int $per_page = 10, int $page = 1): array
+{
     $total = count($data);
     $pages = ceil($total / $per_page);
     $current_page = isset($_GET['page']) ? (int)$_GET['page'] : $page;
@@ -479,7 +500,8 @@ function paginate(array $data, int $per_page = 10, int $page = 1): array {
  * 
  * @return void
  */
-function dd($var) {
+function dd($var)
+{
     if (is_null($var)) {
         echo '<div style="color: red; font-weight: bold;">Null value</div>';
         die();

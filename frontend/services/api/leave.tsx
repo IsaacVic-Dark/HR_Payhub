@@ -96,6 +96,13 @@ class LeaveAPI {
     }
   }
 
+  private getCookie(name: string): string | null {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+    return null;
+  }
+
   private buildQueryParams(filters: LeaveFilters): string {
     const params = new URLSearchParams();
 
@@ -130,13 +137,34 @@ class LeaveAPI {
     return params.toString();
   }
 
-  async getLeaves(filters: LeaveFilters = {}): Promise<ApiResponse<LeavesResponseData>> {
+  private getAuthHeaders(): HeadersInit {
+    // Get token from cookie
+    const token = this.getCookie("access_token");
+
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+
+    // Add Authorization header if token exists
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    return headers;
+  }
+
+  async getLeaves(
+    organizationId: number,
+    filters: LeaveFilters = {}
+  ): Promise<ApiResponse<LeavesResponseData>> {
     try {
       const queryParams = this.buildQueryParams(filters);
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/leaves${queryParams ? `?${queryParams}` : ""}`;
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves${queryParams ? `?${queryParams}` : ""}`;
 
       const response = await fetch(url, {
         method: "GET",
+        credentials: "include", // Send cookies with request
+        headers: this.getAuthHeaders(),
       });
 
       return this.handleResponse<LeavesResponseData>(response);
@@ -149,15 +177,18 @@ class LeaveAPI {
     }
   }
 
-  async updateLeaveStatus(leaveId: number, status: string): Promise<ApiResponse> {
+  async updateLeaveStatus(
+    organizationId: number,
+    leaveId: number,
+    status: string
+  ): Promise<ApiResponse> {
     try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/leaves/${leaveId}/status`;
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves/${leaveId}/status`;
 
       const response = await fetch(url, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        credentials: "include", // Send cookies with request
+        headers: this.getAuthHeaders(),
         body: JSON.stringify({ status }),
       });
 
@@ -166,7 +197,86 @@ class LeaveAPI {
       return {
         success: false,
         error:
-          error instanceof Error ? error.message : "Failed to update leave status",
+          error instanceof Error
+            ? error.message
+            : "Failed to update leave status",
+      };
+    }
+  }
+
+  async createLeave(
+    organizationId: number,
+    leaveData: {
+      employee_id: number;
+      leave_type: string;
+      start_date: string;
+      end_date: string;
+      reason?: string;
+      approver_id?: number;
+      reliever_id?: number;
+    }
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(leaveData),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to create leave",
+      };
+    }
+  }
+
+  async getLeaveById(
+    organizationId: number,
+    leaveId: number
+  ): Promise<ApiResponse<LeaveType>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves/${leaveId}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<LeaveType>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to fetch leave",
+      };
+    }
+  }
+
+  async deleteLeave(
+    organizationId: number,
+    leaveId: number
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves/${leaveId}`;
+
+      const response = await fetch(url, {
+        method: "DELETE",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to delete leave",
       };
     }
   }

@@ -11,7 +11,7 @@ class Response
         header('Content-Type: application/json');
         
         // Set CORS headers if needed
-        header('Access-Control-Allow-Origin: http://localhost:3000');
+        header('Access-Control-Allow-Origin: *');
         header('Access-Control-Allow-Credentials: true');
         header('Access-Control-Allow-Headers: Content-Type, Authorization');
         
