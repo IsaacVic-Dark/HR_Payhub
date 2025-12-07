@@ -73,11 +73,14 @@ export const authService = {
         try {
             console.log('Cookies before request:', document.cookie);
             const response = await authAPI.get('/auth/me');
-            console.log('Auth me response:', response.data);
-            return response.data;
+
+            if(response.success){
+                return response.data;
+            }else{
+                return response.message;
+            }
         } catch (error) {
             console.error('Get current user failed:', error);
-            console.error('Error details:', error.response?.data);
             return { success: false, error: 'Failed to get user' };
         }
     },
