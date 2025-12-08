@@ -1,18 +1,20 @@
+// app/register/page.tsx - Updated version
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useAuth } from '@/hooks/useAuth';
+import { authService } from '@/services/api/auth'; // Direct API call since AuthContext doesn't have register
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { useAuth } from '@/lib/AuthContext'; // Import for checkAuthStatus
 
 export default function RegisterPage() {
-    const [showPassword, setShowPassword] = useState(false);
-    const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [formData, setFormData] = useState({
     // Personal Information
     first_name: '',
@@ -39,10 +41,10 @@ export default function RegisterPage() {
 
   const [errors, setErrors] = useState({});
   const [isLoading, setIsLoading] = useState(false);
-  const { register } = useAuth();
+  const { checkAuthStatus } = useAuth(); // Imported to refresh auth state after registration
   const router = useRouter();
 
-  const handleChange = (e) => {
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
@@ -58,7 +60,7 @@ export default function RegisterPage() {
     }
   };
 
-  const handleSelectChange = (name, value) => {
+  const handleSelectChange = (name: string, value: string) => {
     setFormData(prev => ({
       ...prev,
       [name]: value
@@ -66,7 +68,7 @@ export default function RegisterPage() {
   };
 
   const validateForm = () => {
-    const newErrors = {};
+    const newErrors: Record<string, string> = {};
 
     // Personal info validation
     if (!formData.first_name.trim()) {
@@ -102,7 +104,7 @@ export default function RegisterPage() {
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = async (e) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
     if (!validateForm()) {
@@ -130,15 +132,25 @@ export default function RegisterPage() {
       work_location: formData.work_location
     };
 
-    const result = await register(registrationData);
-    
-    if (result.success) {
-      router.push('/dashboard');
-    } else {
-      setErrors({ submit: result.error });
+    try {
+      // Call authService directly since AuthContext doesn't have register
+      const result = await authService.register(registrationData);
+      
+      if (result.success) {
+        // Refresh auth state after successful registration
+        await checkAuthStatus();
+        router.push('/dashboard');
+      } else {
+        setErrors({ submit: result.error || 'Registration failed' });
+      }
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      setErrors({ 
+        submit: error.response?.data?.error || 'Registration failed. Please try again.' 
+      });
+    } finally {
+      setIsLoading(false);
     }
-    
-    setIsLoading(false);
   };
 
   return (
@@ -236,10 +248,10 @@ export default function RegisterPage() {
                     disabled={isLoading}
                     className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 pr-10 text-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   />
-                                 <button
+                  <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center top-7"
                   >
                     {!showPassword ? (
                       <svg
@@ -280,9 +292,8 @@ export default function RegisterPage() {
                   {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
                 </div>
 
-                <div className="relative">
-                 <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                 <div className="space-y-2"></div>
+                <div className="relative space-y-2">
+                  <Label htmlFor="confirmPassword">Confirm Password *</Label>
                   <Input
                     id="confirmPassword"
                     name="confirmPassword"
@@ -294,10 +305,10 @@ export default function RegisterPage() {
                     disabled={isLoading}
                     className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 pr-10 text-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                   />
-                                 <button
+                  <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    className="absolute inset-y-0 right-0 pr-3 flex items-center top-7"
                   >
                     {!showConfirmPassword ? (
                       <svg
@@ -335,14 +346,6 @@ export default function RegisterPage() {
                       </svg>
                     )}
                   </button>
-                  {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                  <Input
-
-                  />
                   {errors.confirmPassword && <p className="text-red-500 text-sm">{errors.confirmPassword}</p>}
                 </div>
               </div>
