@@ -42,7 +42,12 @@ import {
   SidebarMenuSubButton,
 } from "@/components/ui/sidebar";
 import { usePermissions } from "@/hooks/usePermissions";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { useAuth } from '@/lib/AuthContext';
 
 const data = {
   user: {
@@ -50,35 +55,45 @@ const data = {
     email: "m@example.com",
     avatar: "/../../../images/profile.jpg",
   },
-  
+
   // Core navigation items
   coreNav: [
     {
       title: "Dashboard",
       url: "/dashboard",
       icon: IconDashboard,
-      roles: ['super_admin', 'admin', 'hr_manager', 'payroll_manager', 'payroll_officer', 'department_manager', 'finance_manager', 'auditor', 'employee'],
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "payroll_manager",
+        "payroll_officer",
+        "department_manager",
+        "finance_manager",
+        "auditor",
+        "employee",
+      ],
     },
   ],
-  
+
   // Payroll Management section
   payrollSection: [
     {
       title: "Payrun",
       url: "/payrun",
       icon: IconChartBar,
-      roles: ['super_admin', 'admin', 'payroll_manager', 'payroll_officer'],
+      roles: ["super_admin", "admin", "payroll_manager", "payroll_officer"],
       hasDropdown: true,
       items: [
         {
           title: "Active Payruns",
           url: "/payrun/active",
-          roles: ['super_admin', 'admin', 'payroll_manager'],
+          roles: ["super_admin", "admin", "payroll_manager"],
         },
         {
           title: "Payrun History",
           url: "/payrun/history",
-          roles: ['super_admin', 'admin', 'payroll_manager'],
+          roles: ["super_admin", "admin", "payroll_manager"],
         },
       ],
     },
@@ -86,33 +101,33 @@ const data = {
       title: "Payroll",
       url: "/payroll",
       icon: IconReportMoney,
-      roles: ['super_admin', 'admin', 'payroll_manager', 'payroll_officer'],
+      roles: ["super_admin", "admin", "payroll_manager", "payroll_officer"],
       hasDropdown: true,
       items: [
         {
           title: "Run Payroll",
           url: "/payroll/run",
-          roles: ['super_admin', 'admin', 'payroll_manager'],
+          roles: ["super_admin", "admin", "payroll_manager"],
         },
         {
           title: "Data Entry",
           url: "/payroll/data-entry",
-          roles: ['payroll_officer'],
+          roles: ["payroll_officer"],
         },
         {
           title: "Review & Approve",
           url: "/payroll/review",
-          roles: ['super_admin', 'admin', 'payroll_manager'],
+          roles: ["super_admin", "admin", "payroll_manager"],
         },
         {
           title: "Adjustments",
           url: "/payroll/adjustments",
-          roles: ['super_admin', 'admin', 'payroll_manager'],
+          roles: ["super_admin", "admin", "payroll_manager"],
         },
         {
           title: "Payroll History",
           url: "/payroll/history",
-          roles: ['super_admin', 'admin', 'payroll_manager', 'auditor'],
+          roles: ["super_admin", "admin", "payroll_manager", "auditor"],
         },
       ],
     },
@@ -120,23 +135,23 @@ const data = {
       title: "Payments",
       url: "/payments",
       icon: IconCash,
-      roles: ['super_admin', 'admin', 'finance_manager'],
+      roles: ["super_admin", "admin", "finance_manager"],
       hasDropdown: true,
       items: [
         {
           title: "Payment Records",
           url: "/payments/records",
-          roles: ['super_admin', 'admin', 'finance_manager'],
+          roles: ["super_admin", "admin", "finance_manager"],
         },
         {
           title: "Pending Payments",
           url: "/payments/pending",
-          roles: ['super_admin', 'admin', 'finance_manager'],
+          roles: ["super_admin", "admin", "finance_manager"],
         },
         {
           title: "Process Payments",
           url: "/payments/process",
-          roles: ['super_admin', 'finance_manager'],
+          roles: ["super_admin", "finance_manager"],
         },
       ],
     },
@@ -144,18 +159,18 @@ const data = {
       title: "Payslips",
       url: "/payslips",
       icon: IconReceipt,
-      roles: ['super_admin', 'admin', 'payroll_manager'],
+      roles: ["super_admin", "admin", "payroll_manager"],
       hasDropdown: true,
       items: [
         {
           title: "Generate Payslips",
           url: "/payslips/generate",
-          roles: ['super_admin', 'admin', 'payroll_manager'],
+          roles: ["super_admin", "admin", "payroll_manager"],
         },
         {
           title: "Distribute Payslips",
           url: "/payslips/distribute",
-          roles: ['super_admin', 'admin', 'payroll_manager'],
+          roles: ["super_admin", "admin", "payroll_manager"],
         },
       ],
     },
@@ -163,49 +178,61 @@ const data = {
       title: "P9 Forms",
       url: "/p9-forms",
       icon: IconFileText,
-      roles: ['super_admin', 'admin', 'payroll_manager'],
+      roles: ["super_admin", "admin", "payroll_manager"],
     },
     {
       title: "Tax Reports",
       url: "/tax-reports",
       icon: IconFileText,
-      roles: ['super_admin', 'admin', 'payroll_manager'],
+      roles: ["super_admin", "admin", "payroll_manager"],
     },
   ],
-  
+
   // Employee Management section
   employeeSection: [
     {
       title: "Employees",
       url: "/employees",
       icon: IconUsers,
-      roles: ['super_admin', 'admin', 'hr_manager', 'payroll_manager', 'department_manager'],
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "payroll_manager",
+        "department_manager",
+      ],
       hasDropdown: true,
       items: [
         {
           title: "Employee List",
           url: "/employees/list",
-          roles: ['super_admin', 'admin', 'hr_manager', 'payroll_manager', 'department_manager'],
+          roles: [
+            "super_admin",
+            "admin",
+            "hr_manager",
+            "payroll_manager",
+            "department_manager",
+          ],
         },
         {
           title: "Add Employee",
           url: "/employees/create",
-          roles: ['super_admin', 'admin', 'hr_manager'],
+          roles: ["super_admin", "admin", "hr_manager"],
         },
         {
           title: "Departments",
           url: "/employees/departments",
-          roles: ['super_admin', 'admin', 'hr_manager'],
+          roles: ["super_admin", "admin", "hr_manager"],
         },
         {
           title: "Onboarding",
           url: "/onboarding",
-          roles: ['super_admin', 'admin', 'hr_manager'],
+          roles: ["super_admin", "admin", "hr_manager"],
         },
         {
           title: "Offboarding",
           url: "/offboarding",
-          roles: ['super_admin', 'admin', 'hr_manager'],
+          roles: ["super_admin", "admin", "hr_manager"],
         },
       ],
     },
@@ -213,33 +240,44 @@ const data = {
       title: "Leaves",
       url: "/leaves",
       icon: IconCalendar,
-      roles: ['super_admin', 'admin', 'hr_manager', 'department_manager', 'employee'],
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "department_manager",
+        "employee",
+      ],
       hasDropdown: true,
       items: [
         {
+          title: "Leave",
+          url: "/leaves",
+          roles: ["super_admin", "admin", "hr_manager", "department_manager"],
+        },
+        {
           title: "Leave Requests",
           url: "/leave-requests",
-          roles: ['super_admin', 'admin', 'hr_manager', 'department_manager'],
+          roles: ["super_admin", "admin", "hr_manager", "department_manager"],
         },
         {
           title: "Leave Approvals",
           url: "/leave-approvals",
-          roles: ['super_admin', 'admin', 'hr_manager', 'department_manager'],
+          roles: ["super_admin", "admin", "hr_manager", "department_manager"],
         },
         {
           title: "Leave Balances",
           url: "/leave-balances",
-          roles: ['super_admin', 'admin', 'hr_manager'],
+          roles: ["super_admin", "admin", "hr_manager"],
         },
         {
           title: "Leave Policies",
           url: "/leave-policies",
-          roles: ['super_admin', 'admin', 'hr_manager'],
+          roles: ["super_admin", "admin", "hr_manager"],
         },
         {
           title: "My Leaves",
           url: "/my-leave",
-          roles: ['employee'],
+          roles: ["employee"],
         },
       ],
     },
@@ -247,100 +285,100 @@ const data = {
       title: "Attendance",
       url: "/attendance",
       icon: IconClipboardList,
-      roles: ['super_admin', 'admin', 'hr_manager', 'department_manager'],
+      roles: ["super_admin", "admin", "hr_manager", "department_manager"],
     },
     {
       title: "My Team",
       url: "/team",
       icon: IconUsersGroup,
-      roles: ['department_manager'],
+      roles: ["department_manager"],
       hasDropdown: true,
       items: [
         {
           title: "Team Members",
           url: "/team/members",
-          roles: ['department_manager'],
+          roles: ["department_manager"],
         },
         {
           title: "Leave Approvals",
           url: "/team/leave-approvals",
-          roles: ['department_manager'],
+          roles: ["department_manager"],
         },
         {
           title: "Overtime Approvals",
           url: "/team/overtime-approvals",
-          roles: ['department_manager'],
+          roles: ["department_manager"],
         },
         {
           title: "Expense Claims",
           url: "/team/expense-claims",
-          roles: ['department_manager'],
+          roles: ["department_manager"],
         },
       ],
     },
   ],
-  
+
   // Self-Service section (for employees)
   selfServiceSection: [
     {
       title: "My Payslips",
       url: "/my-payslips",
       icon: IconReceipt,
-      roles: ['employee'],
+      roles: ["employee"],
     },
     {
       title: "My Profile",
       url: "/my-profile",
       icon: IconUsers,
-      roles: ['employee'],
+      roles: ["employee"],
     },
     {
       title: "My Documents",
       url: "/my-documents",
       icon: IconFileText,
-      roles: ['employee'],
+      roles: ["employee"],
     },
     {
       title: "My Requests",
       url: "/my-requests",
       icon: IconClipboardList,
-      roles: ['employee'],
+      roles: ["employee"],
     },
   ],
-  
+
   // Configuration section
   configSection: [
     {
       title: "Company Settings",
       url: "/company-settings",
       icon: IconSettings,
-      roles: ['super_admin', 'admin'],
+      roles: ["super_admin", "admin"],
       hasDropdown: true,
       items: [
         {
           title: "Company Profile",
           url: "/company-profile",
-          roles: ['super_admin', 'admin'],
+          roles: ["super_admin", "admin"],
         },
         {
           title: "Departments",
           url: "/departments",
-          roles: ['super_admin', 'admin'],
+          roles: ["super_admin", "admin"],
         },
         {
           title: "Salary Structures",
           url: "/salary-structures",
-          roles: ['super_admin', 'admin'],
+          roles: ["super_admin", "admin"],
         },
         {
           title: "Allowances & Deductions",
           url: "/allowances",
-          roles: ['super_admin', 'admin'],
+          roles: ["super_admin", "admin"],
         },
         {
           title: "Payroll Cycles",
           url: "/payroll-cycles",
-          roles: ['super_admin', 'admin'],
+          roles: ["super_admin", "admin"],
         },
       ],
     },
@@ -348,56 +386,69 @@ const data = {
       title: "User Management",
       url: "/users",
       icon: IconUsers,
-      roles: ['super_admin', 'admin'],
+      roles: ["super_admin", "admin"],
     },
   ],
-  
+
   // System section
   systemSection: [
     {
       title: "Organizations",
       url: "/organizations",
       icon: IconBuilding,
-      roles: ['super_admin'],
+      roles: ["super_admin"],
     },
     {
       title: "System Settings",
       url: "/system-settings",
       icon: IconSettings,
-      roles: ['super_admin'],
+      roles: ["super_admin"],
     },
     {
       title: "Analytics",
       url: "/analytics",
       icon: IconChartBar,
-      roles: ['super_admin', 'admin', 'hr_manager', 'payroll_manager', 'finance_manager'],
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "payroll_manager",
+        "finance_manager",
+      ],
     },
     {
       title: "Reports",
       url: "/reports",
       icon: IconFileText,
-      roles: ['super_admin', 'admin', 'hr_manager', 'payroll_manager', 'finance_manager', 'auditor'],
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "payroll_manager",
+        "finance_manager",
+        "auditor",
+      ],
       hasDropdown: true,
       items: [
         {
           title: "Payroll Reports",
           url: "/payroll-reports",
-          roles: ['super_admin', 'admin', 'payroll_manager'],
+          roles: ["super_admin", "admin", "payroll_manager"],
         },
         {
           title: "HR Reports",
           url: "/hr-reports",
-          roles: ['super_admin', 'admin', 'hr_manager'],
+          roles: ["super_admin", "admin", "hr_manager"],
         },
         {
           title: "Financial Reports",
           url: "/financial-reports",
-          roles: ['super_admin', 'admin', 'finance_manager'],
+          roles: ["super_admin", "admin", "finance_manager"],
         },
         {
           title: "Audit Reports",
           url: "/audit/reports",
-          roles: ['super_admin', 'auditor'],
+          roles: ["super_admin", "auditor"],
         },
       ],
     },
@@ -405,48 +456,92 @@ const data = {
       title: "Audit",
       url: "/audit/payroll-records",
       icon: IconShieldCheck,
-      roles: ['super_admin', 'auditor'],
+      roles: ["super_admin", "auditor"],
       hasDropdown: true,
       items: [
         {
           title: "Payroll Records",
           url: "/audit/payroll-records",
-          roles: ['super_admin', 'auditor'],
+          roles: ["super_admin", "auditor"],
         },
         {
           title: "User Activity",
           url: "/audit/user-activity",
-          roles: ['super_admin', 'auditor'],
+          roles: ["super_admin", "auditor"],
         },
         {
           title: "Audit Trails",
           url: "/audit/audit-trails",
-          roles: ['super_admin', 'auditor'],
+          roles: ["super_admin", "auditor"],
         },
         {
           title: "Compliance",
           url: "/audit/statutory-compliance",
-          roles: ['super_admin', 'auditor'],
+          roles: ["super_admin", "auditor"],
         },
       ],
     },
   ],
-  
+
   // Others section
   othersSection: [
     {
       title: "Get Help",
       url: "/help",
       icon: IconHelp,
-      roles: ['super_admin', 'admin', 'hr_manager', 'payroll_manager', 'payroll_officer', 'department_manager', 'finance_manager', 'auditor', 'employee'],
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "payroll_manager",
+        "payroll_officer",
+        "department_manager",
+        "finance_manager",
+        "auditor",
+        "employee",
+      ],
     },
   ],
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
-  const { canAccessPage, userRole } = usePermissions();
+  const { canAccessPage, userRole, currentUser } = usePermissions();
   const [openDropdowns, setOpenDropdowns] = React.useState<string[]>([]);
+  const { isLoading } = useAuth(); // Add this
+
+  // Show minimal sidebar while loading
+  if (isLoading) {
+    return (
+      <Sidebar collapsible="icon" {...props}>
+        <SidebarHeader>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                className="data-[slot=sidebar-menu-button]:!p-1.5"
+              >
+                <a href="#">
+                  <IconInnerShadowTop className="!size-5" />
+                  <span className="text-base font-semibold">Pay hub.</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+        <SidebarFooter>
+          <div className="p-4 text-center text-sm text-gray-500">
+            Loading...
+          </div>
+        </SidebarFooter>
+      </Sidebar>
+    );
+  }
+
+  // If no user, don't show sidebar
+  if (!currentUser) {
+    return null;
+  }
 
   const toggleDropdown = (title: string) => {
     setOpenDropdowns((prev) =>
@@ -459,19 +554,19 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // Filter function to check if user has access based on roles OR page path
   const hasAccess = (item: any) => {
     if (!userRole) return false;
-    
+
     // Check if user role is in the allowed roles list
     if (item.roles && item.roles.includes(userRole)) {
       return true;
     }
-    
+
     // Additionally check if user can access the page path
     return canAccessPage(item.url);
   };
 
   // Filter navigation items based on user role and permissions
   const filterNavItems = (items: any[]) => {
-    return items.filter(item => {
+    return items.filter((item) => {
       if (!hasAccess(item)) return false;
 
       // If item has dropdown, filter sub-items
@@ -484,7 +579,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           // Check sub-item path access
           return canAccessPage(subItem.url);
         });
-        
+
         // Only show parent if it has accessible sub-items
         return item.items.length > 0;
       }
@@ -502,12 +597,17 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const filteredOthersSection = filterNavItems(data.othersSection);
 
   const renderNavItem = (item: any) => {
-    const isActive = pathname === item.url || pathname.startsWith(item.url + "/");
+    const isActive =
+      pathname === item.url || pathname.startsWith(item.url + "/");
     const isOpen = openDropdowns.includes(item.title);
 
     if (item.hasDropdown && item.items) {
       return (
-        <Collapsible key={item.title} open={isOpen} onOpenChange={() => toggleDropdown(item.title)}>
+        <Collapsible
+          key={item.title}
+          open={isOpen}
+          onOpenChange={() => toggleDropdown(item.title)}
+        >
           <SidebarMenuItem>
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
