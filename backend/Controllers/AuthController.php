@@ -78,6 +78,40 @@ class AuthController
 
             $tokens = JWTService::generateToken($payload);
 
+            // ✅ SET COOKIES HERE - This is the key addition!
+            // Determine if we're in production
+            $isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
+            $secure = $isProduction; // Only use Secure flag in production with HTTPS
+            $sameSite = 'Lax'; // Use 'Lax' for same-site requests
+
+            // Set access token cookie (expires in 1 hour)
+            setcookie(
+                'access_token',
+                $tokens['access_token'],
+                [
+                    'expires' => time() + 3600, // 1 hour
+                    'path' => '/',
+                    'domain' => '', // Empty string = current domain
+                    'secure' => $secure,
+                    'httponly' => false,
+                    'samesite' => $sameSite
+                ]
+            );
+
+            // Set refresh token cookie (expires in 7 days)
+            setcookie(
+                'refresh_token',
+                $tokens['refresh_token'],
+                [
+                    'expires' => time() + 604800, // 7 days
+                    'path' => '/',
+                    'domain' => '',
+                    'secure' => $secure,
+                    'httponly' => true,
+                    'samesite' => $sameSite
+                ]
+            );
+
             http_response_code(200);
             echo json_encode([
                 'success' => true,
@@ -90,7 +124,7 @@ class AuthController
                     'user_type' => $user['user_type'],
                     'organization_id' => $user['organization_id']
                 ],
-                'tokens' => $tokens
+                'tokens' => $tokens // Still include tokens in response for backward compatibility
             ]);
         } catch (\Exception $e) {
             error_log('Login error: ' . $e->getMessage());
