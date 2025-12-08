@@ -1,3 +1,4 @@
+// components/nav-user.tsx - Updated version
 "use client"
 
 import {
@@ -28,13 +29,30 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "@/components/ui/sidebar"
-import { useAuth } from "@/hooks/useAuth"
+import { useAuth } from "@/lib/AuthContext" // Changed import
 import { useRouter } from "next/navigation"
 
 export function NavUser() {
   const { isMobile } = useSidebar()
-  const { logout, getUserName, getUserInitials, user } = useAuth()
+  const { logout, user, isLoading } = useAuth() // Now using AuthContext
   const router = useRouter()
+
+  // Helper functions to replace Zustand methods
+  const getUserName = () => {
+    if (!user) return '';
+    if (user.first_name && user.surname) {
+      return `${user.first_name} ${user.surname}`;
+    }
+    return user.email || '';
+  };
+
+  const getUserInitials = () => {
+    if (!user) return 'U';
+    if (user.first_name && user.surname) {
+      return `${user.first_name[0]}${user.surname[0]}`.toUpperCase();
+    }
+    return user.email ? user.email[0].toUpperCase() : 'U';
+  };
 
   const handleLogout = async () => {
     try {
@@ -46,9 +64,30 @@ export function NavUser() {
     }
   }
 
-  // Don't render if no user
-  if (!user) {
-    return null
+  // Don't render if no user or loading
+  if (isLoading || !user) {
+    return (
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton
+            size="lg"
+            className="data-[state=open]:bg-sidebar-accent data-[state=open]:text-sidebar-accent-foreground"
+          >
+            <Avatar className="h-8 w-8 rounded-lg">
+              <AvatarFallback className="rounded-lg bg-gray-300">
+                <div className="animate-pulse bg-gray-400 h-full w-full rounded-lg"></div>
+              </AvatarFallback>
+            </Avatar>
+            <div className="grid flex-1 text-left text-sm leading-tight">
+              <span className="truncate font-medium">Loading...</span>
+              <span className="text-muted-foreground truncate text-xs">
+                Please wait
+              </span>
+            </div>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    )
   }
 
   const userData = {
@@ -107,15 +146,15 @@ export function NavUser() {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/my-profile')}>
                 <IconUserCircle className="mr-2" />
                 Account
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/billing')}>
                 <IconCreditCard className="mr-2" />
                 Billing
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/notifications')}>
                 <IconNotification className="mr-2" />
                 Notifications
               </DropdownMenuItem>
