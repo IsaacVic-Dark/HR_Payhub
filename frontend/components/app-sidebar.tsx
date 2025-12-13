@@ -205,7 +205,7 @@ const data = {
       items: [
         {
           title: "Employee List",
-          url: "/employees/list",
+          url: "/employees",
           roles: [
             "super_admin",
             "admin",
