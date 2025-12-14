@@ -174,6 +174,7 @@ CREATE TABLE IF NOT EXISTS `loans` (
 CREATE TABLE IF NOT EXISTS `notifications` (
   `id` int NOT NULL AUTO_INCREMENT,
   `employee_id` int NOT NULL,
+  `organization_id` int NOT NULL,
   `title` varchar(255) NOT NULL,
   `message` text NOT NULL,
   `type` enum('salary','tax','leave','loan','advance','refund','per_diem','other') NOT NULL,
@@ -183,7 +184,10 @@ CREATE TABLE IF NOT EXISTS `notifications` (
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `employee_id` (`employee_id`),
-  CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE
+  KEY `organization_id` (`organization_id`),
+  KEY `idx_org_read` (`organization_id`, `is_read`),
+  CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `notifications_ibfk_2` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
