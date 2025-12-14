@@ -124,8 +124,31 @@ Router::post('api/v1/organizations/{org_id}/leaves/{id}/reject', LeaveController
     'LeaveAuthorizationMiddleware'
 ]);
 
-// Notification routes with authentication
-Router::resource('api/v1/notifications', NotificationController::class, ['AuthMiddleware']);
+// Notification routes with comprehensive authentication and authorization
+Router::get('api/v1/organizations/{org_id}/notifications', NotificationController::class . '@index', [
+    'AuthMiddleware',
+    'NotificationAuthorizationMiddleware'
+]);
+
+Router::get('api/v1/organizations/{org_id}/notifications/{id}', NotificationController::class . '@show', [
+    'AuthMiddleware',
+    'NotificationAuthorizationMiddleware'
+]);
+
+Router::patch('api/v1/organizations/{org_id}/notifications/{id}/read', NotificationController::class . '@markAsRead', [
+    'AuthMiddleware',
+    'NotificationAuthorizationMiddleware'
+]);
+
+Router::patch('api/v1/organizations/{org_id}/notifications/mark-all-read', NotificationController::class . '@markAllAsRead', [
+    'AuthMiddleware',
+    'NotificationAuthorizationMiddleware'
+]);
+
+Router::delete('api/v1/organizations/{org_id}/notifications/{id}', NotificationController::class . '@destroy', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'NotificationAuthorizationMiddleware'
+]);
 
 // Test route
 Router::get('/api/test', function ($d) {
