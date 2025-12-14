@@ -407,7 +407,7 @@ class LeaveController
                 return responseJson(
                     success: false,
                     data: null,
-                    message: "Employee not found",
+                    message: "Employee {$data['employee_id']} not found",
                     code: 404
                 );
             }
