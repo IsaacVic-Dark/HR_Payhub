@@ -25,6 +25,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { Notification, notificationService } from "@/services/api/notification";
+import { useAuth } from '@/lib/AuthContext';
 import { formatDistanceToNow } from 'date-fns';
 
 interface NotificationModalProps {
@@ -135,13 +136,16 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { user } = useAuth();
+
+  console.log("User in NotificationModal: ", user);
 
   const fetchNotifications = async () => {
     setLoading(true);
     setError(null);
     
     try {
-      const response = await notificationService.getNotifications();
+      const response = await notificationService.getNotifications(user.organization_id);
       console.log("The notifications expected: ", response)
       setNotifications(response.notifications);
     } catch (err) {
@@ -160,7 +164,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
 
   const handleMarkAsRead = async (notificationId: number) => {
     try {
-      await notificationService.markAsRead(notificationId);
+      await notificationService.markAsRead(user.organization_id, notificationId);
       
       // Update local state
       setNotifications(prev =>
@@ -180,7 +184,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
 
   const handleMarkAllAsRead = async () => {
     try {
-      await notificationService.markAllAsRead();
+      await notificationService.markAllAsRead(user.organization_id);
       
       // Update local state
       setNotifications(prev =>
