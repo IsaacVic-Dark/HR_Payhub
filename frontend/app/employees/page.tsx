@@ -2,7 +2,7 @@
 
 import { AppSidebar } from "@/components/app-sidebar"
 import { ChartAreaInteractive } from "@/components/chart-area-interactive"
-import { DataTableEmployees } from "@/components/data-table-employees"
+import { DataTableEmployees } from "@/app/employees/components/data-table-employees"
 import { SiteHeader } from "@/components/site-header"
 import {
   SidebarInset,
