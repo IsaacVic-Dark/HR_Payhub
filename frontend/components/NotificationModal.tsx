@@ -138,7 +138,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const { user } = useAuth();
 
-  console.log("User in NotificationModal: ", user);
+  // console.log("User in NotificationModal: ", user);
 
   const fetchNotifications = async () => {
     setLoading(true);
