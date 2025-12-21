@@ -1,6 +1,9 @@
 type LeaveType = {
   leave_id: number;
   employee_id: number;
+  first_name: string;
+  middle_name: string | null;
+  surname: string;
   approver_id: number | null;
   reliever_id: number | null;
   leave_type: string;
@@ -83,7 +86,7 @@ class LeaveAPI {
       // Return the entire response data structure
       return {
         success: true,
-        data: data, // Return the full response data
+        data: data.data, // Return the full response data
         message: data.message,
         metadata: data.metadata,
       };
