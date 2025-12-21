@@ -7,7 +7,7 @@ use App\Services\DB;
 
 class LeaveAuthorizationMiddleware
 {
-    public function handle($request, $next, $scope = 'read')
+    public function handle($request, $next)
     {
         $user = AuthMiddleware::getCurrentUser();
         $employee = AuthMiddleware::getCurrentEmployee();
@@ -22,7 +22,7 @@ class LeaveAuthorizationMiddleware
             );
         }
 
-        // Super admins cannot access organization data (privacy)
+        // Super admins cannot access organization data
         if ($user['user_type'] === 'super_admin') {
             return responseJson(
                 success: false,
@@ -35,12 +35,14 @@ class LeaveAuthorizationMiddleware
         // Apply role-based access control
         switch ($user['user_type']) {
             case 'admin':
-                // Admins can access all leaves in their organization
+            case 'hr_manager':
+            case 'hr_officer':
+                // These roles can access all leaves in their organization
                 break;
-                
-            case 'manager':
-                // Managers can access their team's leaves
-                if (!$this->canManagerAccess($employee['id'], $request, $scope)) {
+
+            case 'department_manager':
+                // Managers can access their team's leaves and leaves pending their approval
+                if (!$this->canManagerAccess($employee['id'], $request)) {
                     return responseJson(
                         success: false,
                         data: null,
@@ -49,10 +51,10 @@ class LeaveAuthorizationMiddleware
                     );
                 }
                 break;
-                
+
             case 'employee':
                 // Employees can only access their own leaves
-                if (!$this->canEmployeeAccess($employee['id'], $request, $scope)) {
+                if (!$this->canEmployeeAccess($employee['id'], $request)) {
                     return responseJson(
                         success: false,
                         data: null,
@@ -61,7 +63,7 @@ class LeaveAuthorizationMiddleware
                     );
                 }
                 break;
-                
+
             default:
                 return responseJson(
                     success: false,
@@ -74,29 +76,41 @@ class LeaveAuthorizationMiddleware
         return $next($request);
     }
 
-    private function canManagerAccess($managerId, $request, $scope)
+    private function canManagerAccess($managerId, $request)
     {
-        // If accessing specific leave, check if it belongs to manager's team
-        if (isset($request['params'][0]) && is_numeric($request['params'][0])) {
-            $leaveId = $request['params'][0];
+        // For approval/rejection endpoints, check if leave is from their team
+        if (isset($request['params']['id']) && is_numeric($request['params']['id'])) {
+            $leaveId = $request['params']['id'];
+
+            // Check if this is an approval/rejection action
+            $uri = $_SERVER['REQUEST_URI'] ?? '';
+            if (strpos($uri, '/approve') !== false || strpos($uri, '/reject') !== false) {
+                return $this->isLeaveInManagerTeam($leaveId, $managerId);
+            }
+
+            // For viewing, also allow if leave is from their team
             return $this->isLeaveInManagerTeam($leaveId, $managerId);
         }
 
-        // For listing, managers can see their team's leaves
-        // This will be handled in the controller with proper filtering
+        // For listing, allow (filtering will be done in controller)
         return true;
     }
 
-    private function canEmployeeAccess($employeeId, $request, $scope)
+    private function canEmployeeAccess($employeeId, $request)
     {
-        // Employees can only access their own leaves
-        if (isset($request['params'][0]) && is_numeric($request['params'][0])) {
-            $leaveId = $request['params'][0];
+        // Employees cannot approve/reject leaves
+        $uri = $_SERVER['REQUEST_URI'] ?? '';
+        if (strpos($uri, '/approve') !== false || strpos($uri, '/reject') !== false) {
+            return false;
+        }
+
+        // For viewing specific leave
+        if (isset($request['params']['id']) && is_numeric($request['params']['id'])) {
+            $leaveId = $request['params']['id'];
             return $this->isEmployeeLeave($leaveId, $employeeId);
         }
 
-        // For listing, employees will only see their own leaves
-        // This will be handled in the controller
+        // For listing, allow (filtering will be done in controller)
         return true;
     }
 
@@ -109,14 +123,15 @@ class LeaveAuthorizationMiddleware
                 INNER JOIN employees e ON l.employee_id = e.id
                 WHERE l.id = :leave_id 
                 AND e.reports_to = :manager_id
+                AND e.status = 'active'
             ";
-            
+
             $result = DB::raw($query, [
                 ':leave_id' => $leaveId,
                 ':manager_id' => $managerId
             ]);
-            
-            return $result[0]->count > 0;
+
+            return ($result[0]->count ?? 0) > 0;
         } catch (\Exception $e) {
             error_log('Manager access check error: ' . $e->getMessage());
             return false;
@@ -132,13 +147,13 @@ class LeaveAuthorizationMiddleware
                 WHERE id = :leave_id 
                 AND employee_id = :employee_id
             ";
-            
+
             $result = DB::raw($query, [
                 ':leave_id' => $leaveId,
                 ':employee_id' => $employeeId
             ]);
-            
-            return $result[0]->count > 0;
+
+            return ($result[0]->count ?? 0) > 0;
         } catch (\Exception $e) {
             error_log('Employee access check error: ' . $e->getMessage());
             return false;

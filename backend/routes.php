@@ -113,14 +113,14 @@ Router::delete('api/v1/organizations/{org_id}/leaves/{id}', LeaveController::cla
     'LeaveAuthorizationMiddleware'
 ]);
 
-// Leave action routes with specific role requirements
+// Leave approval/rejection routes - no need to pass approver_id
 Router::post('api/v1/organizations/{org_id}/leaves/{id}/approve', LeaveController::class . '@approve', [
-    ['AuthMiddleware', ['admin', 'manager']],
+    ['AuthMiddleware', ['admin', 'hr_manager', 'hr_officer', 'department_manager']],
     'LeaveAuthorizationMiddleware'
 ]);
 
 Router::post('api/v1/organizations/{org_id}/leaves/{id}/reject', LeaveController::class . '@reject', [
-    ['AuthMiddleware', ['admin', 'manager']],
+    ['AuthMiddleware', ['admin', 'hr_manager', 'hr_officer', 'department_manager']],
     'LeaveAuthorizationMiddleware'
 ]);
 

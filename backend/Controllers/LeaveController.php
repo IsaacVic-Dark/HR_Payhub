@@ -3,7 +3,6 @@
 namespace App\Controllers;
 
 use App\Services\DB;
-
 class LeaveController
 {
     /**
@@ -12,7 +11,7 @@ class LeaveController
     public function index($org_id = null)
     {
         try {
-                        $filters = $this->applyRoleBasedFilters($org_id);
+            $filters = $this->applyRoleBasedFilters($org_id);
             // Auto-expire leaves that have passed their end date
             $this->autoExpireLeaves();
 
@@ -37,7 +36,7 @@ class LeaveController
                 $whereConditions[] = "leaves.employee_id IN ($placeholders)";
                 $params = array_merge($params, $filters['team_employees']);
             }
-            
+
             // Optional filters
             $status = $_GET['status'] ?? null;
             $approverId = $_GET['approver_id'] ?? null;
@@ -656,25 +655,320 @@ class LeaveController
 
     /**
      * Approve a leave application
+     * Uses authenticated user as approver automatically
      */
-    public function approve($id)
+    public function approve($org_id, $leave_id)
     {
-        $data = json_decode(file_get_contents('php://input'), true);
-        $approverId = $data['approver_id'] ?? null;
+        try {
+            // Get authenticated user and employee
+            $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
+            $currentEmployee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
 
-        return $this->updateLeaveStatus($id, 'approved', null, $approverId);
+            if (!$currentUser || !$currentEmployee) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: 'Authentication required',
+                    code: 401
+                );
+            }
+
+            // Verify the leave exists and belongs to the organization
+            $leave = $this->getLeaveWithValidation($leave_id, $org_id);
+            if (!$leave['success']) {
+                return $leave; // Return error response
+            }
+
+            $leaveData = $leave['data'];
+
+            // Check if leave is already processed
+            if (in_array($leaveData->status, ['approved', 'rejected', 'expired'])) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Leave has already been {$leaveData->status}",
+                    code: 400
+                );
+            }
+
+            // Verify user has permission to approve this specific leave
+            $canApprove = $this->canUserApproveLeave($currentEmployee['id'], $leaveData, $currentUser['user_type']);
+            if (!$canApprove['allowed']) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: $canApprove['reason'],
+                    code: 403
+                );
+            }
+
+            // Update leave status with current user as approver
+            DB::table('leaves')->update(
+                [
+                    'status' => 'approved',
+                    'approver_id' => $currentEmployee['id'],
+                    'updated_at' => date('Y-m-d H:i:s')
+                ],
+                'id',
+                $leave_id
+            );
+
+            // Optional: Create notification for employee
+            $this->notifyEmployee($leaveData->employee_id, $leave_id, 'approved');
+
+            return responseJson(
+                success: true,
+                data: [
+                    'leave_id' => $leave_id,
+                    'status' => 'approved',
+                    'approver_id' => $currentEmployee['id'],
+                    'approver_name' => $currentUser['first_name'] . ' ' . $currentUser['surname']
+                ],
+                message: "Leave approved successfully"
+            );
+        } catch (\Exception $e) {
+            error_log("Leave approval error: " . $e->getMessage());
+            return responseJson(
+                success: false,
+                data: null,
+                message: "Failed to approve leave: " . $e->getMessage(),
+                code: 500
+            );
+        }
     }
 
     /**
      * Reject a leave application
+     * Uses authenticated user as approver automatically
      */
-    public function reject($id)
+    public function reject($org_id, $leave_id)
     {
-        $data = json_decode(file_get_contents('php://input'), true);
-        $rejectionReason = $data['rejection_reason'] ?? null;
-        $approverId = $data['approver_id'] ?? null;
+        try {
+            // Get request body for rejection reason
+            $data = json_decode(file_get_contents('php://input'), true);
+            $rejectionReason = $data['rejection_reason'] ?? null;
 
-        return $this->updateLeaveStatus($id, 'rejected', $rejectionReason, $approverId);
+            // Get authenticated user and employee
+            $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
+            $currentEmployee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
+
+            if (!$currentUser || !$currentEmployee) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: 'Authentication required',
+                    code: 401
+                );
+            }
+
+            // Verify the leave exists and belongs to the organization
+            $leave = $this->getLeaveWithValidation($leave_id, $org_id);
+            if (!$leave['success']) {
+                return $leave;
+            }
+
+            $leaveData = $leave['data'];
+
+            // Check if leave is already processed
+            if (in_array($leaveData->status, ['approved', 'rejected', 'expired'])) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Leave has already been {$leaveData->status}",
+                    code: 400
+                );
+            }
+
+            // Verify user has permission to reject this specific leave
+            $canApprove = $this->canUserApproveLeave($currentEmployee['id'], $leaveData, $currentUser['user_type']);
+            if (!$canApprove['allowed']) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: $canApprove['reason'],
+                    code: 403
+                );
+            }
+
+            // Prepare update data
+            $updateData = [
+                'status' => 'rejected',
+                'approver_id' => $currentEmployee['id'],
+                'updated_at' => date('Y-m-d H:i:s')
+            ];
+
+            // Add rejection reason if provided
+            if ($rejectionReason) {
+                $updateData['rejection_reason'] = $rejectionReason;
+            }
+
+            // Update leave status
+            DB::table('leaves')->update($updateData, 'id', $leave_id);
+
+            // Optional: Create notification for employee
+            $this->notifyEmployee($leaveData->employee_id, $leave_id, 'rejected', $rejectionReason);
+
+            return responseJson(
+                success: true,
+                data: [
+                    'leave_id' => $leave_id,
+                    'status' => 'rejected',
+                    'approver_id' => $currentEmployee['id'],
+                    'approver_name' => $currentUser['first_name'] . ' ' . $currentUser['surname']
+                ],
+                message: "Leave rejected successfully"
+            );
+        } catch (\Exception $e) {
+            error_log("Leave rejection error: " . $e->getMessage());
+            return responseJson(
+                success: false,
+                data: null,
+                message: "Failed to reject leave: " . $e->getMessage(),
+                code: 500
+            );
+        }
+    }
+
+    /**
+     * Validate leave exists and belongs to organization
+     */
+    private function getLeaveWithValidation($leave_id, $org_id)
+    {
+        $query = "
+            SELECT 
+                leaves.*,
+                emp_users.organization_id
+            FROM leaves
+            INNER JOIN employees ON leaves.employee_id = employees.id
+            INNER JOIN users emp_users ON employees.user_id = emp_users.id
+            WHERE leaves.id = :leave_id
+        ";
+
+        $result = DB::raw($query, [':leave_id' => $leave_id]);
+
+        if (empty($result)) {
+            return [
+                'success' => false,
+                'data' => responseJson(
+                    success: false,
+                    data: null,
+                    message: "Leave not found",
+                    code: 404
+                )
+            ];
+        }
+
+        $leave = $result[0];
+
+        // Verify leave belongs to the organization
+        if ($leave->organization_id != $org_id) {
+            return [
+                'success' => false,
+                'data' => responseJson(
+                    success: false,
+                    data: null,
+                    message: "Leave does not belong to this organization",
+                    code: 403
+                )
+            ];
+        }
+
+        return [
+            'success' => true,
+            'data' => $leave
+        ];
+    }
+
+    /**
+     * Check if user can approve/reject a specific leave
+     */
+    private function canUserApproveLeave($currentEmployeeId, $leaveData, $userType)
+    {
+        // Admins can approve any leave in their organization
+        if ($userType === 'admin') {
+            return ['allowed' => true, 'reason' => ''];
+        }
+
+        // HR roles can approve any leave
+        if (in_array($userType, ['hr_manager', 'hr_officer'])) {
+            return ['allowed' => true, 'reason' => ''];
+        }
+
+        // Department managers can only approve leaves from their team
+        if ($userType === 'department_manager') {
+            $isTeamMember = $this->isEmployeeInTeam($leaveData->employee_id, $currentEmployeeId);
+
+            if (!$isTeamMember) {
+                return [
+                    'allowed' => false,
+                    'reason' => 'You can only approve leaves from your team members'
+                ];
+            }
+
+            return ['allowed' => true, 'reason' => ''];
+        }
+
+        // Prevent employees from approving their own leave
+        if ($leaveData->employee_id == $currentEmployeeId) {
+            return [
+                'allowed' => false,
+                'reason' => 'You cannot approve your own leave'
+            ];
+        }
+
+        return [
+            'allowed' => false,
+            'reason' => 'You do not have permission to approve leaves'
+        ];
+    }
+
+    /**
+     * Check if an employee belongs to a manager's team
+     */
+    private function isEmployeeInTeam($employeeId, $managerId)
+    {
+        $query = "
+            SELECT COUNT(*) as count
+            FROM employees
+            WHERE id = :employee_id 
+            AND reports_to = :manager_id
+            AND status = 'active'
+        ";
+
+        $result = DB::raw($query, [
+            ':employee_id' => $employeeId,
+            ':manager_id' => $managerId
+        ]);
+
+        return ($result[0]->count ?? 0) > 0;
+    }
+
+    /**
+     * Create notification for employee (optional - implement based on your notification system)
+     */
+    private function notifyEmployee($employeeId, $leaveId, $status, $reason = null)
+    {
+        // Implement your notification logic here
+        // This could send email, push notification, or create in-app notification
+        try {
+            $message = $status === 'approved'
+                ? "Your leave request has been approved"
+                : "Your leave request has been rejected" . ($reason ? ": $reason" : "");
+
+            // Example: Create notification record
+            DB::table('notifications')->insert([
+                'employee_id' => $employeeId,
+                'type' => 'leave_' . $status,
+                'message' => $message,
+                'reference_id' => $leaveId,
+                'reference_type' => 'leave',
+                'is_read' => 0,
+                'created_at' => date('Y-m-d H:i:s')
+            ]);
+        } catch (\Exception $e) {
+            error_log("Notification error: " . $e->getMessage());
+            // Don't fail the approval/rejection if notification fails
+        }
     }
 
     /**
@@ -968,7 +1262,7 @@ class LeaveController
         }
     }
 
-     private function applyRoleBasedFilters($org_id)
+    private function applyRoleBasedFilters($org_id)
     {
         $user = \App\Middleware\AuthMiddleware::getCurrentUser();
         $employee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
@@ -1012,7 +1306,7 @@ class LeaveController
                 WHERE reports_to = :manager_id 
                 AND status = 'active'
             ";
-            
+
             $result = DB::raw($query, [':manager_id' => $managerId]);
             return array_column($result, 'id');
         } catch (\Exception $e) {
