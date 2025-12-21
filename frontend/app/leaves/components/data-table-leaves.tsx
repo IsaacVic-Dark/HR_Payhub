@@ -4,8 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Filter, Search, Plus, Check, X, Eye } from 'lucide-react';
 import { leaveAPI, LeaveType, LeaveFilters } from '@/services/api/leave';
 import { Button } from '@/components/ui/button';
-import { LeaveActionDialog } from '@/app/leaves/leave-action-dialog';
-import { LeaveViewDrawer } from '@/app/leaves/leave-view-drawer';
+import { LeaveActionDialog } from '@/app/leaves/components/leave-action-dialog';
+import { LeaveViewDrawer } from '@/app/leaves/components/leave-view-drawer';
 import { toast } from 'sonner';
 import { DataTable, ColumnDef } from '@/components/table';
 import { useAuth } from '@/lib/AuthContext';
@@ -70,7 +70,7 @@ const LeaveTable: React.FC = () => {
 
       if (response.success && response.data) {
         // Access the data directly from response.data
-        const leavesData = response.data.data.leaves || [];
+        const leavesData = response.data.leaves || [];
         const paginationData = response.data.pagination;
         
         setLeaves(leavesData);
@@ -331,10 +331,10 @@ const LeaveTable: React.FC = () => {
                 <Filter className="w-4 h-4" />
                 Filters
               </button>
-              <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
+              <Button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
                 <Plus className="w-4 h-4" />
-                Create Leave
-              </button>
+                Apply Leave
+              </Button>
             </div>
           </div>
 
