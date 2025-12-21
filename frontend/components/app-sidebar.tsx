@@ -105,6 +105,11 @@ const data = {
       hasDropdown: true,
       items: [
         {
+          title: "Payroll",
+          url: "/payrolls",
+          roles: ["super_admin", "admin", "payroll_manager"],
+        },
+        {
           title: "Run Payroll",
           url: "/payroll/run",
           roles: ["super_admin", "admin", "payroll_manager"],
