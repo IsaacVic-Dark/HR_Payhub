@@ -4,10 +4,12 @@ namespace App\Controllers;
 
 use App\Services\DB;
 
-class EmployeeController {
-    public function index($orgId) {
+class EmployeeController
+{
+    public function index($orgId)
+    {
         $startTime = microtime(true);
-        
+
         // Validate organization ID
         if (!is_numeric($orgId)) {
             return responseJson(null, "Invalid organization ID", 400);
@@ -15,13 +17,13 @@ class EmployeeController {
 
         // Apply role-based filters FIRST
         $roleFilters = $this->applyRoleBasedFilters($orgId);
-        
+
         // Then apply user-provided filters
         $userFilters = [
             'department' => $_GET['department'] ?? null,
             'job_title' => $_GET['job_title'] ?? null,
         ];
-        
+
         // Cleanup user filters
         array_walk($userFilters, function (&$value) {
             if (is_string($value)) {
@@ -55,6 +57,8 @@ class EmployeeController {
         // Execute query with parameters to prevent SQL injection
         $employees = empty($params) ? DB::raw($query) : DB::raw($query, $params);
 
+        $statistics = $this->calculateStatistics($employees, $orgId);
+
         // Apply sorting
         $userFilters['sort_by'] = $_GET['sort_by'] ?? null;
         $userFilters['sort_order'] = $_GET['sort_order'] ?? null;
@@ -74,16 +78,19 @@ class EmployeeController {
             data: array_values($employees),
             message: empty($employees) ? "No employees found" : "successfully fetched " . count($employees) . " employees",
             metadata: [
-                'dev_mode' => true, 
-                'filters' => array_merge($userFilters, ['role_filters' => $roleFilters]), 
-                'total' => count($employees), 
-                'duration' => (microtime(true) - $startTime)
+                'dev_mode' => true,
+                'filters' => array_merge($userFilters, ['role_filters' => $roleFilters]),
+                'total' => count($employees),
+                'duration' => (microtime(true) - $startTime),
+                // ADD THIS LINE:
+                'statistics' => $statistics ?? null,
             ],
             code: empty($employees) ? 404 : 200
         );
     }
-    
-    public function store($orgId) {
+
+    public function store($orgId)
+    {
         // Check if user has permission to create employees
         $user = \App\Middleware\AuthMiddleware::getCurrentUser();
         if (!in_array($user['user_type'], ['admin', 'hr_manager'])) {
@@ -106,45 +113,30 @@ class EmployeeController {
             'tax_id' => 'string'
         ]);
 
-        // echo $data['first_name'] . ' ' . $data['middle_name'] . ' ' . $data['surname'];
-
         if (!empty($data['user_id'])) {
             $user = DB::table('users')->selectAllWhereID($data['user_id']);
             if (!$user) {
                 return responseJson(null, "Invalid user_id", 400);
             }
         }
+
         if (!empty($data['reports_to'])) {
             $manager = DB::table('employees')->selectAllWhereID($data['reports_to']);
             if (!$manager) {
                 return responseJson(null, "Invalid reports_to (manager)", 400);
             }
         }
+
         $inserted = false;
-
-        //convert hire_date to MySQL format
         $data['hire_date'] = date('Y-m-d', strtotime($data['hire_date']));
-
         $default_password = password_hash('password', PASSWORD_BCRYPT);
 
         try {
             DB::transaction(function () use ($data, $orgId, &$inserted, $default_password) {
 
-                // 1. Insert employee first and get the ID
-                $insertEmployeeSQL = "INSERT INTO employees (organization_id, phone, hire_date, job_title, department, reports_to, base_salary, bank_account_number, tax_id, created_at) 
-            VALUES ({$orgId}, '{$data['phone']}', '{$data['hire_date']}', '{$data['job_title']}', '{$data['department']}', {$data['reports_to']}, {$data['base_salary']}, '{$data['bank_account_number']}', '{$data['tax_id']}', NOW())
-        ";
-
-                DB::raw($insertEmployeeSQL);
-
-                // 2. Get the employee ID we just inserted
-                $getEmployeeIdSQL = "SELECT LAST_INSERT_ID() as employee_id";
-                $employeeResult = DB::raw($getEmployeeIdSQL);
-                $employee_id = $employeeResult[0]->employee_id;
-
-                // 3. Get organization domain
-                $getOrgSQL = "SELECT domain FROM organizations WHERE id = {$orgId}";
-                $orgResult = DB::raw($getOrgSQL);
+                // 1. Get organization domain first (we need it for email generation)
+                $getOrgSQL = "SELECT domain FROM organizations WHERE id = :org_id";
+                $orgResult = DB::raw($getOrgSQL, [':org_id' => $orgId]);
 
                 if (empty($orgResult) || !$orgResult[0]->domain) {
                     throw new \Exception("Organization not found or domain is null");
@@ -152,71 +144,170 @@ class EmployeeController {
 
                 $domain = $orgResult[0]->domain;
 
-                // 4. Generate email
-                $email = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['surname']) . '@' . $domain;
+                // 2. Generate email and username
+                $baseEmail = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['surname']);
+                $baseUsername = $baseEmail;
+                $email = $baseEmail . '@' . $domain;
+                $username = $baseUsername;
 
-                //generate username
-                $username = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['surname']);
+                // 3. Handle email/username conflicts by adding numeric suffix
+                $emailSuffix = 1;
+                while (true) {
+                    $existingEmail = DB::raw(
+                        "SELECT id FROM users WHERE email = :email LIMIT 1",
+                        [':email' => $email]
+                    );
 
-                // 5. Insert user with personal_email, middle_name, and surname
+                    if (empty($existingEmail)) {
+                        break; // Email is unique, we can use it
+                    }
+
+                    $emailSuffix++;
+                    $email = $baseEmail . $emailSuffix . '@' . $domain;
+                    $username = $baseUsername . $emailSuffix;
+                }
+
+                // 4. Insert user with the unique email
                 $personalEmail = !empty($data['personal_email']) ? "'{$data['personal_email']}'" : 'NULL';
                 $middleName = !empty($data['middle_name']) ? "'{$data['middle_name']}'" : 'NULL';
-                
-                $insertUserSQL = "INSERT INTO users (organization_id, username, first_name, middle_name, surname, password_hash, email, personal_email, user_type, created_at) 
-            VALUES ({$orgId}, '{$username}', '{$data['first_name']}', {$middleName}, '{$data['surname']}', '{$default_password}', '{$email}', {$personalEmail}, 'employee', NOW())
-";
 
-                DB::raw($insertUserSQL);
+                $insertUserSQL = "INSERT INTO users (
+                organization_id, 
+                username, 
+                first_name, 
+                middle_name, 
+                surname, 
+                password_hash, 
+                email, 
+                personal_email, 
+                user_type, 
+                created_at
+            ) VALUES (
+                :org_id, 
+                :username, 
+                :first_name, 
+                {$middleName}, 
+                :surname, 
+                :password_hash, 
+                :email, 
+                {$personalEmail}, 
+                'employee', 
+                NOW()
+            )";
 
-                // 6. Get the user ID we just inserted
+                DB::raw($insertUserSQL, [
+                    ':org_id' => $orgId,
+                    ':username' => $username,
+                    ':first_name' => $data['first_name'],
+                    ':surname' => $data['surname'],
+                    ':password_hash' => $default_password,
+                    ':email' => $email
+                ]);
+
+                // 5. Get the user ID we just inserted
                 $getUserIdSQL = "SELECT LAST_INSERT_ID() as user_id";
                 $userResult = DB::raw($getUserIdSQL);
                 $user_id = $userResult[0]->user_id;
 
-                // 7. Update employee with user_id
-                $updateEmployeeSQL = "UPDATE employees SET user_id = {$user_id} WHERE id = {$employee_id};";
-                DB::raw($updateEmployeeSQL);
+                // 6. Insert employee (NO EMAIL FIELD - it's in users table)
+                $insertEmployeeSQL = "INSERT INTO employees (
+                organization_id, 
+                user_id,
+                phone, 
+                hire_date, 
+                job_title, 
+                department, 
+                reports_to, 
+                base_salary, 
+                bank_account_number, 
+                tax_id, 
+                created_at
+            ) VALUES (
+                :org_id,
+                :user_id,
+                :phone, 
+                :hire_date, 
+                :job_title, 
+                :department, 
+                :reports_to, 
+                :base_salary, 
+                :bank_account_number, 
+                :tax_id, 
+                NOW()
+            )";
+
+                DB::raw($insertEmployeeSQL, [
+                    ':org_id' => $orgId,
+                    ':user_id' => $user_id,
+                    ':phone' => $data['phone'],
+                    ':hire_date' => $data['hire_date'],
+                    ':job_title' => $data['job_title'],
+                    ':department' => $data['department'],
+                    ':reports_to' => $data['reports_to'],
+                    ':base_salary' => $data['base_salary'],
+                    ':bank_account_number' => $data['bank_account_number'],
+                    ':tax_id' => $data['tax_id']
+                ]);
 
                 $inserted = true;
             });
 
             if (!$inserted) {
                 return responseJson(null, "Failed to create employee", 500);
-            } else {
-                // Get the created employee with user details
-                $result = DB::raw("SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
-                                    FROM employees e 
-                                    LEFT JOIN users u ON e.user_id = u.id 
-                                    WHERE e.phone = '{$data['phone']}' 
-                                    ORDER BY e.created_at DESC 
-                                    LIMIT 1");
-                if (empty($result)) {
-                    return responseJson(null, "Employee not found", 404);
-                }
-                $mailSent = mail(
-                    $result[0]->email,
-                    "Welcome to HR Payhub",
-                    "Hello {$result[0]->first_name},\n\nYour account has been created successfully. Your username is {$result[0]->username} and your password is 'default_password'. Please change it after your first login.\n\nBest regards,\nHR Payhub Team"
-                );
-                return responseJson(
-                    data: $result[0] ?? null,
-                    message: "Employee created successfully",
-                    metadata: ['dev_mode' => true, 'is_email_sent' => $mailSent ?? false, 'request_url' => $_SERVER['REQUEST_URI']]
-                );
             }
+
+            // Get the created employee with user details (email comes from users table)
+            $result = DB::raw("
+            SELECT 
+                e.*, 
+                u.username, 
+                u.email, 
+                u.personal_email, 
+                u.first_name, 
+                u.middle_name, 
+                u.surname 
+            FROM employees e 
+            LEFT JOIN users u ON e.user_id = u.id 
+            WHERE e.phone = :phone 
+            ORDER BY e.created_at DESC 
+            LIMIT 1
+        ", [':phone' => $data['phone']]);
+
+            if (empty($result)) {
+                return responseJson(null, "Employee not found", 404);
+            }
+
+            // Send welcome email
+            $mailSent = mail(
+                $result[0]->email,
+                "Welcome to HR Payhub",
+                "Hello {$result[0]->first_name},\n\nYour account has been created successfully.\n\nUsername: {$result[0]->username}\nEmail: {$result[0]->email}\nTemporary Password: password\n\nPlease change your password after your first login.\n\nBest regards,\nHR Payhub Team"
+            );
+
+            return responseJson(
+                data: $result[0] ?? null,
+                message: "Employee created successfully",
+                metadata: [
+                    'dev_mode' => true,
+                    'is_email_sent' => $mailSent ?? false,
+                    'generated_email' => $result[0]->email ?? null,
+                    'generated_username' => $result[0]->username ?? null
+                ]
+            );
         } catch (\Exception $e) {
             return responseJson(null, "Error creating employee: " . $e->getMessage(), 500);
         }
     }
-    
-    public function show($orgId, $id) {
+
+    public function show($orgId, $id)
+    {
         // First check if user has access to this employee
         $roleFilters = $this->applyRoleBasedFilters($orgId);
-        
+
         if (isset($roleFilters['employee_id']) && $roleFilters['employee_id'] != $id) {
             return responseJson(null, "Access denied to this employee", 403);
         }
-        
+
         if (isset($roleFilters['team_employees']) && !in_array($id, $roleFilters['team_employees'])) {
             return responseJson(null, "Access denied to this employee", 403);
         }
@@ -225,16 +316,16 @@ class EmployeeController {
                   FROM employees e 
                   LEFT JOIN users u ON e.user_id = u.id 
                   WHERE e.organization_id = {$orgId} AND e.id = {$id}";
-        
+
         $employee = DB::raw($query);
-        
+
         if (!$employee || empty($employee)) {
             return responseJson(null, "Employee not found", 404);
         }
-        
+
         // Apply field-level security
         $employee = $this->applyFieldLevelSecurity($employee, $roleFilters);
-        
+
         return responseJson(
             data: $employee[0],
             message: "Employee fetched successfully",
@@ -242,21 +333,22 @@ class EmployeeController {
             code: 200
         );
     }
-    
+
     /*
      * Update an employee's details
      * @param int $orgId Organization ID
      * @param int $id Employee ID
      * @return JSON response
      */
-    public function update($orgId, $id) {
+    public function update($orgId, $id)
+    {
         // First check if user has access to update this employee
         $roleFilters = $this->applyRoleBasedFilters($orgId);
-        
+
         if (isset($roleFilters['employee_id']) && $roleFilters['employee_id'] != $id) {
             return responseJson(null, "Access denied to update this employee", 403);
         }
-        
+
         if (isset($roleFilters['team_employees']) && !in_array($id, $roleFilters['team_employees'])) {
             return responseJson(null, "Access denied to update this employee", 403);
         }
@@ -264,11 +356,11 @@ class EmployeeController {
         // Check if user has permission to update based on role
         $user = \App\Middleware\AuthMiddleware::getCurrentUser();
         $allowedRoles = ['admin', 'hr_manager'];
-        
+
         // Employees can only update their own basic info
         if ($user['user_type'] === 'employee') {
             $allowedFields = ['phone', 'personal_email'];
-        } 
+        }
         // Managers can update team members' basic info but not financial data
         elseif ($user['user_type'] === 'department_manager') {
             $allowedFields = ['phone', 'job_title', 'department'];
@@ -302,7 +394,7 @@ class EmployeeController {
             'bank_account_number' => 'string',
             'tax_id' => 'string'
         ]);
-        
+
         // Filter data based on user role permissions
         if (isset($allowedFields)) {
             $data = array_intersect_key($data, array_flip($allowedFields));
@@ -310,7 +402,7 @@ class EmployeeController {
                 return responseJson(null, "No permitted fields provided for update", 400);
             }
         }
-        
+
         // Separate employee data from user data
         $employeeData = array_filter([
             'phone' => $data['phone'] ?? null,
@@ -322,7 +414,7 @@ class EmployeeController {
             'bank_account_number' => $data['bank_account_number'] ?? null,
             'tax_id' => $data['tax_id'] ?? null
         ], fn($v) => $v !== null);
-        
+
         $userData = array_filter([
             'first_name' => $data['first_name'] ?? null,
             'middle_name' => $data['middle_name'] ?? null,
@@ -330,7 +422,7 @@ class EmployeeController {
             'email' => $data['email'] ?? null,
             'personal_email' => $data['personal_email'] ?? null
         ], fn($v) => $v !== null);
-        
+
         if (isset($userData['email'])) {
             $existingEmail = DB::table('users')->selectAllWhere('email', $userData['email']);
             if ($existingEmail && $existingEmail[0]->id != $data['user_id']) {
@@ -352,51 +444,52 @@ class EmployeeController {
         if (empty($employeeData) && empty($userData)) {
             return responseJson(null, "No data provided for update", 400);
         }
-        
+
         // Get employee to find user_id
         $employee = DB::table('employees')->selectAllWhere('organization_id', $orgId);
         $employee = array_filter($employee, fn($e) => $e->id == $id);
         if (!$employee) {
             return responseJson(null, "Employee not found", 404);
         }
-        
+
         $employee = array_values($employee)[0];
-        
+
         // Update employee table
         if (!empty($employeeData)) {
             DB::table('employees')->update($employeeData, 'id', $id);
         }
-        
+
         // Update user table
         if (!empty($userData) && $employee->user_id) {
             DB::table('users')->update($userData, 'id', $employee->user_id);
         }
-        
+
         // Fetch updated employee with user details
         $query = "SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
                   FROM employees e 
                   LEFT JOIN users u ON e.user_id = u.id 
                   WHERE e.organization_id = {$orgId} AND e.id = {$id}";
-        
+
         $updatedEmployee = DB::raw($query);
-        
+
         // Apply field-level security
         $updatedEmployee = $this->applyFieldLevelSecurity($updatedEmployee, $roleFilters);
-        
+
         return responseJson(
             data: $updatedEmployee[0],
             message: "Employee updated successfully",
             metadata: ['dev_mode' => true]
         );
     }
-    
+
     /*
      * Delete an employee
      * @param int $orgId Organization ID
      * @param int $id Employee ID
      * @return JSON response
      */
-    public function delete($orgId, $id) {
+    public function delete($orgId, $id)
+    {
         // Check if user has permission to delete employees
         $user = \App\Middleware\AuthMiddleware::getCurrentUser();
         if (!in_array($user['user_type'], ['admin', 'hr_manager'])) {
@@ -420,16 +513,88 @@ class EmployeeController {
         }
     }
 
+    // Add this method anywhere in the EmployeeController class (perhaps near the bottom):
+
+    private function calculateStatistics($employees, $orgId)
+    {
+        if (empty($employees)) {
+            return null;
+        }
+
+        $stats = [
+            'total' => count($employees),
+            'by_department' => [],
+            'by_job_title' => [],
+            'salary_summary' => [],
+            'tenure_summary' => [],
+            'status_summary' => [],
+        ];
+
+        // Department statistics
+        $departments = array_column($employees, 'department');
+        $stats['by_department'] = array_count_values($departments);
+        arsort($stats['by_department']);
+
+        // Job title statistics
+        $jobTitles = array_column($employees, 'job_title');
+        $stats['by_job_title'] = array_count_values($jobTitles);
+        arsort($stats['by_job_title']);
+
+        // Salary statistics (if salary field is available)
+        $salaries = array_filter(array_column($employees, 'base_salary'), 'is_numeric');
+        if (!empty($salaries)) {
+            $stats['salary_summary'] = [
+                'average' => round(array_sum($salaries) / count($salaries), 2),
+                'min' => min($salaries),
+                'max' => max($salaries),
+                'total_monthly' => array_sum($salaries),
+                'total_yearly' => array_sum($salaries) * 12,
+            ];
+        }
+
+        // Tenure statistics (if hire_date is available)
+        $currentYear = date('Y');
+        $tenureGroups = [
+            '<1 year' => 0,
+            '1-3 years' => 0,
+            '3-5 years' => 0,
+            '5-10 years' => 0,
+            '>10 years' => 0,
+        ];
+
+        foreach ($employees as $employee) {
+            if (!empty($employee->hire_date)) {
+                $hireYear = date('Y', strtotime($employee->hire_date));
+                $years = $currentYear - $hireYear;
+
+                if ($years < 1) $tenureGroups['<1 year']++;
+                elseif ($years <= 3) $tenureGroups['1-3 years']++;
+                elseif ($years <= 5) $tenureGroups['3-5 years']++;
+                elseif ($years <= 10) $tenureGroups['5-10 years']++;
+                else $tenureGroups['>10 years']++;
+            }
+        }
+        $stats['tenure_summary'] = $tenureGroups;
+
+        // Status statistics (if status field exists)
+        if (isset($employees[0]->status)) {
+            $statuses = array_column($employees, 'status');
+            $stats['status_summary'] = array_count_values($statuses);
+        }
+
+        return $stats;
+    }
+
     private function buildRoleBasedQuery($orgId, $roleFilters)
     {
         $baseFields = "e.id, e.organization_id, e.user_id, e.phone, e.hire_date, e.job_title, e.department, e.reports_to, e.status, e.created_at";
-        
+
         // Field-level security based on role
         if (isset($roleFilters['payroll_access']) || isset($roleFilters['financial_access'])) {
             // Payroll/Finance roles can see financial data
             $baseFields .= ", e.base_salary, e.bank_account_number, e.tax_id";
         }
-        
+
         if (isset($roleFilters['full_access']) || in_array($roleFilters['user_type'] ?? '', ['admin', 'hr_manager'])) {
             // Full access roles can see all fields
             $baseFields = "e.*";
@@ -459,14 +624,14 @@ class EmployeeController {
     private function applyFieldLevelSecurity($employees, $roleFilters)
     {
         $sensitiveFields = ['base_salary', 'bank_account_number', 'tax_id', 'personal_email'];
-        
+
         foreach ($employees as $employee) {
             // Remove sensitive fields based on role
             if (isset($roleFilters['employee_id'])) {
                 // Employees can see all their own data
                 continue;
             }
-            
+
             if (isset($roleFilters['team_employees'])) {
                 // Managers cannot see sensitive financial data of team members
                 foreach ($sensitiveFields as $field) {
@@ -475,7 +640,7 @@ class EmployeeController {
                     }
                 }
             }
-            
+
             if (isset($roleFilters['read_only'])) {
                 // Auditors can see financial data but not personal contact info
                 if (isset($employee->personal_email)) {
@@ -486,7 +651,7 @@ class EmployeeController {
                 }
             }
         }
-        
+
         return $employees;
     }
 
@@ -558,7 +723,7 @@ class EmployeeController {
                 WHERE reports_to = :manager_id 
                 AND status = 'active'
             ";
-            
+
             $result = DB::raw($query, [':manager_id' => $managerId]);
             return array_column($result, 'id');
         } catch (\Exception $e) {

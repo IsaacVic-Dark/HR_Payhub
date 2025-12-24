@@ -19,6 +19,7 @@ type SectionCardProps = {
   icon?: React.ReactNode;
   rateIcon?: React.ReactNode;
   footerIcon?: React.ReactNode;
+  mainIcon?: React.ReactNode;
 };
 
 export function SectionCard({

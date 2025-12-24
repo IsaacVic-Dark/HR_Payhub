@@ -27,6 +27,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+import { useAuth } from '@/lib/AuthContext';
+
 export type Employee = {
   id: string;
   img: React.ReactNode;
@@ -68,7 +70,8 @@ export function EmployeeDrawerAdd({
 }) {
   const isMobile = useIsMobile();
   const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
-
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
   const [message, setMessage] = React.useState("");
   const [status, setStatus] = React.useState("");
   const [formData, setFormData] = React.useState({
@@ -85,6 +88,7 @@ export function EmployeeDrawerAdd({
     employment_type: "",
     salary: "",
   });
+  const { user } = useAuth();
 
   const operationsManagers = React.useMemo(() => {
     return employees.filter((emp) =>
@@ -119,8 +123,13 @@ export function EmployeeDrawerAdd({
     };
 
     try {
+          if (!user?.organization_id) {
+      setError('No organization ID found. Please log in again.');
+      setLoading(false);
+      return;
+    }
       const response = await fetch(
-        "http://localhost:8000/api/v1/organizations/51/employees",
+        `http://localhost:8000/api/v1/organizations/${user.organization_id}/employees`,
         {
           method: "POST",
           headers: {
@@ -412,7 +421,7 @@ export function EmployeeDrawerAdd({
                         />
                       </svg>
                       <span className="text-sm font-small text-gray-800 w-full">
-                        <PhoneInput
+                        <Input
                           value={formData.phone}
                           onChange={(e) =>
                             setFormData({ ...formData, phone: e.target.value })

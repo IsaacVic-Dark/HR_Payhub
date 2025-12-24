@@ -24,7 +24,7 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `id` int NOT NULL AUTO_INCREMENT,
   `organization_id` int NOT NULL,
   `user_id` int DEFAULT NULL,
-  `email` varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci DEFAULT NULL,
+  -- EMAIL COLUMN REMOVED - Use users.email instead via JOIN
   `phone` varchar(20) DEFAULT NULL,
   `hire_date` date NOT NULL,
   `job_title` varchar(100) DEFAULT NULL,
@@ -39,8 +39,7 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `employment_type` enum('full_time','part_time','contract') DEFAULT 'full_time',
   `work_location` enum('on-site','hybrid','remote') DEFAULT 'on-site',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `email` (`email`),
-  UNIQUE KEY `email_2` (`email`),
+  -- UNIQUE CONSTRAINTS ON EMAIL REMOVED
   KEY `user_id` (`user_id`),
   KEY `reports_to` (`reports_to`),
   KEY `idx_employee_org` (`organization_id`,`id`),

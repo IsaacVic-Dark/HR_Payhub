@@ -42,7 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import { EmployeeDrawer, EmployeeDrawerAdd, EmployeeDrawerEdit } from "@/components/employee-drawer";
+import { EmployeeDrawer, EmployeeDrawerAdd, EmployeeDrawerEdit } from "@/app/employees/components/employee-drawer";
 import { employeeAPI, EmployeeType } from "@/services/api/employee";
 import { useAuth } from "@/lib/AuthContext";
 import { toast } from "sonner";

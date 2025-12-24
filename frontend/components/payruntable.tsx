@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
+import { Button } from "@/components/ui/button";
 import { Filter, Search, UserPlus, Download, MoreHorizontal, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 
 const PayrollTable = () => {
@@ -208,10 +209,10 @@ const PayrollTable = () => {
                 className="pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
-            <button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
+            <Button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
               <UserPlus className="w-4 h-4" />
               Add Employee
-            </button>
+            </Button>
           </div>
         </div>
         {/* Table */}
