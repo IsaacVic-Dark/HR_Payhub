@@ -196,10 +196,6 @@ export function DataTableEmployees() {
 
       const response = await employeeAPI.getEmployees(user.organization_id);
 
-      console.log({ response });
-      console.log("Response success: ", response.success);
-      console.log("Response data: ", response.data);
-
       if (response.success && response.data) {
         // Extract the employees array from the data property
         const employeesData = response.data.data || [];
@@ -228,7 +224,6 @@ export function DataTableEmployees() {
         setEmployees(transformedEmployees);
 
         if (transformedEmployees.length > 0) {
-          console.log("Employees fetched successfully:", transformedEmployees);
           toast.success(`Loaded ${transformedEmployees.length} employees`);
         } else {
           console.warn("No employees found");
