@@ -64,10 +64,6 @@ const LeaveTable: React.FC = () => {
 
       const response = await leaveAPI.getLeaves(user.organization_id, apiFilters);
 
-      console.log({response});
-      console.log("Response success: ", response.success);
-      console.log("Response data: ", response.data);
-
       if (response.success && response.data) {
         // Access the data directly from response.data
         const leavesData = response.data.leaves || [];
