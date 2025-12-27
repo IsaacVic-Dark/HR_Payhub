@@ -224,7 +224,6 @@ export function DataTablePayroll() {
       setEmployees(transformedEmployees);
 
       if (transformedEmployees.length > 0) {
-        console.log("Employees fetched successfully:", transformedEmployees);
       } else {
         console.warn("No employees found");
       }
