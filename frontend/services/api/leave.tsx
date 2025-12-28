@@ -162,7 +162,11 @@ class LeaveAPI {
   ): Promise<ApiResponse<LeavesResponseData>> {
     try {
       const queryParams = this.buildQueryParams(filters);
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves${queryParams ? `?${queryParams}` : ""}`;
+      const url = `${
+        process.env.NEXT_PUBLIC_BACKEND_API_URL
+      }/organizations/${organizationId}/leaves${
+        queryParams ? `?${queryParams}` : ""
+      }`;
 
       const response = await fetch(url, {
         method: "GET",
@@ -180,19 +184,17 @@ class LeaveAPI {
     }
   }
 
-  async updateLeaveStatus(
+  async approveLeave(
     organizationId: number,
-    leaveId: number,
-    status: string
+    leaveId: number
   ): Promise<ApiResponse> {
     try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves/${leaveId}/status`;
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves/${leaveId}/approve`;
 
       const response = await fetch(url, {
-        method: "PUT",
-        credentials: "include", // Send cookies with request
+        method: "POST",
+        credentials: "include",
         headers: this.getAuthHeaders(),
-        body: JSON.stringify({ status }),
       });
 
       return this.handleResponse(response);
@@ -200,9 +202,34 @@ class LeaveAPI {
       return {
         success: false,
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to update leave status",
+          error instanceof Error ? error.message : "Failed to approve leave",
+      };
+    }
+  }
+
+  async rejectLeave(
+    organizationId: number,
+    leaveId: number,
+    rejectionReason?: string
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves/${leaveId}/reject`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({
+          rejection_reason: rejectionReason || "",
+        }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to reject leave",
       };
     }
   }
