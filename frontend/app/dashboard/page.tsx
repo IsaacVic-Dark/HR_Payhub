@@ -105,7 +105,20 @@ export default function Page() {
   };
 
   return (
-    <ProtectedLayout requiredRoles={['super_admin','admin','hr_manager','hr_officer','payroll_manager','payroll_officer','finance_manager','auditor','department_manager','employee']}>
+    <ProtectedLayout
+      requiredRoles={[
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "hr_officer",
+        "payroll_manager",
+        "payroll_officer",
+        "finance_manager",
+        "auditor",
+        "department_manager",
+        "employee",
+      ]}
+    >
       <SidebarProvider
         style={
           {
@@ -140,8 +153,8 @@ export default function Page() {
                     {isSuperAdmin
                       ? "Super Administrator"
                       : isAdmin
-                        ? "Administrator"
-                        : "Employee"}
+                      ? "Administrator"
+                      : "Employee"}
                   </span>
                   {isSuperAdmin && (
                     <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full">
@@ -153,13 +166,12 @@ export default function Page() {
               <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
                 <SectionCards details={cardDetails} />
 
-                {/* Admin-only cards - Use conditional rendering instead of ProtectedLayout */}
                 {(isSuperAdmin || isAdmin) && (
                   <SectionCards details={adminCards} />
                 )}
 
                 {/* Reports section - only for admins and super_admins */}
-                {hasRole(['super_admin', 'admin']) && (
+                {hasRole(["super_admin", "admin"]) && (
                   <>
                     <div className="px-4 lg:px-6">
                       <PayrollDashboard />
@@ -169,7 +181,7 @@ export default function Page() {
                 )}
 
                 {/* Employee-specific content - Use conditional rendering */}
-                {hasRole(['employee']) && (
+                {hasRole(["employee"]) && (
                   <div className="px-4 lg:px-6">
                     <div className="bg-white p-6 rounded-lg border">
                       <h3 className="text-lg font-semibold mb-4">
