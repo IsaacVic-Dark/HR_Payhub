@@ -25,11 +25,12 @@ interface SectionCardsProps {
   details: CardDetail[];
 }
 
+// In section-cards.tsx, change the main div class
 export function SectionCards({ details }: SectionCardsProps) {
   return (
-    <div className="*:data-[slot=card]:from-primary/4 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
+    <div className="*:data-[slot=card]:from-primary/4 *:data-[slot=card]:to-card dark:*:data-[slot=card]:bg-card grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:group-data-[state=expanded]/sidebar:grid-cols-4 xl:group-data-[state=collapsed]/sidebar:grid-cols-5 gap-3 px-4 *:data-[slot=card]:bg-gradient-to-t *:data-[slot=card]:shadow-xs lg:px-6">
       {details.map((detail, index) => (
-        <Card className="" key={index}>
+        <Card className="min-w-0" key={index}> {/* Add min-w-0 to prevent overflow */}
           <CardHeader className="pb-0">
             <CardDescription className="text-xs">{detail.title}</CardDescription>
             <CardTitle className="text-xl font-semibold tabular-nums @[250px]/card:text-2xl">
