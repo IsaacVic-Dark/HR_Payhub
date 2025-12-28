@@ -58,7 +58,7 @@ export function LeaveViewDrawer({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
-      <DrawerContent 
+      <DrawerContent
         className="h-full min-w-xl ml-auto bg-white"
         onInteractOutside={() => onOpenChange(false)}
         onEscapeKeyDown={() => onOpenChange(false)}
@@ -90,7 +90,8 @@ export function LeaveViewDrawer({
               <div>
                 <span className="text-gray-600">Full Name</span>
                 <p className="font-medium">
-                  {leave.first_name} {leave.surname}
+                  {leave.employee_first_name} {leave.employee_middle_name}{" "}
+                  {leave.employee_surname}
                 </p>
               </div>
               <div>
@@ -118,6 +119,30 @@ export function LeaveViewDrawer({
               <div>
                 <span className="text-gray-600">Status</span>
                 <div className="mt-1">{getStatusBadge(leave.status)}</div>
+              </div>
+              <div>
+                <span className="text-gray-600">Approver</span>
+                <p className="font-medium">
+                  {leave.approver_first_name ||
+                  leave.approver_middle_name ||
+                  leave.approver_surname
+                    ? `${leave.approver_first_name ?? ""} ${
+                        leave.approver_middle_name ?? ""
+                      } ${leave.approver_surname ?? ""}`.trim()
+                    : "-"}
+                </p>
+              </div>
+              <div>
+                <span className="text-gray-600">Reliver</span>
+                <p className="font-medium">
+                  {leave.reliever_first_name ||
+                  leave.reliever_middle_name ||
+                  leave.reliever_surname
+                    ? `${leave.reliever_first_name ?? ""} ${
+                        leave.reliever_middle_name ?? ""
+                      } ${leave.reliever_surname ?? ""}`.trim()
+                    : "-"}
+                </p>
               </div>
               <div>
                 <span className="text-gray-600">Start Date</span>
@@ -180,7 +205,9 @@ export function LeaveViewDrawer({
 
         <DrawerFooter className="border-t p-6">
           <DrawerClose asChild>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
