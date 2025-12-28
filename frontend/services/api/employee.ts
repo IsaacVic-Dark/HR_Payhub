@@ -112,7 +112,7 @@ class EmployeeAPI {
       // Return the entire response data structure
       return {
         success: true,
-        data: data,
+        data: data.data,
         message: data.message,
         metadata: data.metadata,
       };
