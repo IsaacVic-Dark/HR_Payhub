@@ -308,28 +308,42 @@ function time_ago($datetime, $full = false)
     return $string ? implode(', ', $string) . ' ago' : 'just now';
 }
 
-function responseJson(
-    $data,
-    string $message,
-    int $code = 200,
-    array $metadata = [],
-    ? bool $success = null
-) {
-    // Decide success if not explicitly set
-    if ($success === null) {
-        $success = $code >= 200 && $code < 300;
+    function responseJson(
+        bool $success,
+        $data = null,
+        string $message = '',
+        int $code = 200,
+        $metadata = null,
+        array $errors = []
+    ) {
+        http_response_code($code);
+        header('Content-Type: application/json');
+        
+        $response = [
+            'success' => $success,
+            'message' => $message,
+            'code' => $code,
+            'timestamp' => time()
+        ];
+        
+        // Add data if provided
+        if ($data !== null) {
+            $response['data'] = $data;
+        }
+
+        // Add metadata if provided
+        if ($metadata !== null) {
+            $response['metadata'] = $metadata;
+        }
+        
+        // Add errors if provided (only for failed responses)
+        if (!$success && !empty($errors)) {
+            $response['errors'] = $errors;
+        }
+        
+        echo json_encode($response);
+        exit;
     }
-
-    http_response_code($code);
-
-    echo json_encode([
-        'success' => $success,
-        'data' => $data,
-        'message' => $message,
-        'metadata' => $metadata ?: null
-    ]);
-    exit(0);
-}
 
 function getInputData(): array
 {
