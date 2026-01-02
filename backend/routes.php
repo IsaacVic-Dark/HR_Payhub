@@ -124,6 +124,15 @@ Router::post('api/v1/organizations/{org_id}/leaves/{id}/reject', LeaveController
     'LeaveAuthorizationMiddleware'
 ]);
 
+// Employee leave routes
+Router::get('api/v1/organizations/{org_id}/employees/{id}/leaves', LeaveController::class . '@myLeaves', [
+    'AuthMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/employees/{id}/leaves', LeaveController::class . '@applyLeave', [
+    'AuthMiddleware'
+]);
+
 // Notification routes with comprehensive authentication and authorization
 Router::get('api/v1/organizations/{org_id}/notifications', NotificationController::class . '@index', [
     'AuthMiddleware',
