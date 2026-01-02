@@ -1,4 +1,3 @@
-// components/ui/data-table.tsx
 'use client';
 
 import React, { ReactNode } from 'react';
@@ -75,13 +74,6 @@ export function DataTable<T>({
       onLimitChange(newLimit);
     }
   };
-
-  // console.log('Table debug:', {
-  //   hasPagination: !!pagination,
-  //   hasData: data.length > 0,
-  //   totalPages: pagination?.totalPages,
-  //   onPageChange: !!onPageChange
-  // });
 
   return (
     <div className={`w-full mx-auto p-4 bg-white ${className}`}>

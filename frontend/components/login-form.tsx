@@ -12,7 +12,7 @@ const TEST_USERS = {
   super_admin: { email: "max@example.com", password: "password" },
   admin: { email: "nyzigilev@example.com", password: "password" },
   hr_manager: { email: "hr@example.com", password: "password" },
-  employee: { email: "employee@example.com", password: "password" },
+  employee: { email: "s.doe@klinebaxteras.com", password: "password" },
   payroll_manager: { email: "payroll@example.com", password: "password" },
   finance_manager: { email: "finance@example.com", password: "password" },
   auditor: { email: "auditor@example.com", password: "password" },

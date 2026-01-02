@@ -281,7 +281,7 @@ const data = {
         },
         {
           title: "My Leaves",
-          url: "/my-leave",
+          url: "/myleave",
           roles: ["employee"],
         },
       ],
