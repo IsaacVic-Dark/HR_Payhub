@@ -6,17 +6,6 @@ use App\Services\DB;
 
 class LeaveController
 {
-    public function test()
-    {
-        return responseJson(
-            success: true,
-            data: null,
-            message: "Test",
-            code: 200,
-            metadata: null,
-            errors: []
-        );
-    }
     /**
      * Get all leaves with pagination and auto-expire old leaves
      */
@@ -1533,8 +1522,8 @@ class LeaveController
                 );
             }
 
-// Verify employee exists and belongs to organization
-$employeeCheck = DB::raw("
+            // Verify employee exists and belongs to organization
+            $employeeCheck = DB::raw("
     SELECT 
         e.*, 
         u.organization_id,
@@ -1752,7 +1741,6 @@ $employeeCheck = DB::raw("
                 );
             }
 
-            // Get basic statistics (simplified to avoid parameter conflicts)
             $statsQuery = "
     SELECT 
         COUNT(*) as total_leaves,
@@ -1761,7 +1749,13 @@ $employeeCheck = DB::raw("
         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) as rejected_leaves,
         SUM(CASE WHEN status = 'expired' THEN 1 ELSE 0 END) as expired_leaves,
         SUM(CASE WHEN YEAR(start_date) = YEAR(CURDATE()) THEN 1 ELSE 0 END) as current_year_leaves,
-        AVG(DATEDIFF(end_date, start_date) + 1) as average_duration_days
+        AVG(DATEDIFF(end_date, start_date) + 1) as average_duration_days,
+        SUM(CASE WHEN leave_type = 'sick' THEN 1 ELSE 0 END) as sick_leaves,
+        SUM(CASE WHEN leave_type = 'casual' THEN 1 ELSE 0 END) as casual_leaves,
+        SUM(CASE WHEN leave_type = 'annual' THEN 1 ELSE 0 END) as annual_leaves,
+        SUM(CASE WHEN leave_type = 'maternity' THEN 1 ELSE 0 END) as maternity_leaves,
+        SUM(CASE WHEN leave_type = 'paternity' THEN 1 ELSE 0 END) as paternity_leaves,
+        SUM(CASE WHEN leave_type = 'other' THEN 1 ELSE 0 END) as other_leaves
     FROM leaves
     $whereClause
 ";
@@ -1883,17 +1877,25 @@ $employeeCheck = DB::raw("
                         'current_year_leaves' => (int) ($stats->current_year_leaves ?? 0),
                         'average_duration_days' => round($stats->average_duration_days ?? 0, 1),
                         'most_common_type' => $mostCommonType,
-                        'leave_utilization_rate' => '0%' // Simplified for now
+                        'leave_utilization_rate' => '0%', // Simplified for now
+                        'by_type' => [
+                            'sick' => (int) ($stats->sick_leaves ?? 0),
+                            'casual' => (int) ($stats->casual_leaves ?? 0),
+                            'annual' => (int) ($stats->annual_leaves ?? 0),
+                            'maternity' => (int) ($stats->maternity_leaves ?? 0),
+                            'paternity' => (int) ($stats->paternity_leaves ?? 0),
+                            'other' => (int) ($stats->other_leaves ?? 0)
+                        ]
                     ],
-'employee_info' => [
-    'employee_id' => (int) $id,
-    'employee_name' => ($employeeCheck[0]->first_name ?? '') . ' ' . ($employeeCheck[0]->surname ?? ''),
-    'employee_email' => $employeeCheck[0]->email ?? 'Not specified',
-    'job_title' => $employeeCheck[0]->job_title ?? 'Not specified',
-    'department' => $employeeCheck[0]->department ?? 'Not specified',
-    'employment_type' => $employeeCheck[0]->employment_type ?? 'Not specified',
-    'status' => $employeeCheck[0]->status ?? 'Not specified'
-]
+                    'employee_info' => [
+                        'employee_id' => (int) $id,
+                        'employee_name' => ($employeeCheck[0]->first_name ?? '') . ' ' . ($employeeCheck[0]->surname ?? ''),
+                        'employee_email' => $employeeCheck[0]->email ?? 'Not specified',
+                        'job_title' => $employeeCheck[0]->job_title ?? 'Not specified',
+                        'department' => $employeeCheck[0]->department ?? 'Not specified',
+                        'employment_type' => $employeeCheck[0]->employment_type ?? 'Not specified',
+                        'status' => $employeeCheck[0]->status ?? 'Not specified'
+                    ]
                 ]
             );
         } catch (\Exception $e) {

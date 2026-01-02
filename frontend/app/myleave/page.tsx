@@ -7,7 +7,10 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import EmployeeLeaveTable from "@/app/myleave/components/employee-leave-table";
-import { leaveAPI, type EmployeeLeavesResponseData } from "@/services/api/leave";
+import {
+  leaveAPI,
+  type EmployeeLeavesResponseData,
+} from "@/services/api/leave";
 import { useAuth } from "@/lib/AuthContext";
 import { IconCalendar, IconCheck, IconX, IconClock } from "@tabler/icons-react";
 
@@ -28,13 +31,16 @@ export default function MyLeavePage() {
       if (!user?.organization_id || !user?.employee?.id) return;
 
       try {
-        const response = await leaveAPI.getEmployeeLeaves(user.organization_id, user.employee.id);
+        const response = await leaveAPI.getEmployeeLeaves(
+          user.organization_id,
+          user.employee.id
+        );
 
         console.log("Employee Leaves statistics API Response:", response);
-        
+
         if (response.success && response.data) {
-          setStatistics(response.metadata.statistics);
-          setDaysSummary(response.metadata.statistics.days_summary);
+          setStatistics(response.data.metadata.statistics);
+          setDaysSummary(response.data.metadata.statistics.days_summary);
         }
       } catch (error) {
         console.error("Failed to fetch employee leave statistics:", error);
@@ -62,7 +68,11 @@ export default function MyLeavePage() {
         },
         {
           title: "Approved",
-          value: statistics.by_status.approved.toString(),
+          value:
+            statistics.approved !== undefined
+              ? statistics.approved.toString()
+              : "0",
+
           change: "",
           changeIcon: null,
           description: "Leaves that have been approved",
@@ -71,7 +81,7 @@ export default function MyLeavePage() {
         },
         {
           title: "Pending",
-          value: statistics.by_status.pending.toString(),
+          value: (statistics.pending ?? 0).toString(),
           change: "",
           changeIcon: null,
           description: "Leaves awaiting approval",
@@ -80,7 +90,7 @@ export default function MyLeavePage() {
         },
         {
           title: "Rejected",
-          value: statistics.by_status.rejected.toString(),
+          value: (statistics.rejected ?? 0).toString(),
           change: "",
           changeIcon: null,
           description: "Leaves that were not approved",
@@ -141,73 +151,81 @@ export default function MyLeavePage() {
               <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
                 <SectionCards details={cardDetails} />
               </div>
-              
+
               {/* Days Summary */}
               {daysCards.length > 0 && (
                 <div className="peer-data-[state=expanded]:xl:grid-cols-2 peer-data-[state=collapsed]:xl:grid-cols-3">
                   <SectionCards details={daysCards} />
                 </div>
               )}
-              
+
               {/* Leave Type Breakdown (if available) */}
               {statistics && (
                 <div className="mt-4">
-                  <h2 className="text-lg font-medium mb-4 mx-6">Leave Type Breakdown</h2>
+                  <h2 className="text-lg font-medium mb-4 mx-6">
+                    Leave Type Breakdown
+                  </h2>
                   <div className="peer-data-[state=expanded]:xl:grid-cols-6 peer-data-[state=collapsed]:xl:grid-cols-6">
-                    <SectionCards details={[
-                      {
-                        title: "Sick",
-                        value: statistics.by_type.sick.toString(),
-                        change: "",
-                        changeIcon: null,
-                        description: "Sick leaves taken",
-                        footerText: "Health related",
-                      },
-                      {
-                        title: "Casual",
-                        value: statistics.by_type.casual.toString(),
-                        change: "",
-                        changeIcon: null,
-                        description: "Casual leaves taken",
-                        footerText: "Personal time",
-                      },
-                      {
-                        title: "Annual",
-                        value: statistics.by_type.annual.toString(),
-                        change: "",
-                        changeIcon: null,
-                        description: "Annual leaves taken",
-                        footerText: "Vacation time",
-                      },
-                      {
-                        title: "Maternity",
-                        value: statistics.by_type.maternity.toString(),
-                        change: "",
-                        changeIcon: null,
-                        description: "Maternity leaves taken",
-                        footerText: "Family planning",
-                      },
-                      {
-                        title: "Paternity",
-                        value: statistics.by_type.paternity.toString(),
-                        change: "",
-                        changeIcon: null,
-                        description: "Paternity leaves taken",
-                        footerText: "Family support",
-                      },
-                      {
-                        title: "Other",
-                        value: statistics.by_type.other.toString(),
-                        change: "",
-                        changeIcon: null,
-                        description: "Other leaves taken",
-                        footerText: "Special cases",
-                      },
-                    ]} />
+                    <SectionCards
+                      details={[
+                        {
+                          title: "Sick",
+                          value: (statistics.by_type?.sick ?? 0).toString(),
+                          change: "",
+                          changeIcon: null,
+                          description: "Sick leaves taken",
+                          footerText: "Health related",
+                        },
+                        {
+                          title: "Casual",
+                          value: (statistics.by_type?.casual ?? 0).toString(),
+                          change: "",
+                          changeIcon: null,
+                          description: "Casual leaves taken",
+                          footerText: "Personal time",
+                        },
+                        {
+                          title: "Annual",
+                          value: (statistics.by_type?.annual ?? 0).toString(),
+                          change: "",
+                          changeIcon: null,
+                          description: "Annual leaves taken",
+                          footerText: "Vacation time",
+                        },
+                        {
+                          title: "Maternity",
+                          value: (
+                            statistics.by_type?.maternity ?? 0
+                          ).toString(),
+                          change: "",
+                          changeIcon: null,
+                          description: "Maternity leaves taken",
+                          footerText: "Family planning",
+                        },
+                        {
+                          title: "Paternity",
+                          value: (
+                            statistics.by_type?.paternity ?? 0
+                          ).toString(),
+                          change: "",
+                          changeIcon: null,
+                          description: "Paternity leaves taken",
+                          footerText: "Family support",
+                        },
+                        {
+                          title: "Other",
+                          value: (statistics.by_type?.other ?? 0).toString(),
+                          change: "",
+                          changeIcon: null,
+                          description: "Other leaves taken",
+                          footerText: "Special cases",
+                        },
+                      ]}
+                    />
                   </div>
                 </div>
               )}
-              
+
               {/* Leave Table */}
               <EmployeeLeaveTable />
             </div>
