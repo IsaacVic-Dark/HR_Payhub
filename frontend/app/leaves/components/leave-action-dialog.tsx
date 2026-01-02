@@ -91,7 +91,7 @@ export function LeaveActionDialog({
         {isApply && children && <div className="py-4">{children}</div>}
 
         {/* ADD: Rejection reason textarea for reject action */}
-        {isReject && (
+        {/* {isReject && (
           <div className="py-4 space-y-2">
             <label className="text-sm font-medium text-gray-700">
               Rejection Reason (Optional)
@@ -105,7 +105,7 @@ export function LeaveActionDialog({
               disabled={loading}
             />
           </div>
-        )}
+        )} */}
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>

@@ -26,9 +26,9 @@ export default function Page() {
       try {
         const response = await leaveAPI.getLeaves(user.organization_id);
 
-        if (response.success && response.data) {
-          setStatistics(response.data.statistics);
-        }
+      if (response.success && response.data) {
+        setStatistics(response.metadata?.statistics);
+      }
       } catch (error) {
         console.error("Failed to fetch leave statistics:", error);
       } finally {
