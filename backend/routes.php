@@ -11,6 +11,7 @@ use App\Controllers\PayrunDetailController;
 use App\Controllers\LeaveController;
 use App\Controllers\NotificationController;
 use App\Controllers\AuthController;
+use App\Controllers\PayrollController;
 
 // Authentication routes - NO authentication required
 Router::post('/api/v1/auth/login', [AuthController::getInstance(), 'login']);
@@ -157,6 +158,32 @@ Router::patch('api/v1/organizations/{org_id}/notifications/mark-all-read', Notif
 Router::delete('api/v1/organizations/{org_id}/notifications/{id}', NotificationController::class . '@destroy', [
     ['AuthMiddleware', ['admin', 'hr_manager']],
     'NotificationAuthorizationMiddleware'
+]);
+
+// Payroll routes with comprehensive authentication and authorization
+Router::get('api/v1/organizations/{org_id}/payrolls', PayrollController::class . '@index', [
+    'AuthMiddleware',
+    'PayrollAuthorizationMiddleware'
+]);
+
+Router::get('api/v1/organizations/{org_id}/payrolls/{id}', PayrollController::class . '@show', [
+    'AuthMiddleware',
+    'PayrollAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/payrolls', PayrollController::class . '@store', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'PayrollAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/payrolls/{id}/approve', PayrollController::class . '@approve', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager']],
+    'PayrollAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/payrolls/{id}/pay', PayrollController::class . '@pay', [
+    ['AuthMiddleware', ['admin', 'finance_manager']],
+    'PayrollAuthorizationMiddleware'
 ]);
 
 // Test route
