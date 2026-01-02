@@ -113,8 +113,13 @@ const LeaveTable: React.FC = () => {
       );
 
       if (response.success && response.data) {
-        const leavesData = response.data.leaves || [];
-        const paginationData = response.data.pagination;
+        // response.data is already the array of leaves
+        const leavesData = Array.isArray(response.data)
+          ? response.data
+          : response.data.leaves || [];
+
+        // Get pagination from metadata
+        const paginationData = response.metadata?.pagination;
 
         setLeaves(leavesData);
         setTotalItems(paginationData?.total || 0);
