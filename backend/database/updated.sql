@@ -392,6 +392,51 @@ CREATE TABLE IF NOT EXISTS `users` (
   CONSTRAINT `users_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- Payrolls table for individual employee payroll records
+CREATE TABLE IF NOT EXISTS `payrolls` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organization_id` int NOT NULL,
+  `employee_id` int NOT NULL,
+  `pay_period_month` int NOT NULL,
+  `pay_period_year` int NOT NULL,
+  `basic_salary` decimal(15,2) NOT NULL,
+  `overtime_amount` decimal(15,2) DEFAULT '0.00',
+  `bonus_amount` decimal(15,2) DEFAULT '0.00',
+  `commission_amount` decimal(15,2) DEFAULT '0.00',
+  `gross_pay` decimal(15,2) NOT NULL,
+  `nssf` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `shif` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `housing_levy` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `taxable_income` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `tax_before_relief` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `personal_relief` decimal(15,2) NOT NULL DEFAULT '2400.00',
+  `paye` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `total_deductions` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `net_pay` decimal(15,2) NOT NULL,
+  `status` enum('pending','approved','paid') DEFAULT 'pending',
+  `approved_by` int DEFAULT NULL,
+  `approved_at` timestamp NULL DEFAULT NULL,
+  `paid_by` int DEFAULT NULL,
+  `paid_at` timestamp NULL DEFAULT NULL,
+  `created_by` int NOT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_employee_period` (`employee_id`, `pay_period_month`, `pay_period_year`),
+  KEY `organization_id` (`organization_id`),
+  KEY `employee_id` (`employee_id`),
+  KEY `status` (`status`),
+  KEY `pay_period` (`pay_period_month`, `pay_period_year`),
+  KEY `created_by` (`created_by`),
+  KEY `approved_by` (`approved_by`),
+  KEY `paid_by` (`paid_by`),
+  CONSTRAINT `payrolls_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `payrolls_ibfk_2` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `payrolls_ibfk_3` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`),
+  CONSTRAINT `payrolls_ibfk_4` FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`),
+  CONSTRAINT `payrolls_ibfk_5` FOREIGN KEY (`paid_by`) REFERENCES `users` (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- Data exporting was unselected.
 
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
