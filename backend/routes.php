@@ -24,9 +24,28 @@ Router::post('/api/v1/auth/refresh', AuthController::class . '@refreshToken');
 Router::post('/api/v1/auth/logout',  [AuthController::getInstance(), 'logout'], ['AuthMiddleware']);
 Router::get('/api/v1/auth/me', [AuthController::getInstance(), 'me'], ['AuthMiddleware']);
 
-// Organization routes with authentication
-Router::resource('api/v1/organizations', OrganizationController::class, ['AuthMiddleware']);
-Router::put('api/v1/organizations/{id}', OrganizationController::class . '@update');
+// Add this route for getting organization details
+Router::get('api/v1/organizations/{org_id}/details', OrganizationController::class . '@showDetails', [
+    'AuthMiddleware',
+    'OrganizationAuthorizationMiddleware'
+]);
+
+// Also update the existing organization routes to use proper authentication
+Router::get('api/v1/organizations/{id}', OrganizationController::class . '@show', [
+    'AuthMiddleware',
+    'OrganizationAuthorizationMiddleware'
+]);
+
+Router::put('api/v1/organizations/{id}', OrganizationController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'finance_manager']],
+    'OrganizationAuthorizationMiddleware'
+]);
+
+Router::delete('api/v1/organizations/{id}', OrganizationController::class . '@destroy', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+
 Router::resource('api/v1/organizations/{id}/configs', OrganizationConfigController::class, ['AuthMiddleware']);
 
 // User routes with authentication
