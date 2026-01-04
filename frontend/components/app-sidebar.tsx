@@ -106,7 +106,7 @@ const data = {
       items: [
         {
           title: "Payroll",
-          url: "/payrolls",
+          url: "/payroll",
           roles: ["super_admin", "admin", "payroll_manager"],
         },
         {
@@ -362,7 +362,8 @@ const data = {
       items: [
         {
           title: "Company Profile",
-          url: "/company-profile",
+          // url: "/company-profile",
+          url: "/company-settings",
           roles: ["super_admin", "admin"],
         },
         {
