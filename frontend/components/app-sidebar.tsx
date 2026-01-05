@@ -86,13 +86,13 @@ const data = {
       hasDropdown: true,
       items: [
         {
-          title: "Active Payruns",
-          url: "/payrun/active",
+          title: "Payruns History",
+          url: "/payrun/history",
           roles: ["super_admin", "admin", "payroll_manager"],
         },
         {
-          title: "Payrun History",
-          url: "/payrun/history",
+          title: "Employee Payruns",
+          url: "/payrun/employees",
           roles: ["super_admin", "admin", "payroll_manager"],
         },
       ],
