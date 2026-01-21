@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `id` int NOT NULL AUTO_INCREMENT,
   `organization_id` int NOT NULL,
   `user_id` int DEFAULT NULL,
+  `employee_number` varchar(50) NOT NULL,
   -- EMAIL COLUMN REMOVED - Use users.email instead via JOIN
   `phone` varchar(20) DEFAULT NULL,
   `hire_date` date NOT NULL,
@@ -43,6 +44,7 @@ CREATE TABLE IF NOT EXISTS `employees` (
   KEY `user_id` (`user_id`),
   KEY `reports_to` (`reports_to`),
   KEY `idx_employee_org` (`organization_id`,`id`),
+  UNIQUE KEY `unique_employee_number_per_org` (`organization_id`, `employee_number`),
   CONSTRAINT `employees_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `employees_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `employees_ibfk_3` FOREIGN KEY (`reports_to`) REFERENCES `employees` (`id`) ON DELETE SET NULL
