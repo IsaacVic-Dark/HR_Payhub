@@ -1,21 +1,58 @@
-// app/register/page.tsx - Updated version
 'use client';
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { authService } from '@/services/api/auth'; // Direct API call since AuthContext doesn't have register
+import { authService } from '@/services/api/auth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/lib/AuthContext'; // Import for checkAuthStatus
+import { 
+  Select, 
+  SelectContent, 
+  SelectItem, 
+  SelectTrigger, 
+  SelectValue 
+} from '@/components/ui/select';
+import { useAuth } from '@/lib/AuthContext';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { AlertCircle, Eye, EyeOff } from 'lucide-react';
+
+// Define form data interface
+interface FormData {
+  // Personal Information
+  first_name: string;
+  middle_name: string;
+  surname: string;
+  email: string;
+  phone: string;
+  password: string;
+  confirmPassword: string;
+  
+  // Organization Information
+  organization_name: string;
+  legal_type: string;
+  currency: string;
+  payroll_schedule: string;
+  
+  // Employment Information
+  job_title: string;
+  department: string;
+  base_salary: string;
+  employment_type: string;
+  work_location: string;
+}
+
+// Define errors interface
+interface FormErrors {
+  [key: string]: string;
+}
 
 export default function RegisterPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FormData>({
     // Personal Information
     first_name: '',
     middle_name: '',
@@ -39,9 +76,9 @@ export default function RegisterPage() {
     work_location: 'on-site'
   });
 
-  const [errors, setErrors] = useState({});
+  const [errors, setErrors] = useState<FormErrors>({});
   const [isLoading, setIsLoading] = useState(false);
-  const { checkAuthStatus } = useAuth(); // Imported to refresh auth state after registration
+  const { checkAuthStatus } = useAuth();
   const router = useRouter();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,15 +97,15 @@ export default function RegisterPage() {
     }
   };
 
-  const handleSelectChange = (name: string, value: string) => {
+  const handleSelectChange = (name: keyof FormData, value: string) => {
     setFormData(prev => ({
       ...prev,
       [name]: value
     }));
   };
 
-  const validateForm = () => {
-    const newErrors: Record<string, string> = {};
+  const validateForm = (): boolean => {
+    const newErrors: FormErrors = {};
 
     // Personal info validation
     if (!formData.first_name.trim()) {
@@ -164,9 +201,10 @@ export default function RegisterPage() {
         </CardHeader>
         <CardContent>
           {errors.submit && (
-            <div className="mb-4 p-3 bg-red-100 border border-red-400 text-red-700 rounded">
-              {errors.submit}
-            </div>
+            <Alert variant="destructive" className="mb-4">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{errors.submit}</AlertDescription>
+            </Alert>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-6">
@@ -183,8 +221,8 @@ export default function RegisterPage() {
                     value={formData.first_name}
                     onChange={handleChange}
                     required
+                    error={errors.first_name}
                   />
-                  {errors.first_name && <p className="text-red-500 text-sm">{errors.first_name}</p>}
                 </div>
 
                 <div className="space-y-2">
@@ -195,8 +233,8 @@ export default function RegisterPage() {
                     value={formData.surname}
                     onChange={handleChange}
                     required
+                    error={errors.surname}
                   />
-                  {errors.surname && <p className="text-red-500 text-sm">{errors.surname}</p>}
                 </div>
               </div>
 
@@ -219,8 +257,8 @@ export default function RegisterPage() {
                   value={formData.email}
                   onChange={handleChange}
                   required
+                  error={errors.email}
                 />
-                {errors.email && <p className="text-red-500 text-sm">{errors.email}</p>}
               </div>
 
               <div className="space-y-2">
@@ -237,116 +275,64 @@ export default function RegisterPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="relative space-y-2">
                   <Label htmlFor="password">Password *</Label>
-                  <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={handleChange}
-                    required
-                    disabled={isLoading}
-                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 pr-10 text-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center top-7"
-                  >
-                    {!showPassword ? (
-                      <svg
-                        className="h-4 w-4 text-gray-400 hover:text-gray-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        ></path>
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                        ></path>
-                      </svg>
-                    ) : (
-                      <svg
-                        className="h-4 w-4 text-gray-400 hover:text-gray-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"
-                        ></path>
-                      </svg>
-                    )}
-                  </button>
-                  {errors.password && <p className="text-red-500 text-sm">{errors.password}</p>}
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      name="password"
+                      type={showPassword ? "text" : "password"}
+                      placeholder="Enter your password"
+                      value={formData.password}
+                      onChange={handleChange}
+                      required
+                      disabled={isLoading}
+                      error={errors.password}
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowPassword(!showPassword)}
+                    >
+                      {showPassword ? (
+                        <EyeOff className="h-4 w-4 text-gray-500" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-500" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="relative space-y-2">
                   <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                  <Input
-                    id="confirmPassword"
-                    name="confirmPassword"
-                    type={showConfirmPassword ? "text" : "password"}
-                    placeholder="Confirm your password"
-                    value={formData.confirmPassword}
-                    onChange={handleChange}
-                    required
-                    disabled={isLoading}
-                    className="flex h-10 w-full rounded-md border border-slate-200 bg-white px-3 py-2 pr-10 text-sm placeholder:text-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-950 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="absolute inset-y-0 right-0 pr-3 flex items-center top-7"
-                  >
-                    {!showConfirmPassword ? (
-                      <svg
-                        className="h-4 w-4 text-gray-400 hover:text-gray-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"
-                        ></path>
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"
-                        ></path>
-                      </svg>
-                    ) : (
-                      <svg
-                        className="h-4 w-4 text-gray-400 hover:text-gray-600"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth="2"
-                          d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L3 3m6.878 6.878L21 21"
-                        ></path>
-                      </svg>
-                    )}
-                  </button>
-                  {errors.confirmPassword && <p className="text-red-500 text-sm">{errors.confirmPassword}</p>}
+                  <div className="relative">
+                    <Input
+                      id="confirmPassword"
+                      name="confirmPassword"
+                      type={showConfirmPassword ? "text" : "password"}
+                      placeholder="Confirm your password"
+                      value={formData.confirmPassword}
+                      onChange={handleChange}
+                      required
+                      disabled={isLoading}
+                      error={errors.confirmPassword}
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="h-4 w-4 text-gray-500" />
+                      ) : (
+                        <Eye className="h-4 w-4 text-gray-500" />
+                      )}
+                    </Button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -363,14 +349,17 @@ export default function RegisterPage() {
                   value={formData.organization_name}
                   onChange={handleChange}
                   required
+                  error={errors.organization_name}
                 />
-                {errors.organization_name && <p className="text-red-500 text-sm">{errors.organization_name}</p>}
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="legal_type">Legal Type</Label>
-                  <Select value={formData.legal_type} onValueChange={(value) => handleSelectChange('legal_type', value)}>
+                  <Select 
+                    value={formData.legal_type} 
+                    onValueChange={(value) => handleSelectChange('legal_type', value)}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -389,7 +378,10 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="currency">Currency</Label>
-                  <Select value={formData.currency} onValueChange={(value) => handleSelectChange('currency', value)}>
+                  <Select 
+                    value={formData.currency} 
+                    onValueChange={(value) => handleSelectChange('currency', value)}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -403,7 +395,10 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="payroll_schedule">Payroll Schedule</Label>
-                  <Select value={formData.payroll_schedule} onValueChange={(value) => handleSelectChange('payroll_schedule', value)}>
+                  <Select 
+                    value={formData.payroll_schedule} 
+                    onValueChange={(value) => handleSelectChange('payroll_schedule', value)}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -458,7 +453,10 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="employment_type">Employment Type</Label>
-                  <Select value={formData.employment_type} onValueChange={(value) => handleSelectChange('employment_type', value)}>
+                  <Select 
+                    value={formData.employment_type} 
+                    onValueChange={(value) => handleSelectChange('employment_type', value)}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -472,7 +470,10 @@ export default function RegisterPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="work_location">Work Location</Label>
-                  <Select value={formData.work_location} onValueChange={(value) => handleSelectChange('work_location', value)}>
+                  <Select 
+                    value={formData.work_location} 
+                    onValueChange={(value) => handleSelectChange('work_location', value)}
+                  >
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -493,7 +494,7 @@ export default function RegisterPage() {
             <div className="text-center">
               <p className="text-sm text-gray-600">
                 Already have an account?{' '}
-                <Link href="/login" className="text-blue-600 hover:underline">
+                <Link href="/login" className="text-blue-600 hover:underline font-medium">
                   Sign in
                 </Link>
               </p>
