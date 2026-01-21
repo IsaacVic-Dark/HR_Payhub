@@ -51,6 +51,9 @@ export default function Page() {
           const details = Array.isArray(detailsResponse.data)
             ? detailsResponse.data
             : [];
+
+          console.log("Details for payruns :", details);
+
           setPayrunDetails(details);
 
           const paginationData = detailsResponse.metadata?.pagination;
