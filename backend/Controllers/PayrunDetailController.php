@@ -62,6 +62,7 @@ class PayrunDetailController
                     payrun_details.*,
                     employees.id,
                     employees.job_title,
+                    employees.employee_number,
                     employees.department,
                     users.first_name as employee_first_name,
                     users.middle_name as employee_middle_name,

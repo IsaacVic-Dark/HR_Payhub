@@ -27,6 +27,7 @@ class EmployeeController
             $userFilters = [
                 'department' => $_GET['department'] ?? null,
                 'job_title' => $_GET['job_title'] ?? null,
+                'employee_number' => $_GET['employee_number'] ?? null, // NEW: Added employee number filter
             ];
 
             // Cleanup user filters
@@ -57,6 +58,12 @@ class EmployeeController
             if (!empty($userFilters['job_title'])) {
                 $query .= " AND e.job_title = :job_title";
                 $params[':job_title'] = $userFilters['job_title'];
+            }
+
+            // NEW: Employee number filter
+            if (!empty($userFilters['employee_number'])) {
+                $query .= " AND e.employee_number = :employee_number";
+                $params[':employee_number'] = $userFilters['employee_number'];
             }
 
             // Execute query with parameters to prevent SQL injection
@@ -132,6 +139,7 @@ class EmployeeController
 
             $data = validate([
                 'user_id' => 'numeric',
+                'employee_number' => 'required,string', // NEW: Required employee number
                 'first_name' => 'required,string',
                 'middle_name' => 'string',
                 'surname' => 'required,string',
@@ -145,6 +153,20 @@ class EmployeeController
                 'bank_account_number' => 'string',
                 'tax_id' => 'string'
             ]);
+
+            // NEW: Validate employee number uniqueness within organization
+            $existingEmployeeNumber = DB::raw(
+                "SELECT id FROM employees WHERE organization_id = :org_id AND employee_number = :emp_num LIMIT 1",
+                [':org_id' => $orgId, ':emp_num' => $data['employee_number']]
+            );
+
+            if (!empty($existingEmployeeNumber)) {
+                return responseJson(
+                    success: false,
+                    message: "Employee number '{$data['employee_number']}' already exists in this organization",
+                    code: 400
+                );
+            }
 
             if (!empty($data['user_id'])) {
                 $user = DB::table('users')->selectAllWhereID($data['user_id']);
@@ -249,10 +271,11 @@ class EmployeeController
                 $userResult = DB::raw($getUserIdSQL);
                 $user_id = $userResult[0]->user_id;
 
-                // 6. Insert employee (NO EMAIL FIELD - it's in users table)
+                // 6. Insert employee with employee_number (NEW: Added employee_number field)
                 $insertEmployeeSQL = "INSERT INTO employees (
                     organization_id, 
                     user_id,
+                    employee_number,
                     phone, 
                     hire_date, 
                     job_title, 
@@ -265,6 +288,7 @@ class EmployeeController
                 ) VALUES (
                     :org_id,
                     :user_id,
+                    :employee_number,
                     :phone, 
                     :hire_date, 
                     :job_title, 
@@ -279,6 +303,7 @@ class EmployeeController
                 DB::raw($insertEmployeeSQL, [
                     ':org_id' => $orgId,
                     ':user_id' => $user_id,
+                    ':employee_number' => $data['employee_number'], // NEW
                     ':phone' => $data['phone'],
                     ':hire_date' => $data['hire_date'],
                     ':job_title' => $data['job_title'],
@@ -300,7 +325,7 @@ class EmployeeController
                 );
             }
 
-            // Get the created employee with user details (email comes from users table)
+            // Get the created employee with user details (NEW: Include employee_number)
             $result = DB::raw("
                 SELECT 
                     e.*, 
@@ -312,10 +337,14 @@ class EmployeeController
                     u.surname 
                 FROM employees e 
                 LEFT JOIN users u ON e.user_id = u.id 
-                WHERE e.phone = :phone 
+                WHERE e.employee_number = :employee_number 
+                AND e.organization_id = :org_id
                 ORDER BY e.created_at DESC 
                 LIMIT 1
-            ", [':phone' => $data['phone']]);
+            ", [
+                ':employee_number' => $data['employee_number'],
+                ':org_id' => $orgId
+            ]);
 
             if (empty($result)) {
                 return responseJson(
@@ -329,7 +358,7 @@ class EmployeeController
             $mailSent = mail(
                 $result[0]->email,
                 "Welcome to HR Payhub",
-                "Hello {$result[0]->first_name},\n\nYour account has been created successfully.\n\nUsername: {$result[0]->username}\nEmail: {$result[0]->email}\nTemporary Password: password\n\nPlease change your password after your first login.\n\nBest regards,\nHR Payhub Team"
+                "Hello {$result[0]->first_name},\n\nYour account has been created successfully.\n\nEmployee Number: {$result[0]->employee_number}\nUsername: {$result[0]->username}\nEmail: {$result[0]->email}\nTemporary Password: password\n\nPlease change your password after your first login.\n\nBest regards,\nHR Payhub Team"
             );
 
             return responseJson(
@@ -339,7 +368,8 @@ class EmployeeController
                 metadata: [
                     'is_email_sent' => $mailSent ?? false,
                     'generated_email' => $result[0]->email ?? null,
-                    'generated_username' => $result[0]->username ?? null
+                    'generated_username' => $result[0]->username ?? null,
+                    'employee_number' => $result[0]->employee_number ?? null // NEW
                 ],
                 code: 201
             );
@@ -376,6 +406,7 @@ class EmployeeController
                 );
             }
 
+            // NEW: Include employee_number in SELECT
             $query = "SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
                       FROM employees e 
                       LEFT JOIN users u ON e.user_id = u.id 
@@ -464,6 +495,7 @@ class EmployeeController
 
             $data = validate([
                 'user_id' => 'numeric',
+                'employee_number' => 'string', // NEW: Allow updating employee number
                 'first_name' => 'string',
                 'middle_name' => 'string',
                 'surname' => 'string',
@@ -479,6 +511,22 @@ class EmployeeController
                 'tax_id' => 'string'
             ]);
 
+            // NEW: Validate employee number uniqueness if being updated
+            if (isset($data['employee_number'])) {
+                $existingEmployeeNumber = DB::raw(
+                    "SELECT id FROM employees WHERE organization_id = :org_id AND employee_number = :emp_num AND id != :emp_id LIMIT 1",
+                    [':org_id' => $orgId, ':emp_num' => $data['employee_number'], ':emp_id' => $id]
+                );
+
+                if (!empty($existingEmployeeNumber)) {
+                    return responseJson(
+                        success: false,
+                        message: "Employee number '{$data['employee_number']}' already exists in this organization",
+                        code: 400
+                    );
+                }
+            }
+
             // Filter data based on user role permissions
             if (isset($allowedFields)) {
                 $data = array_intersect_key($data, array_flip($allowedFields));
@@ -493,6 +541,7 @@ class EmployeeController
 
             // Separate employee data from user data
             $employeeData = array_filter([
+                'employee_number' => $data['employee_number'] ?? null, // NEW
                 'phone' => $data['phone'] ?? null,
                 'hire_date' => $data['hire_date'] ?? null,
                 'job_title' => $data['job_title'] ?? null,
@@ -724,7 +773,7 @@ class EmployeeController
 
     private function buildRoleBasedQuery($orgId, $roleFilters)
     {
-        $baseFields = "e.id, e.organization_id, e.user_id, e.phone, e.hire_date, e.job_title, e.department, e.reports_to, e.status, e.created_at";
+        $baseFields = "e.id, e.organization_id, e.user_id, e.employee_number, e.phone, e.hire_date, e.job_title, e.department, e.reports_to, e.status, e.created_at"; // NEW: Added employee_number
 
         // Field-level security based on role
         if (isset($roleFilters['payroll_access']) || isset($roleFilters['financial_access'])) {
