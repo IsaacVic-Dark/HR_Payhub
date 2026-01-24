@@ -242,21 +242,46 @@ CREATE TABLE IF NOT EXISTS `organizations` (
 
 -- Data exporting was unselected.
 
--- Dumping structure for table payhub.organization_configs
 CREATE TABLE IF NOT EXISTS `organization_configs` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `organization_id` int NOT NULL,
-  `config_type` enum('tax','deduction','loan','benefit','per_diem','advance','refund') NOT NULL,
-  `name` varchar(100) NOT NULL,
-  `percentage` decimal(5,2) DEFAULT NULL,
-  `fixed_amount` decimal(15,2) DEFAULT NULL,
-  `is_active` tinyint(1) DEFAULT '1',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `organization_id` INT NOT NULL,
+  `config_type` ENUM('tax','deduction','loan','benefit','per_diem','advance','refund') NOT NULL,
+  `name` VARCHAR(100) NOT NULL,
+  `percentage` DECIMAL(5,2) DEFAULT NULL,
+  `fixed_amount` DECIMAL(15,2) DEFAULT NULL,
+  `status` ENUM('pending', 'approved', 'rejected', 'deleted_pending') NOT NULL DEFAULT 'approved',
+  `created_by` INT NULL,
+  `approved_by` INT NULL,
+  `rejected_by` INT NULL,
+  `approved_at` TIMESTAMP NULL,
+  `rejected_at` TIMESTAMP NULL,
+  `rejection_reason` TEXT NULL,
+  `is_active` TINYINT(1) DEFAULT '1',
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_config` (`organization_id`,`config_type`,`name`),
-  CONSTRAINT `organization_configs_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE
+
+  /* Foreign keys */
+  CONSTRAINT `organization_configs_ibfk_1`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) 
+    ON DELETE CASCADE,
+
+  CONSTRAINT `organization_configs_created_by_fk`
+    FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) 
+    ON DELETE SET NULL,
+
+  CONSTRAINT `organization_configs_approved_by_fk`
+    FOREIGN KEY (`approved_by`) REFERENCES `users`(`id`) 
+    ON DELETE SET NULL,
+
+  CONSTRAINT `organization_configs_rejected_by_fk`
+    FOREIGN KEY (`rejected_by`) REFERENCES `users`(`id`) 
+    ON DELETE SET NULL
+
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 
 -- Data exporting was unselected.
 

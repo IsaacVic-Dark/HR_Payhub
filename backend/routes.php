@@ -47,7 +47,59 @@ Router::delete('api/v1/organizations/{id}', OrganizationController::class . '@de
     'OrganizationAuthorizationMiddleware'
 ]);
 
-Router::resource('api/v1/organizations/{id}/configs', OrganizationConfigController::class, ['AuthMiddleware']);
+// Organization Config routes with comprehensive authentication and authorization
+Router::get('api/v1/organizations/{org_id}/configs', OrganizationConfigController::class . '@index', [
+    'AuthMiddleware',
+    'OrganizationConfigAuthorizationMiddleware'
+]);
+
+Router::get('api/v1/organizations/{org_id}/configs/{id}', OrganizationConfigController::class . '@show', [
+    'AuthMiddleware',
+    'OrganizationConfigAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/configs', OrganizationConfigController::class . '@store', [
+    ['AuthMiddleware', ['admin', 'payroll_manager']],
+    'OrganizationConfigAuthorizationMiddleware'
+]);
+
+Router::put('api/v1/organizations/{org_id}/configs/{id}', OrganizationConfigController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'payroll_manager']],
+    'OrganizationConfigAuthorizationMiddleware'
+]);
+
+Router::patch('api/v1/organizations/{org_id}/configs/{id}', OrganizationConfigController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'payroll_manager']],
+    'OrganizationConfigAuthorizationMiddleware'
+]);
+
+Router::delete('api/v1/organizations/{org_id}/configs/{id}', OrganizationConfigController::class . '@destroy', [
+    ['AuthMiddleware', ['admin', 'payroll_manager']],
+    'OrganizationConfigAuthorizationMiddleware'
+]);
+
+// Configuration approval/rejection routes
+Router::post('api/v1/organizations/{org_id}/configs/{id}/approve', OrganizationConfigController::class . '@approve', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager']],
+    'OrganizationConfigAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/configs/{id}/reject', OrganizationConfigController::class . '@reject', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager']],
+    'OrganizationConfigAuthorizationMiddleware'
+]);
+
+// Pending approvals route
+Router::get('api/v1/organizations/{org_id}/configs/pending', OrganizationConfigController::class . '@getPendingApprovals', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager']],
+    'OrganizationConfigAuthorizationMiddleware'
+]);
+
+// Bulk operations (optional)
+Router::post('api/v1/organizations/{org_id}/configs/bulk-import', OrganizationConfigController::class . '@bulkImport', [
+    ['AuthMiddleware', ['admin', 'payroll_manager']],
+    'OrganizationConfigAuthorizationMiddleware'
+]);
 
 // User routes with authentication
 Router::resource('api/v1/users', UserController::class, ['AuthMiddleware']);
