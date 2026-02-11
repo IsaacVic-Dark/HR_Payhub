@@ -250,7 +250,14 @@ class OrganizationConfigAPI {
   ): Promise<ApiResponse<{ id: number }>> {
     try {
       // Validate that either percentage OR fixed_amount is provided, but not both
-      if (configData.percentage !== null && configData.fixed_amount !== null) {
+      // Check for actual values, not just undefined (null is allowed)
+      const hasPercentage =
+        configData.percentage !== undefined && configData.percentage !== null;
+      const hasFixedAmount =
+        configData.fixed_amount !== undefined &&
+        configData.fixed_amount !== null;
+
+      if (hasPercentage && hasFixedAmount) {
         return {
           success: false,
           error: "Cannot set both percentage and fixed amount",
@@ -259,7 +266,7 @@ class OrganizationConfigAPI {
       }
 
       // Validate that at least one of percentage or fixed_amount is provided
-      if (configData.percentage === null && configData.fixed_amount === null) {
+      if (!hasPercentage && !hasFixedAmount) {
         return {
           success: false,
           error: "Either percentage or fixed amount must be provided",
@@ -297,10 +304,14 @@ class OrganizationConfigAPI {
   ): Promise<ApiResponse> {
     try {
       // Validate that either percentage OR fixed_amount is provided, but not both
-      if (
-        configData.percentage !== undefined &&
-        configData.fixed_amount !== undefined
-      ) {
+      // Check for actual values, not just undefined (null is allowed)
+      const hasPercentage =
+        configData.percentage !== undefined && configData.percentage !== null;
+      const hasFixedAmount =
+        configData.fixed_amount !== undefined &&
+        configData.fixed_amount !== null;
+
+      if (hasPercentage && hasFixedAmount) {
         return {
           success: false,
           error: "Cannot set both percentage and fixed amount",

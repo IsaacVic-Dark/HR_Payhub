@@ -461,30 +461,6 @@ export default function OrganizationConfigPage() {
     setShowEditModal(true);
   };
 
-  const handleSaveEdit = async () => {
-    if (!editingField || !editValue.trim()) {
-      toast.error("Please enter a value");
-      return;
-    }
-
-    setLoading(true);
-    try {
-      const success = await updateOrganization(editingField, editValue.trim());
-      if (success) {
-        toast.success("Profile updated successfully");
-        setShowEditModal(false);
-        setEditingField("");
-        setEditValue("");
-      } else {
-        toast.error("Failed to update profile");
-      }
-    } catch (error) {
-      toast.error("Failed to update profile");
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleEditConfigClick = (config: UIConfigItem) => {
     // Only allow editing active configs
     if (!config.is_active) {
@@ -505,6 +481,8 @@ export default function OrganizationConfigPage() {
   };
 
   const handleSaveEditConfig = async () => {
+    console.log("handleSaveEditConfig called");
+
     if (!editingConfig.name.trim()) {
       toast.error("Please enter a name");
       return;
@@ -522,7 +500,6 @@ export default function OrganizationConfigPage() {
 
     // Build config data based on calculation type
     const configData: any = {
-      config_type: activeSection,
       name: editingConfig.name,
       is_active: 1, // Keep it active
     };
@@ -535,17 +512,29 @@ export default function OrganizationConfigPage() {
       configData.percentage = null; // Explicitly set to null
     }
 
-    // Use the updateConfig function from your hook
-    const response = await updateConfig(editingConfig.id, configData);
+    console.log("Sending update with data:", configData); // Debug log
 
-    if (response.success) {
-      setShowEditConfigModal(false);
-      setEditingConfig({
-        id: null,
-        name: "",
-        calculationType: "percentage",
-        value: "",
-      });
+    try {
+      // Use the updateConfig function from your hook
+      const response = await updateConfig(editingConfig.id, configData);
+
+      console.log("Update response:", response); // Debug log
+
+      if (response.success) {
+        toast.success("Configuration updated successfully!");
+        setShowEditConfigModal(false);
+        setEditingConfig({
+          id: null,
+          name: "",
+          calculationType: "percentage",
+          value: "",
+        });
+      } else {
+        toast.error(response.error || "Failed to update configuration");
+      }
+    } catch (error) {
+      console.error("Update error:", error); // Debug log
+      toast.error("An unexpected error occurred");
     }
   };
 
@@ -904,7 +893,6 @@ export default function OrganizationConfigPage() {
             </Button>
             <Button
               onClick={handleAddConfig}
-              disabled={!newConfig.name.trim() || !newConfig.value.trim()}
             >
               Save Configuration
             </Button>
@@ -913,7 +901,7 @@ export default function OrganizationConfigPage() {
       </Dialog>
 
       {/* Edit Profile Modal */}
-      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+      {/* <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Edit {getFieldLabel(editingField)}</DialogTitle>
@@ -948,7 +936,7 @@ export default function OrganizationConfigPage() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog>
+      </Dialog> */}
 
       {/* Edit Configuration Modal */}
       <Dialog open={showEditConfigModal} onOpenChange={setShowEditConfigModal}>
@@ -1047,14 +1035,7 @@ export default function OrganizationConfigPage() {
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleSaveEditConfig}
-              disabled={
-                !editingConfig.name.trim() || !editingConfig.value.trim()
-              }
-            >
-              Save Changes
-            </Button>
+            <Button onClick={handleSaveEditConfig}>Save Changes</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

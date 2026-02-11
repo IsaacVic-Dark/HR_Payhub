@@ -37,6 +37,20 @@ export default function Page() {
     return user.email ? user.email[0].toUpperCase() : "U";
   };
 
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+
+    if (hour >= 5 && hour < 12) {
+      return "Good morning";
+    } else if (hour >= 12 && hour < 17) {
+      return "Good afternoon";
+    } else if (hour >= 17 && hour < 22) {
+      return "Good evening";
+    } else {
+      return "Hello";
+    }
+  };
+
   const { isSuperAdmin, isAdmin, canViewReports } = usePermissions();
 
   console.log("Dashboard auth state:", {
@@ -141,7 +155,7 @@ export default function Page() {
                   })}
                 </p>
                 <h1 className="text-4xl font-medium">
-                  Good morning, {getUserName()}!
+                  {getGreeting()}, {getUserName()}!
                 </h1>
                 <p className="text-base text-muted-foreground">
                   Here's what's happening with your team today:
@@ -153,8 +167,8 @@ export default function Page() {
                     {isSuperAdmin
                       ? "Super Administrator"
                       : isAdmin
-                      ? "Administrator"
-                      : "Employee"}
+                        ? "Administrator"
+                        : "Employee"}
                   </span>
                   {isSuperAdmin && (
                     <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded-full">

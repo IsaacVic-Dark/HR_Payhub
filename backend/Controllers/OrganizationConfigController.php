@@ -365,14 +365,20 @@ class OrganizationConfigController
                 $newName = $updateData['name'] ?? $config->name;
                 $newType = $updateData['config_type'] ?? $config->config_type;
                 
-                $duplicateCheck = DB::table('organization_configs')
-                    ->where([
-                        'organization_id' => $org_id,
-                        'config_type' => $newType,
-                        'name' => $newName
-                    ])
-                    ->where('id', '!=', $id)
-                    ->get();
+                $duplicateCheckQuery  = "
+                    SELECT * FROM organization_configs 
+                    WHERE organization_id = :org_id 
+                    AND config_type = :config_type 
+                    AND name = :name 
+                    AND id != :id
+                ";
+
+                $duplicateCheck = DB::raw($duplicateCheckQuery, [
+                    ':org_id' => $org_id,
+                    ':config_type' => $newType,
+                    ':name' => $newName,
+                    ':id' => $id
+                ]);
 
                 if (!empty($duplicateCheck)) {
                     return responseJson(

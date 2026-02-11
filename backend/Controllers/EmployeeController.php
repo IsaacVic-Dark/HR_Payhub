@@ -113,7 +113,6 @@ class EmployeeController
                 ],
                 code: 200
             );
-
         } catch (\Exception $e) {
             error_log("Employee index error: " . $e->getMessage());
             return responseJson(
@@ -373,7 +372,6 @@ class EmployeeController
                 ],
                 code: 201
             );
-
         } catch (\Exception $e) {
             error_log("Employee store error: " . $e->getMessage());
             return responseJson(
@@ -431,7 +429,6 @@ class EmployeeController
                 message: "Employee fetched successfully",
                 code: 200
             );
-
         } catch (\Exception $e) {
             error_log("Employee show error: " . $e->getMessage());
             return responseJson(
@@ -561,8 +558,23 @@ class EmployeeController
             ], fn($v) => $v !== null);
 
             if (isset($userData['email'])) {
+                // First get the current employee to find their user_id
+                $currentEmployee = DB::table('employees')->selectAllWhere('organization_id', $orgId);
+                $currentEmployee = array_filter($currentEmployee, fn($e) => $e->id == $id);
+
+                if (!$currentEmployee) {
+                    return responseJson(
+                        success: false,
+                        message: "Employee not found",
+                        code: 404
+                    );
+                }
+
+                $currentEmployee = array_values($currentEmployee)[0];
+
+                // Check if email exists for a different user
                 $existingEmail = DB::table('users')->selectAllWhere('email', $userData['email']);
-                if ($existingEmail && $existingEmail[0]->id != $data['user_id']) {
+                if ($existingEmail && $existingEmail[0]->id != $currentEmployee->user_id) {
                     return responseJson(
                         success: false,
                         message: "Email already exists",
@@ -570,7 +582,7 @@ class EmployeeController
                     );
                 }
             }
-            
+
             if (isset($data['user_id'])) {
                 $user = DB::table('users')->selectAllWhereID($data['user_id']);
                 if (!$user) {
@@ -581,7 +593,7 @@ class EmployeeController
                     );
                 }
             }
-            
+
             if (isset($employeeData['reports_to'])) {
                 $manager = DB::table('employees')->selectAllWhereID($employeeData['reports_to']);
                 if (!$manager) {
@@ -592,7 +604,7 @@ class EmployeeController
                     );
                 }
             }
-            
+
             if (empty($employeeData) && empty($userData)) {
                 return responseJson(
                     success: false,
@@ -641,7 +653,6 @@ class EmployeeController
                 message: "Employee updated successfully",
                 code: 200
             );
-
         } catch (\Exception $e) {
             error_log("Employee update error: " . $e->getMessage());
             return responseJson(
@@ -674,7 +685,7 @@ class EmployeeController
                     code: 404
                 );
             }
-            
+
             $deleted = DB::table('employees')->delete('id', $id);
             if ($deleted) {
                 return responseJson(
@@ -690,7 +701,6 @@ class EmployeeController
                     code: 500
                 );
             }
-
         } catch (\Exception $e) {
             error_log("Employee delete error: " . $e->getMessage());
             return responseJson(
