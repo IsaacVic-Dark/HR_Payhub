@@ -260,3 +260,5 @@ class PayrunDetailAPI {
 export const payrunDetailAPI = new PayrunDetailAPI();
 export type { PayrunDetailType, PayrunDetailFilters, ApiResponse };
 
+
+
