@@ -21,6 +21,7 @@ export default function Page() {
   const [payrun, setPayrun] = useState<PayrunType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [noPayrunsExist, setNoPayrunsExist] = useState(false);
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
@@ -28,9 +29,57 @@ export default function Page() {
 
   const payrunId = searchParams.get("payrun_id");
 
+  // When there is no payrun_id in the URL, fetch the latest payrun and redirect
   useEffect(() => {
+    if (payrunId || !user?.organization_id) return;
+
+    const redirectToLatest = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch payruns sorted by created_at descending, only need the first one
+        const response = await payrunAPI.getPayruns(user.organization_id, {
+          page: 1,
+          per_page: 1,
+        });
+
+        if (response.success && response.data) {
+          const payruns = Array.isArray(response.data)
+            ? response.data
+            : response.data.payruns || [];
+
+          if (payruns.length > 0) {
+            // Sort by created_at descending in case the API doesn't guarantee order
+            const latest = payruns.sort(
+              (a: PayrunType, b: PayrunType) =>
+                new Date(b.created_at).getTime() -
+                new Date(a.created_at).getTime()
+            )[0];
+
+            router.replace(`/payrun/employees?payrun_id=${latest.id}`);
+            return;
+          }
+        }
+
+        // No payruns found
+        setNoPayrunsExist(true);
+      } catch (err) {
+        setError("Failed to load the latest payrun.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    redirectToLatest();
+  }, [payrunId, user?.organization_id, router]);
+
+  // Main data fetch — only runs when payrun_id is present in the URL
+  useEffect(() => {
+    if (!payrunId) return;
+
     const fetchData = async () => {
-      if (!user?.organization_id || !payrunId) {
+      if (!user?.organization_id) {
         setError("Missing organization ID or payrun ID");
         setLoading(false);
         return;
@@ -51,8 +100,6 @@ export default function Page() {
           const details = Array.isArray(detailsResponse.data)
             ? detailsResponse.data
             : [];
-
-          console.log("Details for payruns :", details);
 
           setPayrunDetails(details);
 
@@ -162,6 +209,7 @@ export default function Page() {
     );
   }
 
+  // No payrun_id yet — show a loading/redirecting state while we find the latest
   if (!payrunId) {
     return (
       <SidebarProvider
@@ -178,9 +226,51 @@ export default function Page() {
           <div className="flex flex-1 flex-col">
             <div className="mt-4 mx-6 space-y-2">
               <h1 className="text-2xl font-medium">Employee Payruns</h1>
-              <p className="text-base text-muted-foreground">
-                Please select a payrun to view employee details.
-              </p>
+
+              {/* Still loading / redirecting */}
+              {loading && !noPayrunsExist && !error && (
+                <p className="text-base text-muted-foreground">
+                  Loading latest payrun…
+                </p>
+              )}
+
+              {/* No payruns exist at all */}
+              {noPayrunsExist && (
+                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-6 mt-4">
+                  <p className="text-sm font-medium text-yellow-800">
+                    No payruns found
+                  </p>
+                  <p className="text-sm text-yellow-700 mt-1">
+                    There are no payruns in your organisation yet. Create a
+                    payrun first before viewing employee pay details.
+                  </p>
+                  <Button
+                    size="sm"
+                    className="mt-4"
+                    onClick={() => router.push("/payrun/history")}
+                  >
+                    Go to Payrun History
+                  </Button>
+                </div>
+              )}
+
+              {/* Error while fetching latest */}
+              {error && !noPayrunsExist && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-6 mt-4">
+                  <p className="text-sm font-medium text-red-800">
+                    Something went wrong
+                  </p>
+                  <p className="text-sm text-red-700 mt-1">{error}</p>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="mt-4"
+                    onClick={() => router.refresh()}
+                  >
+                    Retry
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
         </SidebarInset>
@@ -247,6 +337,3 @@ export default function Page() {
     </SidebarProvider>
   );
 }
-
-
-

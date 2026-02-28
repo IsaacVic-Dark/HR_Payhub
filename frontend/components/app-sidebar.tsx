@@ -86,7 +86,7 @@ const data = {
       hasDropdown: true,
       items: [
         {
-          title: "Payruns History",
+          title: "Payruns",
           url: "/payrun/history",
           roles: ["super_admin", "admin", "payroll_manager"],
         },
