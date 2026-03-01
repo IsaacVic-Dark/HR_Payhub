@@ -172,6 +172,25 @@ Router::delete('api/v1/organizations/{org_id}/payrun/{payrun_id}', PayrunControl
     'PayrunAuthorizationMiddleware'
 ]);
 
+Router::post('api/v1/organizations/{org_id}/payrun/{payrun_id}/process', PayrunController::class . '@processPayrun', [
+    ['AuthMiddleware', ['admin', 'super_admin', 'payroll_manager', 'payroll_officer']],
+    'PayrunAuthorizationMiddleware'
+]);
+
+// Review a payrun (draft → reviewed)
+// Allowed roles: admin, payroll_manager, hr_manager, payroll_officer
+Router::post('api/v1/organizations/{org_id}/payrun/{payrun_id}/review', PayrunController::class . '@reviewPayrun', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'hr_manager', 'payroll_officer']],
+    'PayrunAuthorizationMiddleware'
+]);
+
+// Finalize a payrun (reviewed → finalized) — also auto-creates next draft payrun
+// Allowed roles: admin, payroll_manager, finance_manager
+Router::post('api/v1/organizations/{org_id}/payrun/{payrun_id}/finalize', PayrunController::class . '@finalizePayrun', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager']],
+    'PayrunAuthorizationMiddleware'
+]);
+
 // Audit Log routes with comprehensive authentication and authorization
 Router::get('api/v1/organizations/{org_id}/audit-logs', AuditLogController::class . '@index', [
     'AuthMiddleware',
