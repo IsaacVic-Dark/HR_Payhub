@@ -50,6 +50,76 @@ CREATE TABLE IF NOT EXISTS `employees` (
   CONSTRAINT `employees_ibfk_3` FOREIGN KEY (`reports_to`) REFERENCES `employees` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+
+-- -----------------------------------------------------------------------------
+-- 1. employee_profiles
+--    Stores statutory identity numbers that don't belong in the employees table.
+--    Personal info: National ID, KRA PIN, NSSF Number, SHIF/NHIF Number.
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `employee_profiles` (
+  `id`               INT         NOT NULL AUTO_INCREMENT,
+  `employee_id`      INT         NOT NULL,
+  `national_id`      VARCHAR(20) DEFAULT NULL  COMMENT 'National ID number',
+  `kra_pin`          VARCHAR(11) DEFAULT NULL  COMMENT 'KRA Personal Identification Number',
+  `nssf_number`      VARCHAR(20) DEFAULT NULL  COMMENT 'NSSF member number',
+  `shif_number`      VARCHAR(20) DEFAULT NULL  COMMENT 'SHIF/NHIF member number',
+  `bank_name`        VARCHAR(100) DEFAULT NULL,
+  `bank_branch`      VARCHAR(100) DEFAULT NULL,
+  `bank_account_name` VARCHAR(150) DEFAULT NULL,
+  -- bank_account_number is already in employees table; link there
+
+  -- Pension & Sacco (voluntary)
+  `pension_provider`       VARCHAR(100) DEFAULT NULL,
+  `pension_member_number`  VARCHAR(50)  DEFAULT NULL,
+  `pension_contribution`   DECIMAL(15,2) DEFAULT NULL  COMMENT 'Monthly employee pension contribution',
+  `sacco_name`             VARCHAR(100) DEFAULT NULL,
+  `sacco_member_number`    VARCHAR(50)  DEFAULT NULL,
+  `sacco_contribution`     DECIMAL(15,2) DEFAULT NULL  COMMENT 'Monthly Sacco deduction',
+
+  -- PAYE exemptions (e.g. disability certificate, mortgage relief)
+  `paye_exemption_type`    ENUM('none','disability','mortgage_relief','other') DEFAULT 'none',
+  `paye_exemption_amount`  DECIMAL(15,2) DEFAULT NULL  COMMENT 'Monthly relief amount if applicable',
+  `paye_exemption_ref`     VARCHAR(100)  DEFAULT NULL  COMMENT 'Certificate / reference number',
+
+  `created_at`  TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_employee_profile` (`employee_id`),
+
+  CONSTRAINT `employee_profiles_emp_fk`
+    FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+-- -----------------------------------------------------------------------------
+-- 2. employee_allowances
+--    Recurring allowances attached to an employee (house allowance, transport, etc.)
+--    These are added to gross pay every payrun automatically.
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `employee_allowances` (
+  `id`              INT           NOT NULL AUTO_INCREMENT,
+  `employee_id`     INT           NOT NULL,
+  `config_id`       INT           NOT NULL  COMMENT 'Points to organization_configs (config_type=benefit)',
+  `amount`          DECIMAL(15,2) NOT NULL,
+  `effective_from`  DATE          NOT NULL,
+  `effective_to`    DATE          DEFAULT NULL  COMMENT 'NULL = no end date',
+  `is_active`       TINYINT(1)    DEFAULT 1,
+  `created_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  KEY `ea_employee_id` (`employee_id`),
+  KEY `ea_config_id`   (`config_id`),
+
+  CONSTRAINT `ea_emp_fk`    FOREIGN KEY (`employee_id`) REFERENCES `employees`            (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ea_config_fk` FOREIGN KEY (`config_id`)   REFERENCES `organization_configs` (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- Dumping structure for table payhub.advances
 CREATE TABLE IF NOT EXISTS `advances` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -347,11 +417,19 @@ CREATE TABLE IF NOT EXISTS `payrun_deductions` (
 CREATE TABLE IF NOT EXISTS `payrun_details` (
   `id` int NOT NULL AUTO_INCREMENT,
   `payrun_id` int NOT NULL,
+  `organization_id` int NOT NULL,
   `employee_id` int NOT NULL,
   `basic_salary` decimal(15,2) NOT NULL,
   `overtime_amount` decimal(15,2) DEFAULT '0.00',
   `bonus_amount` decimal(15,2) DEFAULT '0.00',
   `commission_amount` decimal(15,2) DEFAULT '0.00',
+  `nssf` decimal(15,2) DEFAULT '0.00',
+  `shif` decimal(15,2) DEFAULT '0.00',
+  `housing_levy` decimal(15,2) DEFAULT '0.00',
+  `taxable_income` decimal(15,2) DEFAULT '0.00',
+  `tax_before_relief` decimal(15,2) DEFAULT '0.00',
+  `personal_relief` decimal(15,2) DEFAULT '0.00',
+  `paye` decimal(15,2) DEFAULT '0.00',
   `gross_pay` decimal(15,2) NOT NULL,
   `total_deductions` decimal(15,2) NOT NULL,
   `net_pay` decimal(15,2) NOT NULL,
@@ -360,8 +438,10 @@ CREATE TABLE IF NOT EXISTS `payrun_details` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_payrun_employee` (`payrun_id`,`employee_id`),
   KEY `employee_id` (`employee_id`),
+  KEY `idx_payrundetails_org` (`organization_id`),
   CONSTRAINT `payrun_details_ibfk_1` FOREIGN KEY (`payrun_id`) REFERENCES `payruns` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `payrun_details_ibfk_2` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE
+  CONSTRAINT `payrun_details_ibfk_2` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `payrun_details_org_fk` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
@@ -401,6 +481,61 @@ CREATE TABLE IF NOT EXISTS `refunds` (
   CONSTRAINT `refunds_ibfk_1` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
   CONSTRAINT `refunds_ibfk_2` FOREIGN KEY (`config_id`) REFERENCES `organization_configs` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS `payslips` (
+  `id`                INT  NOT NULL AUTO_INCREMENT,
+  `organization_id`   INT  NOT NULL,
+  `payrun_id`         INT  NOT NULL,
+  `payrun_detail_id`  INT  NOT NULL,
+  `employee_id`       INT  NOT NULL,
+  `payslip_number`    VARCHAR(50)  NOT NULL,
+  `status`            ENUM('generated','sent','acknowledged') DEFAULT 'generated',
+  `generated_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `sent_at`           TIMESTAMP NULL DEFAULT NULL,
+  `pdf_path`          VARCHAR(500)  DEFAULT NULL  COMMENT 'Server path to stored PDF',
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_payslip` (`payrun_id`, `employee_id`),
+  KEY `payslips_org`    (`organization_id`),
+  KEY `payslips_detail` (`payrun_detail_id`),
+
+  CONSTRAINT `payslips_org_fk`    FOREIGN KEY (`organization_id`)  REFERENCES `organizations`  (`id`) ON DELETE CASCADE,
+  CONSTRAINT `payslips_run_fk`    FOREIGN KEY (`payrun_id`)        REFERENCES `payruns`        (`id`) ON DELETE CASCADE,
+  CONSTRAINT `payslips_detail_fk` FOREIGN KEY (`payrun_detail_id`) REFERENCES `payrun_details` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `payslips_emp_fk`    FOREIGN KEY (`employee_id`)      REFERENCES `employees`      (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+-- -----------------------------------------------------------------------------
+-- 4. statutory_remittances
+--    Tracks remittance of PAYE / NSSF / SHIF to KRA and other bodies.
+--    Due by 9th of the following month.
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `statutory_remittances` (
+  `id`              INT           NOT NULL AUTO_INCREMENT,
+  `organization_id` INT           NOT NULL,
+  `payrun_id`       INT           NOT NULL,
+  `remittance_type` ENUM('PAYE','NSSF','SHIF','Housing_Levy','Other') NOT NULL,
+  `amount`          DECIMAL(15,2) NOT NULL,
+  `due_date`        DATE          NOT NULL,
+  `remitted_at`     DATE          DEFAULT NULL,
+  `reference_number` VARCHAR(100) DEFAULT NULL  COMMENT 'KRA / NSSF / SHIF payment reference',
+  `status`          ENUM('pending','remitted','overdue') DEFAULT 'pending',
+  `remitted_by`     INT           DEFAULT NULL,
+  `created_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  KEY `sr_org_run` (`organization_id`, `payrun_id`),
+
+  CONSTRAINT `sr_org_fk`    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `sr_run_fk`    FOREIGN KEY (`payrun_id`)       REFERENCES `payruns`       (`id`) ON DELETE CASCADE,
+  CONSTRAINT `sr_user_fk`   FOREIGN KEY (`remitted_by`)     REFERENCES `users`         (`id`) ON DELETE SET NULL
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 
 -- Data exporting was unselected.
 
