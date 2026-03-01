@@ -394,7 +394,8 @@ final class DB
      */
     private function isUpdateOrDeleteQuery(string $sql): bool
     {
-        return stripos($sql, 'update') !== false || stripos($sql, 'delete') !== false;
+        $trimmed = ltrim($sql);
+        return stripos($trimmed, 'update') === 0 || stripos($trimmed, 'delete') === 0;
     }
 
     static public function getDebugFullQuery($query, $params = [])
