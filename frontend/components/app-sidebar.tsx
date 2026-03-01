@@ -86,56 +86,61 @@ const data = {
       hasDropdown: true,
       items: [
         {
-          title: "Payruns",
+          title: "History",
           url: "/payrun/history",
           roles: ["super_admin", "admin", "payroll_manager"],
         },
         {
-          title: "Employee Payruns",
+          title: "Process",
+          url: "/payrun/process",
+          roles: ["super_admin", "admin", "payroll_manager"],
+        },
+        {
+          title: "Employees",
           url: "/payrun/employees",
           roles: ["super_admin", "admin", "payroll_manager"],
         },
       ],
     },
-    {
-      title: "Payroll",
-      url: "/payroll",
-      icon: IconReportMoney,
-      roles: ["super_admin", "admin", "payroll_manager", "payroll_officer"],
-      hasDropdown: true,
-      items: [
-        {
-          title: "Payroll",
-          url: "/payroll",
-          roles: ["super_admin", "admin", "payroll_manager"],
-        },
-        {
-          title: "Run Payroll",
-          url: "/payroll/run",
-          roles: ["super_admin", "admin", "payroll_manager"],
-        },
-        {
-          title: "Data Entry",
-          url: "/payroll/data-entry",
-          roles: ["payroll_officer"],
-        },
-        {
-          title: "Review & Approve",
-          url: "/payroll/review",
-          roles: ["super_admin", "admin", "payroll_manager"],
-        },
-        {
-          title: "Adjustments",
-          url: "/payroll/adjustments",
-          roles: ["super_admin", "admin", "payroll_manager"],
-        },
-        {
-          title: "Payroll History",
-          url: "/payroll/history",
-          roles: ["super_admin", "admin", "payroll_manager", "auditor"],
-        },
-      ],
-    },
+    // {
+    //   title: "Payroll",
+    //   url: "/payroll",
+    //   icon: IconReportMoney,
+    //   roles: ["super_admin", "admin", "payroll_manager", "payroll_officer"],
+    //   hasDropdown: true,
+    //   items: [
+    //     {
+    //       title: "Payroll",
+    //       url: "/payroll",
+    //       roles: ["super_admin", "admin", "payroll_manager"],
+    //     },
+    //     {
+    //       title: "Run Payroll",
+    //       url: "/payroll/run",
+    //       roles: ["super_admin", "admin", "payroll_manager"],
+    //     },
+    //     {
+    //       title: "Data Entry",
+    //       url: "/payroll/data-entry",
+    //       roles: ["payroll_officer"],
+    //     },
+    //     {
+    //       title: "Review & Approve",
+    //       url: "/payroll/review",
+    //       roles: ["super_admin", "admin", "payroll_manager"],
+    //     },
+    //     {
+    //       title: "Adjustments",
+    //       url: "/payroll/adjustments",
+    //       roles: ["super_admin", "admin", "payroll_manager"],
+    //     },
+    //     {
+    //       title: "Payroll History",
+    //       url: "/payroll/history",
+    //       roles: ["super_admin", "admin", "payroll_manager", "auditor"],
+    //     },
+    //   ],
+    // },
     {
       title: "Payments",
       url: "/payments",
