@@ -153,7 +153,7 @@ class PayrunAPI {
 
   async getPayruns(
     organizationId: number,
-    filters: PayrunFilters = {}
+    filters: PayrunFilters = {},
   ): Promise<ApiResponse<PayrunsResponseData>> {
     try {
       const queryParams = this.buildQueryParams(filters);
@@ -181,7 +181,7 @@ class PayrunAPI {
 
   async getPayrunById(
     organizationId: number,
-    payrunId: number
+    payrunId: number,
   ): Promise<ApiResponse<PayrunType>> {
     try {
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}`;
@@ -214,7 +214,7 @@ class PayrunAPI {
       total_deductions?: number;
       total_net_pay?: number;
       employee_count?: number;
-    }
+    },
   ): Promise<ApiResponse> {
     try {
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payruns`;
@@ -249,7 +249,7 @@ class PayrunAPI {
       total_deductions?: number;
       total_net_pay?: number;
       employee_count?: number;
-    }
+    },
   ): Promise<ApiResponse> {
     try {
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}`;
@@ -273,7 +273,7 @@ class PayrunAPI {
 
   async deletePayrun(
     organizationId: number,
-    payrunId: number
+    payrunId: number,
   ): Promise<ApiResponse> {
     try {
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}`;
@@ -290,6 +290,52 @@ class PayrunAPI {
         success: false,
         error:
           error instanceof Error ? error.message : "Failed to delete payrun",
+      };
+    }
+  }
+
+  async reviewPayrun(
+    organizationId: number,
+    payrunId: number,
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/review`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to review payrun",
+      };
+    }
+  }
+
+  async finalizePayrun(
+    organizationId: number,
+    payrunId: number,
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/finalize`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to finalize payrun",
       };
     }
   }
