@@ -10,108 +10,141 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { useState, useEffect } from "react";
+import { AlertTriangle } from "lucide-react";
 
 interface PayrollActionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  action: "approve" | "pay" | "generate";
-  payrollPeriod?: string;
-  employeeName?: string;
-  netPay?: number;
+  action: "review" | "finalize";
+  payrunStatus?: string;
+  payrunName?: string;
+  payPeriodStart?: string;
+  payPeriodEnd?: string;
+  totalGrossPay?: number;
+  totalDeductions?: number;
+  employeeCount?: number;
   onConfirm: () => void;
   loading?: boolean;
-  children?: React.ReactNode;
 }
+
+const formatCurrency = (amount?: number) => {
+  if (amount === undefined) return "—";
+  return new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: "KES",
+  }).format(amount);
+};
+
+const formatDate = (dateStr?: string) => {
+  if (!dateStr) return "—";
+  return new Date(dateStr).toLocaleDateString("en-KE", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+};
 
 export function PayrollActionDialog({
   open,
   onOpenChange,
   action,
-  payrollPeriod,
-  employeeName,
-  netPay,
+  payrunStatus,
+  payrunName,
+  payPeriodStart,
+  payPeriodEnd,
+  totalGrossPay,
+  totalDeductions,
+  employeeCount,
   onConfirm,
   loading = false,
-  children,
 }: PayrollActionDialogProps) {
-  const isApprove = action === "approve";
-  const isPay = action === "pay";
-  const isGenerate = action === "generate";
+  const isReview = action === "review";
+  const cannotFinalize = !isReview && payrunStatus !== "reviewed";
 
-  const getTitle = () => {
-    if (isGenerate) return "Generate Payroll";
-    if (isApprove) return "Approve Payroll";
-    return "Mark Payroll as Paid";
-  };
-
-  const getDescription = () => {
-    if (isGenerate) return null;
-    return (
-      <>
-        Are you sure you want to {isApprove ? "approve" : "mark as paid"} the payroll
-        for <strong>{employeeName}</strong>?
-        <br />
-        <br />
-        <strong>Pay Period:</strong>
-        <br />
-        <strong className="text-gray-900">{payrollPeriod}</strong>
-        {netPay && (
-          <>
-            <br />
-            <br />
-            <strong>Net Pay:</strong>
-            <br />
-            <strong className="text-gray-900">
-              {new Intl.NumberFormat("en-KE", {
-                style: "currency",
-                currency: "KES",
-              }).format(netPay)}
-            </strong>
-          </>
-        )}
-      </>
-    );
-  };
-
-  const getButtonText = () => {
-    if (loading) return "Processing...";
-    if (isGenerate) return "Generate Payroll";
-    if (isApprove) return "Confirm Approval";
-    return "Confirm Payment";
-  };
-
-  const getButtonClass = () => {
-    if (isGenerate) return "bg-blue-600 hover:bg-blue-700";
-    if (isApprove) return "bg-blue-600 hover:bg-blue-700";
-    return "bg-green-600 hover:bg-green-700";
-  };
+  const title = isReview ? "Review Payrun" : "Finalize Payrun";
+  const buttonLabel = loading
+    ? "Processing..."
+    : isReview
+      ? "Confirm Review"
+      : "Confirm Finalize";
+  const buttonClass = isReview
+    ? "bg-blue-600 hover:bg-blue-700"
+    : "bg-green-600 hover:bg-green-700";
+  const warningText = isReview
+    ? "Are you sure you want to review this payrun? This will mark it as reviewed and ready for finalization."
+    : "Are you sure you want to finalize this payrun? This action cannot be undone and will lock the payrun.";
 
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
-      <AlertDialogContent>
+      <AlertDialogContent className="max-w-md">
         <AlertDialogHeader>
-          <AlertDialogTitle>{getTitle()}</AlertDialogTitle>
-          {!isGenerate && (
-            <AlertDialogDescription>{getDescription()}</AlertDialogDescription>
-          )}
+          <AlertDialogTitle>{title}</AlertDialogTitle>
         </AlertDialogHeader>
 
-        {/* Custom content for generate action */}
-        {isGenerate && children && <div className="py-4">{children}</div>}
+        {/* Payrun summary */}
+        <div className="space-y-3 py-2">
+          {/* Status warning — only shown when trying to finalize a non-reviewed payrun */}
+          {cannotFinalize && (
+            <div className="flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3">
+              <AlertTriangle className="w-4 h-4 text-red-600 mt-0.5 shrink-0" />
+              <p className="text-xs text-red-800">
+                This payrun cannot be finalized because its current status is{" "}
+                <strong>"{payrunStatus || "unknown"}"</strong>. It must be{" "}
+                <strong>reviewed</strong> first before it can be finalized.
+              </p>
+            </div>
+          )}
+          <div className="rounded-md border bg-gray-50 p-3 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Payrun</span>
+              <span className="font-medium text-gray-900">
+                {payrunName || "—"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Pay Period</span>
+              <span className="font-medium text-gray-900">
+                {formatDate(payPeriodStart)} – {formatDate(payPeriodEnd)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Employees</span>
+              <span className="font-medium text-gray-900">
+                {employeeCount ?? "—"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Gross Pay</span>
+              <span className="font-medium text-gray-900">
+                {formatCurrency(totalGrossPay)}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Total Deductions</span>
+              <span className="font-medium text-gray-900">
+                {formatCurrency(totalDeductions)}
+              </span>
+            </div>
+          </div>
+
+          {/* Warning */}
+          <div className="flex items-start gap-2 rounded-md border border-yellow-200 bg-yellow-50 p-3">
+            <AlertTriangle className="w-4 h-4 text-yellow-600 mt-0.5 shrink-0" />
+            <p className="text-xs text-yellow-800">{warningText}</p>
+          </div>
+        </div>
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
           <AlertDialogAction
             onClick={onConfirm}
-            disabled={loading}
-            className={getButtonClass()}
+            disabled={loading || cannotFinalize}
+            className={`${buttonClass} disabled:opacity-50 disabled:cursor-not-allowed`}
           >
-            {getButtonText()}
+            {buttonLabel}
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );
 }
-
