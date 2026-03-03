@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { ReactNode } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import React, { ReactNode } from "react";
+import { ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 export interface ColumnDef<T> {
   key: string;
@@ -27,6 +27,12 @@ interface DataTableProps<T> {
   error?: string | null;
   emptyMessage?: string;
   className?: string;
+  tableTitle?: ReactNode;
+  button?: ReactNode;
+  searchInput?: React.InputHTMLAttributes<HTMLInputElement> & {
+    inputClassName?: string;
+  };
+  filters?: ReactNode;
 }
 
 export function DataTable<T>({
@@ -38,7 +44,11 @@ export function DataTable<T>({
   loading = false,
   error = null,
   emptyMessage = "No data found",
-  className = ""
+  className = "",
+  tableTitle,
+  button,
+  searchInput,
+  filters,
 }: DataTableProps<T>) {
   if (loading) {
     return (
@@ -64,7 +74,12 @@ export function DataTable<T>({
   }
 
   const handlePageChange = (newPage: number) => {
-    if (onPageChange && pagination && newPage > 0 && newPage <= pagination.totalPages) {
+    if (
+      onPageChange &&
+      pagination &&
+      newPage > 0 &&
+      newPage <= pagination.totalPages
+    ) {
       onPageChange(newPage);
     }
   };
@@ -77,6 +92,43 @@ export function DataTable<T>({
 
   return (
     <div className={`w-full mx-auto p-4 bg-white ${className}`}>
+      {/* Header Bar */}
+      {(tableTitle || filters || searchInput || button) && (
+        <div className="flex items-center justify-between mb-4">
+          {/* Left: Title */}
+          <div>
+            {tableTitle &&
+              (typeof tableTitle === "string" ? (
+                <h2 className="text-base font-semibold text-gray-900">
+                  {tableTitle}
+                </h2>
+              ) : (
+                tableTitle
+              ))}
+          </div>
+
+          {/* Right: Filters + Search + Button */}
+          <div className="flex items-center gap-2">
+            {filters && filters}
+
+            {searchInput &&
+              (() => {
+                const { inputClassName, ...inputProps } = searchInput;
+                return (
+                  <div className="relative">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                    <input
+                      {...inputProps}
+                      className={`pl-8 pr-3 py-1.5 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white ${inputClassName || ""}`}
+                    />
+                  </div>
+                );
+              })()}
+
+            {button && button}
+          </div>
+        </div>
+      )}
       <div className="">
         {/* Table */}
         <div className="bg-white overflow-x-auto">
@@ -93,7 +145,7 @@ export function DataTable<T>({
                   {columns.map((column) => (
                     <th
                       key={column.key}
-                      className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${column.className || ''}`}
+                      className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider ${column.className || ""}`}
                     >
                       {column.header}
                     </th>
@@ -106,7 +158,7 @@ export function DataTable<T>({
                     {columns.map((column) => (
                       <td
                         key={`${index}-${column.key}`}
-                        className={`px-4 py-4 text-xs text-gray-900 ${column.className || ''}`}
+                        className={`px-4 py-4 text-xs text-gray-900 ${column.className || ""}`}
                       >
                         {column.cell(row)}
                       </td>
@@ -123,9 +175,12 @@ export function DataTable<T>({
           <div className="flex items-center justify-between mt-6 px-4 py-4 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-4">
               <span className="text-xs text-gray-700">
-                Showing {(pagination.page - 1) * pagination.limit + 1} to{' '}
-                {Math.min(pagination.page * pagination.limit, pagination.totalItems)} of{' '}
-                {pagination.totalItems} results
+                Showing {(pagination.page - 1) * pagination.limit + 1} to{" "}
+                {Math.min(
+                  pagination.page * pagination.limit,
+                  pagination.totalItems,
+                )}{" "}
+                of {pagination.totalItems} results
               </span>
               {onLimitChange && (
                 <div className="flex items-center gap-2">
@@ -151,49 +206,52 @@ export function DataTable<T>({
                   disabled={pagination.page === 1}
                   className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors ${
                     pagination.page === 1
-                      ? 'text-gray-400 cursor-not-allowed'
-                      : 'text-gray-700 hover:bg-gray-200'
+                      ? "text-gray-400 cursor-not-allowed"
+                      : "text-gray-700 hover:bg-gray-200"
                   }`}
                 >
                   <ChevronLeft className="w-3 h-3" />
                   Previous
                 </button>
 
-                {Array.from({ length: Math.min(pagination.totalPages, 5) }, (_, i) => {
-                  let pageNumber;
+                {Array.from(
+                  { length: Math.min(pagination.totalPages, 5) },
+                  (_, i) => {
+                    let pageNumber;
 
-                  if (pagination.totalPages <= 5) {
-                    pageNumber = i + 1;
-                  } else if (pagination.page <= 3) {
-                    pageNumber = i + 1;
-                  } else if (pagination.page >= pagination.totalPages - 2) {
-                    pageNumber = pagination.totalPages - 4 + i;
-                  } else {
-                    pageNumber = pagination.page - 2 + i;
-                  }
+                    if (pagination.totalPages <= 5) {
+                      pageNumber = i + 1;
+                    } else if (pagination.page <= 3) {
+                      pageNumber = i + 1;
+                    } else if (pagination.page >= pagination.totalPages - 2) {
+                      pageNumber = pagination.totalPages - 4 + i;
+                    } else {
+                      pageNumber = pagination.page - 2 + i;
+                    }
 
-                  return (
-                    <button
-                      key={pageNumber}
-                      onClick={() => handlePageChange(pageNumber)}
-                      className={`px-2 py-1 text-xs rounded-md transition-colors ${
-                        pagination.page === pageNumber
-                          ? 'bg-blue-600 text-white'
-                          : 'text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {pageNumber}
-                    </button>
-                  );
-                })}
+                    return (
+                      <button
+                        key={pageNumber}
+                        onClick={() => handlePageChange(pageNumber)}
+                        className={`px-2 py-1 text-xs rounded-md transition-colors ${
+                          pagination.page === pageNumber
+                            ? "bg-blue-600 text-white"
+                            : "text-gray-700 hover:bg-gray-200"
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    );
+                  },
+                )}
 
                 <button
                   onClick={() => handlePageChange(pagination.page + 1)}
                   disabled={pagination.page === pagination.totalPages}
                   className={`flex items-center gap-1 px-2 py-1 text-xs rounded-md transition-colors ${
                     pagination.page === pagination.totalPages
-                      ? 'text-gray-400 cursor-not-allowed'
-                      : 'text-gray-700 hover:bg-gray-200'
+                      ? "text-gray-400 cursor-not-allowed"
+                      : "text-gray-700 hover:bg-gray-200"
                   }`}
                 >
                   Next
