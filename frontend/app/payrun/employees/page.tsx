@@ -5,12 +5,26 @@ import { SiteHeader } from "@/components/site-header";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
-import { payrunDetailAPI, PayrunDetailType } from "@/services/api/payrun-detail";
+import {
+  payrunDetailAPI,
+  PayrunDetailType,
+} from "@/services/api/payrun-detail";
 import { payrunAPI, PayrunType } from "@/services/api/payrun";
 import { useAuth } from "@/lib/AuthContext";
 import { DataTable, ColumnDef } from "@/components/table";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, UserPlus, Filter } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { PayrollActionDialog } from "@/app/payroll/components/payroll-action-dialog";
+
+// Role permission helper
+const canReview = (userType: string) =>
+  ["admin", "payroll_manager", "payroll_officer", "hr_manager"].includes(
+    userType,
+  );
+
+const canFinalize = (userType: string) =>
+  ["admin", "payroll_manager", "finance_manager"].includes(userType);
 
 export default function Page() {
   const pathname = usePathname();
@@ -26,6 +40,11 @@ export default function Page() {
   const [perPage, setPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  const [processDialogOpen, setProcessDialogOpen] = useState(false);
+  const [processLoading, setProcessLoading] = useState(false);
+  const [dialogAction, setDialogAction] = useState<"review" | "finalize">(
+    "review",
+  );
 
   const payrunId = searchParams.get("payrun_id");
 
@@ -54,7 +73,7 @@ export default function Page() {
             const latest = payruns.sort(
               (a: PayrunType, b: PayrunType) =>
                 new Date(b.created_at).getTime() -
-                new Date(a.created_at).getTime()
+                new Date(a.created_at).getTime(),
             )[0];
 
             router.replace(`/payrun/employees?payrun_id=${latest.id}`);
@@ -93,7 +112,7 @@ export default function Page() {
         const detailsResponse = await payrunDetailAPI.getPayrunEmployees(
           user.organization_id,
           parseInt(payrunId),
-          { page, per_page: perPage }
+          { page, per_page: perPage },
         );
 
         if (detailsResponse.success && detailsResponse.data) {
@@ -114,7 +133,7 @@ export default function Page() {
             // Fetch payrun separately
             const payrunResponse = await payrunAPI.getPayrunById(
               user.organization_id,
-              parseInt(payrunId)
+              parseInt(payrunId),
             );
             if (payrunResponse.success && payrunResponse.data) {
               setPayrun(payrunResponse.data);
@@ -146,6 +165,67 @@ export default function Page() {
   const handleLimitChange = (newLimit: number) => {
     setPerPage(newLimit);
     setPage(1);
+  };
+
+  const handleReviewPayrun = async () => {
+    if (!user?.organization_id || !payrunId) return;
+    setProcessLoading(true);
+    try {
+      const result = await payrunAPI.reviewPayrun(
+        user.organization_id,
+        parseInt(payrunId),
+      );
+
+      if (result.success) {
+        toast.success(result.message || "Payrun reviewed successfully");
+        setProcessDialogOpen(false);
+        // refresh payrun state so status updates in the UI
+        setPayrun((prev) => (prev ? { ...prev, status: "reviewed" } : prev));
+      } else {
+        toast.error(
+          result.error || result.message || "Failed to review payrun",
+        );
+        // modal stays open
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "An unexpected error occurred",
+      );
+    } finally {
+      setProcessLoading(false);
+    }
+  };
+
+  const handleFinalizePayrun = async () => {
+    if (!user?.organization_id || !payrunId) return;
+    setProcessLoading(true);
+    try {
+      const result = await payrunAPI.finalizePayrun(
+        user.organization_id,
+        parseInt(payrunId),
+      );
+      if (result.success) {
+        toast.success(result.message || "Payrun finalized successfully");
+        setProcessDialogOpen(false);
+        setPayrun((prev) => (prev ? { ...prev, status: "finalized" } : prev));
+      } else {
+        toast.error(
+          result.error || result.message || "Failed to finalize payrun",
+        );
+        // modal stays open
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "An unexpected error occurred",
+      );
+    } finally {
+      setProcessLoading(false);
+    }
+  };
+
+  const openDialog = (action: "review" | "finalize") => {
+    setDialogAction(action);
+    setProcessDialogOpen(true);
   };
 
   const formatCurrency = (amount: number) => {
@@ -322,6 +402,35 @@ export default function Page() {
                       totalItems,
                       totalPages,
                     }}
+                    tableTitle="Payrun Employees Details"
+                    filters={
+                      <button className="flex items-center gap-1 px-3 py-1.5 border rounded-md text-xs">
+                        <Filter className="w-3 h-3" /> Filters
+                      </button>
+                    }
+                    searchInput={{ placeholder: "Find Employee" }}
+                    button={
+                      user && payrun?.status !== "finalized" && (
+                        <div className="flex items-center gap-2">
+                          {canReview(user.user_type) && (
+                            <button
+                              className="flex items-center gap-1 px-3 py-1.5 border border-blue-600 text-blue-600 rounded-md text-xs hover:bg-blue-50"
+                              onClick={() => openDialog("review")}
+                            >
+                              Review Payrun
+                            </button>
+                          )}
+                          {canFinalize(user.user_type) && (
+                            <button
+                              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                              onClick={() => openDialog("finalize")}
+                            >
+                              Finalize Payrun
+                            </button>
+                          )}
+                        </div>
+                      )
+                    }
                     onPageChange={handlePageChange}
                     onLimitChange={handleLimitChange}
                     loading={loading}
@@ -333,6 +442,24 @@ export default function Page() {
             </div>
           </div>
         </div>
+        <PayrollActionDialog
+          open={processDialogOpen}
+          onOpenChange={setProcessDialogOpen}
+          action={dialogAction}
+          payrunStatus={payrun?.status}
+          payrunName={payrun?.payrun_name}
+          payPeriodStart={payrun?.pay_period_start}
+          payPeriodEnd={payrun?.pay_period_end}
+          totalGrossPay={payrun?.total_gross_pay}
+          totalDeductions={payrun?.total_deductions}
+          employeeCount={payrun?.employee_count}
+          onConfirm={
+            dialogAction === "review"
+              ? handleReviewPayrun
+              : handleFinalizePayrun
+          }
+          loading={processLoading}
+        />
       </SidebarInset>
     </SidebarProvider>
   );
