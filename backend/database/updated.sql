@@ -25,11 +25,10 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `organization_id` int NOT NULL,
   `user_id` int DEFAULT NULL,
   `employee_number` varchar(50) NOT NULL,
-  -- EMAIL COLUMN REMOVED - Use users.email instead via JOIN
   `phone` varchar(20) DEFAULT NULL,
   `hire_date` date NOT NULL,
   `job_title` varchar(100) DEFAULT NULL,
-  `department` varchar(100) DEFAULT NULL,
+  `department_id` int DEFAULT NULL,
   `reports_to` int DEFAULT NULL,
   `base_salary` decimal(15,2) NOT NULL,
   `bank_account_number` varchar(50) DEFAULT NULL,
@@ -40,14 +39,15 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `employment_type` enum('full_time','part_time','contract') DEFAULT 'full_time',
   `work_location` enum('on-site','hybrid','remote') DEFAULT 'on-site',
   PRIMARY KEY (`id`),
-  -- UNIQUE CONSTRAINTS ON EMAIL REMOVED
   KEY `user_id` (`user_id`),
   KEY `reports_to` (`reports_to`),
   KEY `idx_employee_org` (`organization_id`,`id`),
+  KEY `idx_department_id` (`department_id`),
   UNIQUE KEY `unique_employee_number_per_org` (`organization_id`, `employee_number`),
   CONSTRAINT `employees_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `employees_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `employees_ibfk_3` FOREIGN KEY (`reports_to`) REFERENCES `employees` (`id`) ON DELETE SET NULL
+  CONSTRAINT `employees_ibfk_3` FOREIGN KEY (`reports_to`) REFERENCES `employees` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `employees_ibfk_4` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
@@ -119,6 +119,30 @@ CREATE TABLE IF NOT EXISTS `employee_allowances` (
   CONSTRAINT `ea_config_fk` FOREIGN KEY (`config_id`)   REFERENCES `organization_configs` (`id`) ON DELETE CASCADE
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+-- -----------------------------------------------------------------------------
+-- 3. departments
+--    Departments within an organization
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `departments` (
+    `id` INT NOT NULL AUTO_INCREMENT,
+    `organization_id` INT NOT NULL,
+    `name` VARCHAR(100) NOT NULL,
+    `code` VARCHAR(20) DEFAULT NULL,
+    `head_employee_id` INT DEFAULT NULL,
+    `description` TEXT DEFAULT NULL,
+    `is_active` TINYINT(1) DEFAULT 1,
+    `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`id`),
+    UNIQUE KEY `unique_org_dept` (`organization_id`, `name`),
+    KEY `idx_org_dept` (`organization_id`, `name`),
+    KEY `idx_head` (`head_employee_id`),
+    CONSTRAINT fk_dept_org FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+    CONSTRAINT fk_dept_head FOREIGN KEY (`head_employee_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 
 -- Dumping structure for table payhub.advances
 CREATE TABLE IF NOT EXISTS `advances` (
