@@ -16,21 +16,15 @@ import { ArrowLeft, UserPlus, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PayrollActionDialog } from "@/app/payroll/components/payroll-action-dialog";
-
-// Role permission helper
-const canReview = (userType: string) =>
-  ["admin", "payroll_manager", "payroll_officer", "hr_manager"].includes(
-    userType,
-  );
-
-const canFinalize = (userType: string) =>
-  ["admin", "payroll_manager", "finance_manager"].includes(userType);
+import { formatCurrency } from "@/utils/currency";
+import { usePermissions } from "@/hooks/usePermissions";
 
 export default function Page() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
+  const { canReviewPayrun, canFinalizePayrun } = usePermissions();
   const [payrunDetails, setPayrunDetails] = useState<PayrunDetailType[]>([]);
   const [payrun, setPayrun] = useState<PayrunType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -228,13 +222,6 @@ export default function Page() {
     setProcessDialogOpen(true);
   };
 
-  const formatCurrency = (amount: number) => {
-    return `Kshs ${amount.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
-
   const columns: ColumnDef<PayrunDetailType>[] = [
     {
       key: "employee",
@@ -412,7 +399,7 @@ export default function Page() {
                     button={
                       user && payrun?.status !== "finalized" && (
                         <div className="flex items-center gap-2">
-                          {canReview(user.user_type) && (
+                          {canReviewPayrun && (
                             <button
                               className="flex items-center gap-1 px-3 py-1.5 border border-blue-600 text-blue-600 rounded-md text-xs hover:bg-blue-50"
                               onClick={() => openDialog("review")}
@@ -420,7 +407,7 @@ export default function Page() {
                               Review Payrun
                             </button>
                           )}
-                          {canFinalize(user.user_type) && (
+                          {canFinalizePayrun && (
                             <button
                               className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
                               onClick={() => openDialog("finalize")}

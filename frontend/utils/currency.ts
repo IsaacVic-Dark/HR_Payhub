@@ -2,18 +2,14 @@
  * Formats a number into a currency string with thousand separators
  * and two decimal places.
  */
-export function formatCurrency(
-  amount: number,
-  currency: string = "Kshs"
-): string {
-  if (isNaN(amount)) {
-    return `${currency} 0.00`;
-  }
+export const formatCurrency = (amount: number | string): string => {
+  const value = typeof amount === "string" ? parseFloat(amount) : amount;
 
-  const formattedAmount = amount.toLocaleString("en-US", {
+  if (isNaN(value)) return "Kshs 0.00";
+
+  return new Intl.NumberFormat("en-KE", {
+    style: "currency",
+    currency: "KES",
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-
-  return `${currency} ${formattedAmount}`;
-}
+  }).format(value);
+};
