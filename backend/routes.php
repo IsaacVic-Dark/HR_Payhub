@@ -13,6 +13,7 @@ use App\Controllers\LeaveController;
 use App\Controllers\NotificationController;
 use App\Controllers\AuthController;
 use App\Controllers\PayrollController;
+use App\Controllers\DepartmentController;
 
 // Authentication routes - NO authentication required
 Router::post('/api/v1/auth/login', [AuthController::getInstance(), 'login']);
@@ -231,6 +232,55 @@ Router::put('api/v1/payruns/{payrun_id}/details/{id}', PayrunDetailController::c
 Router::delete('api/v1/payruns/{payrun_id}/details/{id}', PayrunDetailController::class . '@delete', [
     'AuthMiddleware',
     'PayrunDetailAuthorizationMiddleware'
+]);
+
+// Department routes
+
+// List all departments
+Router::get('api/v1/organizations/{org_id}/departments', DepartmentController::class . '@index', [
+    'AuthMiddleware',
+    'DepartmentAuthorizationMiddleware'
+]);
+
+// Get a single department
+Router::get('api/v1/organizations/{org_id}/departments/{id}', DepartmentController::class . '@show', [
+    'AuthMiddleware',
+    'DepartmentAuthorizationMiddleware'
+]);
+
+// Create a department — admin, hr_manager only
+Router::post('api/v1/organizations/{org_id}/departments', DepartmentController::class . '@store', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'DepartmentAuthorizationMiddleware'
+]);
+
+// Update a department — admin, hr_manager only
+Router::put('api/v1/organizations/{org_id}/departments/{id}', DepartmentController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'DepartmentAuthorizationMiddleware'
+]);
+
+Router::patch('api/v1/organizations/{org_id}/departments/{id}', DepartmentController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'DepartmentAuthorizationMiddleware'
+]);
+
+// Soft-delete (deactivate) a department — admin, hr_manager only
+Router::delete('api/v1/organizations/{org_id}/departments/{id}', DepartmentController::class . '@destroy', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'DepartmentAuthorizationMiddleware'
+]);
+
+// Assign or change department head — admin, hr_manager only
+Router::post('api/v1/organizations/{org_id}/departments/{id}/assign-head', DepartmentController::class . '@assignHead', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'DepartmentAuthorizationMiddleware'
+]);
+
+// List employees in a department
+Router::get('api/v1/organizations/{org_id}/departments/{id}/employees', DepartmentController::class . '@employees', [
+    'AuthMiddleware',
+    'DepartmentAuthorizationMiddleware'
 ]);
 
 // Leave routes with comprehensive authentication and authorization
