@@ -224,26 +224,26 @@ const data = {
             "department_manager",
           ],
         },
-        {
-          title: "Add Employee",
-          url: "/employees/create",
-          roles: ["super_admin", "admin", "hr_manager"],
-        },
+        // {
+        //   title: "Add Employee",
+        //   url: "/employees/create",
+        //   roles: ["super_admin", "admin", "hr_manager"],
+        // },
         {
           title: "Departments",
           url: "/employees/departments",
           roles: ["super_admin", "admin", "hr_manager"],
         },
-        {
-          title: "Onboarding",
-          url: "/onboarding",
-          roles: ["super_admin", "admin", "hr_manager"],
-        },
-        {
-          title: "Offboarding",
-          url: "/offboarding",
-          roles: ["super_admin", "admin", "hr_manager"],
-        },
+        // {
+        //   title: "Onboarding",
+        //   url: "/onboarding",
+        //   roles: ["super_admin", "admin", "hr_manager"],
+        // },
+        // {
+        //   title: "Offboarding",
+        //   url: "/offboarding",
+        //   roles: ["super_admin", "admin", "hr_manager"],
+        // },
       ],
     },
     {
