@@ -1,10 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import {
   IconReceipt,
-  IconCoin,
   IconGift,
   IconPlane,
   IconArrowForward,
@@ -47,6 +46,7 @@ import { UIConfigItem } from "@/services/api/organization-config";
 import { toast } from "sonner";
 import { useOrganization } from "./components/organization-actions";
 import { useOrganizationConfig } from "@/hooks/useOrganizationConfig";
+import { type OrganizationType } from "@/services/api/organization";
 
 const sidebarItems = [
   { key: "profile", label: "My Profile", icon: IconBuilding },
@@ -92,7 +92,7 @@ const ConfigSkeleton = () => (
 
 // Profile Section Component
 interface ProfileSectionProps {
-  organization: any;
+  organization: OrganizationType | null;
   isLoading: boolean;
   onEditClick: (field: string, value: string) => void;
 }
@@ -200,8 +200,12 @@ function ProfileSection({
                   {field.description}
                 </p>
                 <p className="mt-2">
-                  {organization[field.key as keyof typeof organization] ||
-                    "Not set"}
+                  {organization
+                    ? String(
+                        organization[field.key as keyof typeof organization] ??
+                          "",
+                      ) || "Not set"
+                    : "Not set"}
                 </p>
               </div>
               <Button
@@ -210,7 +214,13 @@ function ProfileSection({
                 onClick={() =>
                   onEditClick(
                     field.key,
-                    organization[field.key as keyof typeof organization] || "",
+                    organization
+                      ? String(
+                          organization[
+                            field.key as keyof typeof organization
+                          ] ?? "",
+                        )
+                      : "",
                   )
                 }
               >
@@ -359,14 +369,13 @@ function DataExportSection() {
 
 // Main Component
 export default function OrganizationConfigPage() {
-  const { user } = useAuth();
   const [activeSection, setActiveSection] = useState("profile");
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingField, setEditingField] = useState<string>("");
   const [editValue, setEditValue] = useState<string>("");
-  const [loading, setLoading] = useState(false);
   const [showEditConfigModal, setShowEditConfigModal] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [editingConfig, setEditingConfig] = useState<{
     id: number | null;
     name: string;
@@ -418,8 +427,23 @@ export default function OrganizationConfigPage() {
     }
 
     // Build config data based on calculation type
-    const configData: any = {
-      config_type: activeSection,
+    type ConfigType =
+      | "tax"
+      | "deduction"
+      | "loan"
+      | "benefit"
+      | "per_diem"
+      | "advance"
+      | "refund";
+
+    const configData: {
+      config_type: ConfigType;
+      name: string;
+      is_active: number;
+      percentage?: number | null;
+      fixed_amount?: number | null;
+    } = {
+      config_type: activeSection as ConfigType,
       name: newConfig.name,
       is_active: 1,
     };
@@ -461,6 +485,22 @@ export default function OrganizationConfigPage() {
     setShowEditModal(true);
   };
 
+  const handleSaveEdit = async () => {
+    if (!editingField) return;
+
+    setLoading(true);
+    try {
+      const success = await updateOrganization(editingField, editValue || null);
+      if (success) {
+        setShowEditModal(false);
+        setEditingField("");
+        setEditValue("");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleEditConfigClick = (config: UIConfigItem) => {
     // Only allow editing active configs
     if (!config.is_active) {
@@ -499,7 +539,12 @@ export default function OrganizationConfigPage() {
     }
 
     // Build config data based on calculation type
-    const configData: any = {
+    const configData: {
+      name?: string;
+      is_active: number;
+      percentage?: number | null;
+      fixed_amount?: number | null;
+    } = {
       name: editingConfig.name,
       is_active: 1, // Keep it active
     };
@@ -724,7 +769,6 @@ export default function OrganizationConfigPage() {
                                             config.is_active,
                                           )
                                         }
-                                        size="sm"
                                       />
                                       {!config.is_active && (
                                         <Badge
@@ -891,17 +935,13 @@ export default function OrganizationConfigPage() {
             >
               Cancel
             </Button>
-            <Button
-              onClick={handleAddConfig}
-            >
-              Save Configuration
-            </Button>
+            <Button onClick={handleAddConfig}>Save Configuration</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Edit Profile Modal */}
-      {/* <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
             <DialogTitle>Edit {getFieldLabel(editingField)}</DialogTitle>
@@ -936,7 +976,7 @@ export default function OrganizationConfigPage() {
             </Button>
           </DialogFooter>
         </DialogContent>
-      </Dialog> */}
+      </Dialog>
 
       {/* Edit Configuration Modal */}
       <Dialog open={showEditConfigModal} onOpenChange={setShowEditConfigModal}>
