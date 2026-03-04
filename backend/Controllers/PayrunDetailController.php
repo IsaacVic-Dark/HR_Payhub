@@ -63,7 +63,8 @@ class PayrunDetailController
                     employees.id,
                     employees.job_title,
                     employees.employee_number,
-                    employees.department,
+                    employees.department_id,
+                    departments.name as department,
                     users.first_name as employee_first_name,
                     users.middle_name as employee_middle_name,
                     users.surname as employee_surname,
@@ -72,6 +73,7 @@ class PayrunDetailController
                 FROM payrun_details
                 INNER JOIN employees ON payrun_details.employee_id = employees.id
                 INNER JOIN users ON employees.user_id = users.id
+                LEFT JOIN departments ON employees.department_id = departments.id
                 WHERE payrun_details.payrun_id = :payrun_id
                 ORDER BY users.surname, users.first_name
                 LIMIT :pagination_limit OFFSET :pagination_offset
@@ -230,7 +232,8 @@ class PayrunDetailController
                     payrun_details.*,
                     employees.employee_number,
                     employees.job_title,
-                    employees.department,
+                    employees.department_id,
+                    departments.name as department,
                     users.first_name as employee_first_name,
                     users.middle_name as employee_middle_name,
                     users.surname as employee_surname,
@@ -239,6 +242,7 @@ class PayrunDetailController
                 FROM payrun_details
                 INNER JOIN employees ON payrun_details.employee_id = employees.id
                 INNER JOIN users ON employees.user_id = users.id
+                LEFT JOIN departments ON employees.department_id = departments.id
                 WHERE payrun_details.id = :id AND payrun_details.payrun_id = :payrun_id",
                 [':id' => $id, ':payrun_id' => $payrunId]
             );
