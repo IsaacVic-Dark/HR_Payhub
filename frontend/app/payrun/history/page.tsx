@@ -122,7 +122,7 @@ export default function Page() {
             </div>
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
               <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
-                <SectionCards details={cardDetails} />
+                <SectionCards details={cardDetails} loading={isLoading} error={null} />
               </div>
               <PayrunTable />
             </div>

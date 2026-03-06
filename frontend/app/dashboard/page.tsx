@@ -29,13 +29,13 @@ export default function Page() {
     return user.email || "";
   };
 
-  const getUserInitials = () => {
-    if (!user) return "U";
-    if (user.first_name && user.surname) {
-      return `${user.first_name[0]}${user.surname[0]}`.toUpperCase();
-    }
-    return user.email ? user.email[0].toUpperCase() : "U";
-  };
+  // const getUserInitials = () => {
+  //   if (!user) return "U";
+  //   if (user.first_name && user.surname) {
+  //     return `${user.first_name[0]}${user.surname[0]}`.toUpperCase();
+  //   }
+  //   return user.email ? user.email[0].toUpperCase() : "U";
+  // };
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -51,7 +51,7 @@ export default function Page() {
     }
   };
 
-  const { isSuperAdmin, isAdmin, canViewReports } = usePermissions();
+  const { isSuperAdmin, isAdmin } = usePermissions();
 
   console.log("Dashboard auth state:", {
     user,
@@ -158,7 +158,7 @@ export default function Page() {
                   {getGreeting()}, {getUserName()}!
                 </h1>
                 <p className="text-base text-muted-foreground">
-                  Here's what's happening with your team today:
+                  Here&apos;s what&apos;s happening with your team today:
                 </p>
 
                 {/* Role-based welcome message */}

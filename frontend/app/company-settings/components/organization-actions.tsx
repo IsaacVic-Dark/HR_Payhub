@@ -1,8 +1,11 @@
 // app/company-settings/components/organization-actions.tsx
 "use client";
 
-import { useState, useEffect } from "react";
-import { organizationAPI, type OrganizationType } from "@/services/api/organization";
+import { useState, useEffect, useCallback } from "react";
+import {
+  organizationAPI,
+  type OrganizationType,
+} from "@/services/api/organization";
 import { useAuth } from "@/lib/AuthContext";
 import { toast } from "sonner"; // or whatever toast library you're using
 
@@ -11,16 +14,18 @@ interface UseOrganizationReturn {
   isLoading: boolean;
   error: string | null;
   refetchOrganization: () => Promise<void>;
-  updateOrganization: (field: string, value: any) => Promise<boolean>;
+  updateOrganization: (field: string, value: string | null) => Promise<boolean>;
 }
 
 export function useOrganization(): UseOrganizationReturn {
   const { user } = useAuth();
-  const [organization, setOrganization] = useState<OrganizationType | null>(null);
+  const [organization, setOrganization] = useState<OrganizationType | null>(
+    null,
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchOrganization = async () => {
+  const fetchOrganization = useCallback(async () => {
     if (!user?.organization_id) {
       setIsLoading(false);
       return;
@@ -30,7 +35,9 @@ export function useOrganization(): UseOrganizationReturn {
     setError(null);
 
     try {
-      const response = await organizationAPI.getOrganizationDetails(user.organization_id);
+      const response = await organizationAPI.getOrganizationDetails(
+        user.organization_id,
+      );
 
       if (response.success && response.data) {
         setOrganization(response.data);
@@ -39,15 +46,19 @@ export function useOrganization(): UseOrganizationReturn {
         toast.error(response.error || "Failed to fetch organization details");
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An error occurred";
+      const errorMessage =
+        err instanceof Error ? err.message : "An error occurred";
       setError(errorMessage);
       toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [user?.organization_id]);
 
-  const updateOrganization = async (field: string, value: any): Promise<boolean> => {
+  const updateOrganization = async (
+    field: string,
+    value: string | null,
+  ): Promise<boolean> => {
     if (!user?.organization_id || !organization) {
       toast.error("Organization not found");
       return false;
@@ -57,7 +68,7 @@ export function useOrganization(): UseOrganizationReturn {
       const updateData = { [field]: value };
       const response = await organizationAPI.updateOrganization(
         user.organization_id,
-        updateData
+        updateData,
       );
 
       if (response.success && response.data) {
@@ -77,7 +88,8 @@ export function useOrganization(): UseOrganizationReturn {
         return false;
       }
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : "An error occurred";
+      const errorMessage =
+        err instanceof Error ? err.message : "An error occurred";
       toast.error(errorMessage);
       return false;
     }
@@ -85,7 +97,7 @@ export function useOrganization(): UseOrganizationReturn {
 
   useEffect(() => {
     fetchOrganization();
-  }, [user?.organization_id]);
+  }, [fetchOrganization]);
 
   return {
     organization,

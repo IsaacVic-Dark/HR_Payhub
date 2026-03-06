@@ -1,25 +1,10 @@
-// [file name]: employee-drawer.tsx
-// [file content begin]
 "use client";
 
 import * as React from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import {
-  CheckCheck,
-  Plus,
-  X,
-  Calendar,
-  Mail,
-  Phone,
-  Building,
-  Briefcase,
-  MapPin,
-  Banknote,
-  User,
-  Download,
-} from "lucide-react";
+import { CheckCheck, X, Mail, Briefcase, Banknote, User } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
   Drawer,
@@ -44,7 +29,10 @@ import {
   EmployeeType as ApiEmployeeType,
 } from "@/services/api/employee";
 import { toast } from "sonner";
-import { Textarea } from "@/components/ui/textarea";
+
+type EmploymentType = "full_time" | "part_time" | "contract";
+
+type WorkLocation = "on-site" | "remote" | "hybrid";
 
 export type Employee = {
   id: string;
@@ -180,26 +168,58 @@ export function EmployeeDrawerAdd({
 
     setLoading(true);
     try {
-      const payload = {
+      // Build payload with proper types - no null values
+      const payload: {
+        first_name: string;
+        middle_name?: string;
+        surname: string;
+        email: string;
+        personal_email?: string;
+        phone: string;
+        hire_date: string;
+        job_title: string;
+        department: string;
+        reports_to?: number;
+        base_salary: string;
+        bank_account_number?: string;
+        tax_id?: string;
+        status: Employee["status"]; // Use the specific type
+        employment_type: EmploymentType;
+        work_location: WorkLocation;
+        username: string;
+        user_id: number;
+      } = {
         first_name: formData.first_name,
-        middle_name: formData.middle_name || null,
         surname: formData.surname,
         email: formData.email,
-        personal_email: formData.personal_email || null,
         phone: formData.phone,
         hire_date: formData.hire_date,
         job_title: formData.job_title,
         department: formData.department,
-        reports_to: formData.reports_to ? parseInt(formData.reports_to) : null,
         base_salary: formData.base_salary,
-        bank_account_number: formData.bank_account_number || null,
-        tax_id: null,
-        status: formData.status,
-        employment_type: formData.employment_type,
-        work_location: formData.work_location,
+        status: formData.status as Employee["status"], // Cast to the correct type
+        employment_type: formData.employment_type as EmploymentType,
+        work_location: formData.work_location as WorkLocation,
         username: `${formData.first_name.toLowerCase()}.${formData.surname.toLowerCase()}`,
         user_id: 0, // This should come from user creation
       };
+
+      // Only add optional fields if they have values
+      if (formData.middle_name && formData.middle_name.trim()) {
+        payload.middle_name = formData.middle_name;
+      }
+
+      if (formData.personal_email && formData.personal_email.trim()) {
+        payload.personal_email = formData.personal_email;
+      }
+
+      if (formData.reports_to && formData.reports_to.trim()) {
+        payload.reports_to = parseInt(formData.reports_to);
+      }
+
+      if (formData.bank_account_number && formData.bank_account_number.trim()) {
+        payload.bank_account_number = formData.bank_account_number;
+      }
 
       const response = await employeeAPI.createEmployee(
         user.organization_id,
@@ -482,7 +502,7 @@ export function EmployeeDrawerAdd({
                     </label>
                     <Select
                       value={formData.employment_type}
-                      onValueChange={(value: any) =>
+                      onValueChange={(value: EmploymentType) =>
                         handleInputChange("employment_type", value)
                       }
                     >
@@ -504,7 +524,7 @@ export function EmployeeDrawerAdd({
                     </label>
                     <Select
                       value={formData.work_location}
-                      onValueChange={(value: any) =>
+                      onValueChange={(value: WorkLocation) =>
                         handleInputChange("work_location", value)
                       }
                     >
@@ -953,7 +973,23 @@ export function EmployeeDrawerEdit({
     setLoading(true);
     try {
       // Build payload with only changed fields
-      const payload: any = {};
+      const payload: {
+        first_name?: string;
+        middle_name?: string;
+        surname?: string;
+        email?: string;
+        personal_email?: string;
+        phone?: string;
+        hire_date?: string;
+        job_title?: string;
+        department?: string;
+        reports_to?: number;
+        base_salary?: string;
+        bank_account_number?: string;
+        status?: Employee["status"];
+        employment_type?: EmploymentType;
+        work_location?: WorkLocation;
+      } = {};
 
       // Compare with original employee data
       const originalFirstName = employee.name.split(" ")[0] || "";
@@ -961,13 +997,30 @@ export function EmployeeDrawerEdit({
 
       if (formData.first_name !== originalFirstName)
         payload.first_name = formData.first_name;
-      if (formData.middle_name && formData.middle_name.trim())
+
+      // Handle middle_name - only include if it has a value, otherwise omit it
+      if (formData.middle_name && formData.middle_name.trim()) {
         payload.middle_name = formData.middle_name;
+      }
+
       if (formData.surname !== originalSurname)
         payload.surname = formData.surname;
       if (formData.email !== employee.email) payload.email = formData.email;
-      if (formData.personal_email !== (employee.personal_email || ""))
-        payload.personal_email = formData.personal_email || null;
+
+      // Fix for personal_email - use undefined instead of null
+      if (formData.personal_email !== (employee.personal_email || "")) {
+        // Only include if it has a value, otherwise omit (undefined)
+        if (formData.personal_email && formData.personal_email.trim()) {
+          payload.personal_email = formData.personal_email;
+        }
+        // If it's empty and the original had a value, we want to clear it
+        // But since we can't send null, we need to check if the API accepts empty string
+        // Option 1: Send empty string if the API accepts it
+        else if (employee.personal_email) {
+          payload.personal_email = ""; // or omit this line if you don't want to clear it
+        }
+      }
+
       if (formData.phone !== (employee.phone || ""))
         payload.phone = formData.phone;
       if (formData.hire_date !== employee.hire_date)
@@ -976,22 +1029,44 @@ export function EmployeeDrawerEdit({
         payload.job_title = formData.job_title;
       if (formData.department !== employee.department)
         payload.department = formData.department;
-      if (formData.reports_to !== (employee.reports_to || ""))
+      if (formData.reports_to !== (employee.reports_to || "")) {
         payload.reports_to = formData.reports_to
           ? parseInt(formData.reports_to)
-          : null;
+          : undefined;
+      }
       if (formData.base_salary !== employee.salary.toString())
         payload.base_salary = formData.base_salary;
-      if (formData.bank_account_number !== (employee.bank_account_number || ""))
-        payload.bank_account_number = formData.bank_account_number || null;
+
+      // Fix for bank_account_number - use undefined instead of null
+      if (
+        formData.bank_account_number !== (employee.bank_account_number || "")
+      ) {
+        if (
+          formData.bank_account_number &&
+          formData.bank_account_number.trim()
+        ) {
+          payload.bank_account_number = formData.bank_account_number;
+        }
+        // If clearing the field, omit it (undefined) or send empty string if API accepts it
+        else if (employee.bank_account_number) {
+          payload.bank_account_number = ""; // or omit this line
+        }
+      }
+
       if (formData.status !== employee.status) payload.status = formData.status;
-      if (formData.employment_type !== (employee.employment_type as any))
+      if (
+        formData.employment_type !==
+        (employee.employment_type as EmploymentType)
+      )
         payload.employment_type = formData.employment_type;
-      if (formData.work_location !== (employee.work_location as any))
+      if (formData.work_location !== (employee.work_location as WorkLocation))
         payload.work_location = formData.work_location;
 
-      // If nothing changed, don't make API call
+      // Fix the syntax error in your if statements (they were nested incorrectly)
+      // The original code had a syntax error with nested if statements without braces
+
       if (Object.keys(payload).length === 0) {
+        // If nothing changed, don't make API call
         toast.info("No changes detected");
         setLoading(false);
         return;
@@ -1245,7 +1320,7 @@ export function EmployeeDrawerEdit({
                     </label>
                     <Select
                       value={formData.employment_type}
-                      onValueChange={(value: any) =>
+                      onValueChange={(value: EmploymentType) =>
                         handleInputChange("employment_type", value)
                       }
                     >
@@ -1267,7 +1342,7 @@ export function EmployeeDrawerEdit({
                     </label>
                     <Select
                       value={formData.work_location}
-                      onValueChange={(value: any) =>
+                      onValueChange={(value: WorkLocation) =>
                         handleInputChange("work_location", value)
                       }
                     >

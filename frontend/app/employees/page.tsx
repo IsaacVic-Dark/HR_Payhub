@@ -1,5 +1,3 @@
-// [file name]: page.tsx
-// [file content begin]
 "use client";
 
 import { AppSidebar } from "@/components/app-sidebar";
@@ -9,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { DataTableEmployees } from "@/app/employees/components/data-table-employees";
-import { employeeAPI, EmployeeType } from "@/services/api/employee";
+import { employeeAPI } from "@/services/api/employee";
 import { useAuth } from "@/lib/AuthContext";
 import { formatCurrency } from "@/lib/utils";
 
@@ -35,45 +33,46 @@ export default function Page() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    const fetchStatistics = async () => {
-      if (!user?.organization_id) {
-        setIsLoading(false);
-        setError("No organization ID found");
-        return;
-      }
+useEffect(() => {
+  const fetchStatistics = async () => {
+    if (!user?.organization_id) {
+      setIsLoading(false);
+      setError("No organization ID found");
+      return;
+    }
 
-      try {
-        setIsLoading(true);
-        setError(null);
+    try {
+      setIsLoading(true);
+      setError(null);
 
-        const data = await employeeAPI.getEmployees(user.organization_id);
+      const response = await employeeAPI.getEmployees(user.organization_id);
 
-        if (!data.success) {
-          throw new Error(
-            `Failed to fetch: ${data.message || "Unknown error"}`
-          );
-        }
-
-        if (data.metadata?.statistics) {
-          setStatistics(data.metadata.statistics);
-        } else if (data.data?.metadata?.statistics) {
-          setStatistics(data.data.metadata.statistics);
-        } else {
-          throw new Error("Statistics data not found in response");
-        }
-      } catch (error) {
-        console.error("Failed to fetch statistics:", error);
-        setError(
-          error instanceof Error ? error.message : "Failed to fetch statistics"
+      if (!response.success) {
+        throw new Error(
+          `Failed to fetch: ${response.error || response.message || "Unknown error"}`
         );
-      } finally {
-        setIsLoading(false);
       }
-    };
 
-    fetchStatistics();
-  }, [user?.organization_id]);
+      // Check for metadata at the top level of the response
+      if (response.metadata?.statistics) {
+        setStatistics(response.metadata.statistics);
+      } else {
+        // If no statistics in metadata, you might need to calculate them from the employees data
+        console.log("No statistics found in metadata");
+        setStatistics(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch statistics:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to fetch statistics"
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  fetchStatistics();
+}, [user?.organization_id]);
 
   // Generate card details dynamically from statistics
   const cardDetails: CardDetail[] = [];
@@ -115,8 +114,6 @@ export default function Page() {
       });
     }
   }
-
-  const path = pathname.split("/").filter(Boolean).pop() || "Dashboard";
 
   return (
     <SidebarProvider

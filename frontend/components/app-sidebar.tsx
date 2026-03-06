@@ -105,39 +105,16 @@ const data = {
     // {
     //   title: "Payroll",
     //   url: "/payroll",
-    //   icon: IconReportMoney,
-    //   roles: ["super_admin", "admin", "payroll_manager", "payroll_officer"],
-    //   hasDropdown: true,
     //   items: [
-    //     {
-    //       title: "Payroll",
-    //       url: "/payroll",
-    //       roles: ["super_admin", "admin", "payroll_manager"],
-    //     },
-    //     {
-    //       title: "Run Payroll",
-    //       url: "/payroll/run",
-    //       roles: ["super_admin", "admin", "payroll_manager"],
-    //     },
     //     {
     //       title: "Data Entry",
     //       url: "/payroll/data-entry",
     //       roles: ["payroll_officer"],
     //     },
     //     {
-    //       title: "Review & Approve",
-    //       url: "/payroll/review",
-    //       roles: ["super_admin", "admin", "payroll_manager"],
-    //     },
-    //     {
     //       title: "Adjustments",
     //       url: "/payroll/adjustments",
     //       roles: ["super_admin", "admin", "payroll_manager"],
-    //     },
-    //     {
-    //       title: "Payroll History",
-    //       url: "/payroll/history",
-    //       roles: ["super_admin", "admin", "payroll_manager", "auditor"],
     //     },
     //   ],
     // },
@@ -210,41 +187,7 @@ const data = {
         "hr_manager",
         "payroll_manager",
         "department_manager",
-      ],
-      hasDropdown: true,
-      items: [
-        {
-          title: "Employee List",
-          url: "/employees",
-          roles: [
-            "super_admin",
-            "admin",
-            "hr_manager",
-            "payroll_manager",
-            "department_manager",
-          ],
-        },
-        // {
-        //   title: "Add Employee",
-        //   url: "/employees/create",
-        //   roles: ["super_admin", "admin", "hr_manager"],
-        // },
-        {
-          title: "Departments",
-          url: "/employees/departments",
-          roles: ["super_admin", "admin", "hr_manager"],
-        },
-        // {
-        //   title: "Onboarding",
-        //   url: "/onboarding",
-        //   roles: ["super_admin", "admin", "hr_manager"],
-        // },
-        // {
-        //   title: "Offboarding",
-        //   url: "/offboarding",
-        //   roles: ["super_admin", "admin", "hr_manager"],
-        // },
-      ],
+      ]
     },
     {
       title: "Leaves",
@@ -256,40 +199,7 @@ const data = {
         "hr_manager",
         "department_manager",
         "employee",
-      ],
-      hasDropdown: true,
-      items: [
-        {
-          title: "Leave",
-          url: "/leaves",
-          roles: ["super_admin", "admin", "hr_manager", "department_manager"],
-        },
-        {
-          title: "Leave Requests",
-          url: "/leave-requests",
-          roles: ["super_admin", "admin", "hr_manager", "department_manager"],
-        },
-        {
-          title: "Leave Approvals",
-          url: "/leave-approvals",
-          roles: ["super_admin", "admin", "hr_manager", "department_manager"],
-        },
-        {
-          title: "Leave Balances",
-          url: "/leave-balances",
-          roles: ["super_admin", "admin", "hr_manager"],
-        },
-        {
-          title: "Leave Policies",
-          url: "/leave-policies",
-          roles: ["super_admin", "admin", "hr_manager"],
-        },
-        {
-          title: "My Leaves",
-          url: "/myleave",
-          roles: ["employee"],
-        },
-      ],
+      ]
     },
     {
       title: "Attendance",
@@ -366,31 +276,30 @@ const data = {
       hasDropdown: true,
       items: [
         {
-          title: "Company Profile",
-          // url: "/company-profile",
+          title: "All Settings",
           url: "/company-settings",
           roles: ["super_admin", "admin"],
         },
         {
           title: "Departments",
-          url: "/departments",
-          roles: ["super_admin", "admin"],
+          url: "/employees/departments",
+          roles: ["super_admin", "admin", "hr_manager"]
         },
-        {
-          title: "Salary Structures",
-          url: "/salary-structures",
-          roles: ["super_admin", "admin"],
-        },
-        {
-          title: "Allowances & Deductions",
-          url: "/allowances",
-          roles: ["super_admin", "admin"],
-        },
-        {
-          title: "Payroll Cycles",
-          url: "/payroll-cycles",
-          roles: ["super_admin", "admin"],
-        },
+        // {
+        //   title: "Salary Structures",
+        //   url: "/salary-structures",
+        //   roles: ["super_admin", "admin"],
+        // },
+        // {
+        //   title: "Allowances & Deductions",
+        //   url: "/allowances",
+        //   roles: ["super_admin", "admin"],
+        // },
+        // {
+        //   title: "Payroll Cycles",
+        //   url: "/payroll-cycles",
+        //   roles: ["super_admin", "admin"],
+        // },
       ],
     },
     {

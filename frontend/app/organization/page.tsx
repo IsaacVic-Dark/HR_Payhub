@@ -3,14 +3,6 @@
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
-import {
-  IconTrendingDown,
-  IconTrendingUp,
-  IconBuilding,
-  IconMapPin,
-  IconCurrency,
-  IconCalendarPlus,
-} from "@tabler/icons-react";
 import { usePathname } from "next/navigation";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import OrganizationTable from "@/components/data-table-organizations";
@@ -52,8 +44,6 @@ export default function Page() {
       footerText: "Improved setup process efficiency",
     },
   ];
-
-  const path = pathname.split("/").filter(Boolean).pop() || "Dashboard";
 
   return (
     <SidebarProvider

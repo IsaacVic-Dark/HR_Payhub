@@ -1,12 +1,14 @@
-// [file name]: data-table-employees.tsx
-// [file content begin]
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Filter, Search, Plus, Eye, ChevronDownIcon, MoreHorizontal } from "lucide-react";
+import { Filter, Search, Plus, Eye } from "lucide-react";
 import { employeeAPI, EmployeeType } from "@/services/api/employee";
 import { Button } from "@/components/ui/button";
-import { EmployeeDrawer, EmployeeDrawerAdd, EmployeeDrawerEdit } from "@/app/employees/components/employee-drawer";
+import {
+  EmployeeDrawer,
+  EmployeeDrawerAdd,
+  EmployeeDrawerEdit,
+} from "@/app/employees/components/employee-drawer";
 import { toast } from "sonner";
 import { DataTable, ColumnDef } from "@/components/table";
 import { useAuth } from "@/lib/AuthContext";
@@ -21,6 +23,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
+type DrawerEmployeeStatus =
+  | "active"
+  | "inactive"
+  | "on_leave"
+  | "terminated"
+  | "resigned"
+  | "suspended"
+  | "probation";
 
 interface Statistics {
   total: number;
@@ -39,7 +50,9 @@ interface DataTableEmployeesProps {
   statistics?: Statistics | null;
 }
 
-const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) => {
+const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
+  statistics: _statistics,
+}) => {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<EmployeeType[]>([]);
   const [loading, setLoading] = useState(true);
@@ -59,7 +72,9 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) =
 
   // Dialog states
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [employeeToDelete, setEmployeeToDelete] = useState<EmployeeType | null>(null);
+  const [employeeToDelete, setEmployeeToDelete] = useState<EmployeeType | null>(
+    null,
+  );
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   const fetchEmployees = useCallback(async () => {
@@ -73,28 +88,35 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) =
       setLoading(true);
       setError(null);
 
-      const filters: any = {
-        department: selectedDepartment || undefined,
-        status: selectedStatus || undefined,
-        job_title: selectedJobTitle || undefined,
-        sort_by: "created_at",
-        sort_order: "desc",
-      };
+const filters: {
+  department?: string;
+  status?: string;
+  job_title?: string;
+  sort_by: string;
+  sort_order: "asc" | "desc";
+} = {
+  department: selectedDepartment || undefined,
+  status: selectedStatus || undefined,
+  job_title: selectedJobTitle || undefined,
+  sort_by: "created_at",
+  sort_order: "desc",
+};
 
-      const response = await employeeAPI.getEmployees(user.organization_id, filters);
+      const response = await employeeAPI.getEmployees(
+        user.organization_id,
+        filters,
+      );
 
       if (response.success && response.data) {
         // The response.data is already the array of employees
-        const employeesData = Array.isArray(response.data)
-          ? response.data
-          : [];
+        const employeesData = Array.isArray(response.data) ? response.data : [];
 
         // Filter by search term if provided
         const filteredEmployees = searchTerm
           ? employeesData.filter((emp: EmployeeType) =>
               `${emp.first_name} ${emp.surname}`
                 .toLowerCase()
-                .includes(searchTerm.toLowerCase())
+                .includes(searchTerm.toLowerCase()),
             )
           : employeesData;
 
@@ -130,7 +152,14 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) =
     } finally {
       setLoading(false);
     }
-  }, [user?.organization_id, searchTerm, selectedDepartment, selectedStatus, selectedJobTitle, limit]);
+  }, [
+    user?.organization_id,
+    searchTerm,
+    selectedDepartment,
+    selectedStatus,
+    selectedJobTitle,
+    limit,
+  ]);
 
   useEffect(() => {
     if (user?.organization_id) {
@@ -194,8 +223,11 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) =
 
     setDeleteLoading(true);
     try {
-      const response = await employeeAPI.deleteEmployee(user.organization_id, employeeToDelete.id);
-      
+      const response = await employeeAPI.deleteEmployee(
+        user.organization_id,
+        employeeToDelete.id,
+      );
+
       if (response.success) {
         toast.success("Employee deleted successfully");
         setDeleteDialogOpen(false);
@@ -204,7 +236,7 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) =
       } else {
         toast.error(response.error || "Failed to delete employee");
       }
-    } catch (err) {
+    } catch {
       toast.error("An error occurred while deleting employee");
     } finally {
       setDeleteLoading(false);
@@ -230,12 +262,19 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) =
     setPage(1);
   };
 
-  const hasActiveFilters = searchTerm || selectedDepartment || selectedStatus || selectedJobTitle;
+  const hasActiveFilters =
+    searchTerm || selectedDepartment || selectedStatus || selectedJobTitle;
 
   // Get unique values for filter dropdowns
-  const departments = Array.from(new Set(employees.map(emp => emp.department))).filter(Boolean);
-  const jobTitles = Array.from(new Set(employees.map(emp => emp.job_title))).filter(Boolean);
-  const statuses = Array.from(new Set(employees.map(emp => emp.status))).filter(Boolean);
+  const departments = Array.from(
+    new Set(employees.map((emp) => emp.department)),
+  ).filter(Boolean);
+  const jobTitles = Array.from(
+    new Set(employees.map((emp) => emp.job_title)),
+  ).filter(Boolean);
+  const statuses = Array.from(
+    new Set(employees.map((emp) => emp.status)),
+  ).filter(Boolean);
 
   if (!user) {
     return (
@@ -257,7 +296,8 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) =
         <div className="flex items-center space-x-3">
           <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
             <span className="font-medium text-gray-700">
-              {employee.first_name[0]}{employee.surname[0]}
+              {employee.first_name[0]}
+              {employee.surname[0]}
             </span>
           </div>
           <div>
@@ -302,62 +342,66 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) =
       header: "Actions",
       cell: (employee) => (
         <div className="flex items-center gap-2">
-          <EmployeeDrawer employee={{
-            id: employee.id.toString(),
-            name: `${employee.first_name} ${employee.surname}`,
-            email: employee.email,
-            personal_email: employee.personal_email || "",
-            phone: employee.phone || "",
-            position: employee.job_title,
-            department: employee.department,
-            status: employee.status as any,
-            salary: parseFloat(employee.base_salary),
-            hire_date: employee.hire_date,
-            bank_account_number: employee.bank_account_number || "",
-            work_location: employee.work_location,
-            employment_type: employee.employment_type,
-            reports_to: employee.reports_to?.toString() || "",
-            location: employee.work_location,
-            img: (
-              <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                <span className="font-medium text-gray-700">
-                  {employee.first_name[0]}{employee.surname[0]}
-                </span>
-              </div>
-            )
-          }}>
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0"
-            >
+          <EmployeeDrawer
+            employee={{
+              id: employee.id.toString(),
+              name: `${employee.first_name} ${employee.surname}`,
+              email: employee.email,
+              p_email: employee.personal_email || "",
+              personal_email: employee.personal_email || "",
+              phone: employee.phone || "",
+              position: employee.job_title,
+              department: employee.department,
+              status: employee.status as unknown as DrawerEmployeeStatus,
+              salary: parseFloat(employee.base_salary),
+              hire_date: employee.hire_date,
+              bank_account_number: employee.bank_account_number || "",
+              work_location: employee.work_location,
+              employment_type: employee.employment_type,
+              reports_to: employee.reports_to?.toString() || "",
+              location: employee.work_location,
+              img: (
+                <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                  <span className="font-medium text-gray-700">
+                    {employee.first_name[0]}
+                    {employee.surname[0]}
+                  </span>
+                </div>
+              ),
+            }}
+          >
+            <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
               <Eye className="h-4 w-4" />
             </Button>
           </EmployeeDrawer>
-          <EmployeeDrawerEdit employee={{
-            id: employee.id.toString(),
-            name: `${employee.first_name} ${employee.surname}`,
-            email: employee.email,
-            personal_email: employee.personal_email || "",
-            phone: employee.phone || "",
-            position: employee.job_title,
-            department: employee.department,
-            status: employee.status as any,
-            salary: parseFloat(employee.base_salary),
-            hire_date: employee.hire_date,
-            bank_account_number: employee.bank_account_number || "",
-            work_location: employee.work_location,
-            employment_type: employee.employment_type,
-            reports_to: employee.reports_to?.toString() || "",
-            location: employee.work_location,
-            img: (
-              <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                <span className="font-medium text-gray-700">
-                  {employee.first_name[0]}{employee.surname[0]}
-                </span>
-              </div>
-            )
-          }}>
+          <EmployeeDrawerEdit
+            employee={{
+              id: employee.id.toString(),
+              name: `${employee.first_name} ${employee.surname}`,
+              email: employee.email,
+              p_email: employee.personal_email || "",
+              personal_email: employee.personal_email || "",
+              phone: employee.phone || "",
+              position: employee.job_title,
+              department: employee.department,
+              status: (employee.status as unknown) as DrawerEmployeeStatus,
+              salary: parseFloat(employee.base_salary),
+              hire_date: employee.hire_date,
+              bank_account_number: employee.bank_account_number || "",
+              work_location: employee.work_location,
+              employment_type: employee.employment_type,
+              reports_to: employee.reports_to?.toString() || "",
+              location: employee.work_location,
+              img: (
+                <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
+                  <span className="font-medium text-gray-700">
+                    {employee.first_name[0]}
+                    {employee.surname[0]}
+                  </span>
+                </div>
+              ),
+            }}
+          >
             <Button
               size="sm"
               variant="ghost"
@@ -436,9 +480,7 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) =
                 employees={employees}
                 onEmployeeAdded={fetchEmployees}
               >
-                <Button
-                  className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
-                >
+                <Button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
                   <Plus className="w-4 h-4" />
                   Add Employee
                 </Button>
@@ -540,14 +582,22 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({ statistics }) =
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Employee</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the employee <strong>{employeeToDelete?.first_name} {employeeToDelete?.surname}</strong>?
+              Are you sure you want to delete the employee{" "}
+              <strong>
+                {employeeToDelete?.first_name} {employeeToDelete?.surname}
+              </strong>
+              ?
               <br />
               <br />
-              <strong className="text-red-600">This action cannot be undone.</strong>
+              <strong className="text-red-600">
+                This action cannot be undone.
+              </strong>
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteLoading}>
+              Cancel
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDelete}
               disabled={deleteLoading}

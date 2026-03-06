@@ -53,7 +53,7 @@ export const useOrganizationConfig = () => {
   }, [fetchConfigs]);
 
   const createConfig = async (configData: {
-    config_type: string;
+    config_type: "tax" | "deduction" | "loan" | "benefit" | "per_diem" | "advance" | "refund";
     name: string;
     percentage?: number | null;
     fixed_amount?: number | null;

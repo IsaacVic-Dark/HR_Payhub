@@ -16,7 +16,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import {
   ChevronLeft,
   User,
@@ -35,7 +34,14 @@ import {
 
 const UntitledUISignup = () => {
   const [currentStep, setCurrentStep] = useState(1);
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    email: string;
+    password: string;
+    companyName: string;
+    location: string;
+    currency: string;
+    logo: File | null;
+  }>({
     email: "",
     password: "",
     companyName: "",
@@ -101,12 +107,12 @@ const UntitledUISignup = () => {
     { code: "GBP", name: "British Pound (GBP)" },
   ];
 
-  const handleInputChange = (field, value) => {
+  const handleInputChange = (field: string, value: string | File | null) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleFileUpload = (event) => {
-    const file = event.target.files[0];
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
     if (file) {
       setFormData((prev) => ({ ...prev, logo: file }));
     }
@@ -194,8 +200,8 @@ const UntitledUISignup = () => {
                   isActive
                     ? "bg-black text-white"
                     : isCompleted
-                    ? "bg-green-100 text-green-600"
-                    : "bg-gray-200 text-gray-400"
+                      ? "bg-green-100 text-green-600"
+                      : "bg-gray-200 text-gray-400"
                 }`}
               >
                 <IconComponent className="w-4 h-4" />
@@ -341,12 +347,30 @@ const UntitledUISignup = () => {
               <div className="flex justify-center space-y-2">
                 <InputOTP maxLength={6} pattern={"[0-9]*"}>
                   <InputOTPGroup className="grid grid-cols-6 gap-2">
-                    <InputOTPSlot className="rounded-md !border-l !border-gray-400" index={0} />
-                    <InputOTPSlot className="rounded-md !border-l !border-gray-400" index={1} />
-                    <InputOTPSlot className="rounded-md !border-l !border-gray-400" index={2} />
-                    <InputOTPSlot className="rounded-md !border-l !border-gray-400" index={3} />
-                    <InputOTPSlot className="rounded-md !border-l !border-gray-400" index={4} />
-                    <InputOTPSlot className="rounded-md !border-l !border-gray-400" index={5} />
+                    <InputOTPSlot
+                      className="rounded-md !border-l !border-gray-400"
+                      index={0}
+                    />
+                    <InputOTPSlot
+                      className="rounded-md !border-l !border-gray-400"
+                      index={1}
+                    />
+                    <InputOTPSlot
+                      className="rounded-md !border-l !border-gray-400"
+                      index={2}
+                    />
+                    <InputOTPSlot
+                      className="rounded-md !border-l !border-gray-400"
+                      index={3}
+                    />
+                    <InputOTPSlot
+                      className="rounded-md !border-l !border-gray-400"
+                      index={4}
+                    />
+                    <InputOTPSlot
+                      className="rounded-md !border-l !border-gray-400"
+                      index={5}
+                    />
                   </InputOTPGroup>
                 </InputOTP>
               </div>
@@ -446,7 +470,6 @@ const UntitledUISignup = () => {
                   <label htmlFor="logo" className="cursor-pointer">
                     <Upload className="size-6 mx-auto mb-2 text-gray-400" />
                     <div className="text-sm text-gray-600">
-                      
                       {formData.logo
                         ? formData.logo.name
                         : "Click to upload logo"}

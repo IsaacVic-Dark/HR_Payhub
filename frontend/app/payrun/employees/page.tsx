@@ -15,7 +15,7 @@ import { DataTable, ColumnDef } from "@/components/table";
 import { ArrowLeft, UserPlus, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
-import { PayrollActionDialog } from "@/app/payroll/components/payroll-action-dialog";
+import { PayrollActionDialog } from "@/app/payrun/components/payroll-action-dialog";
 import { formatCurrency } from "@/utils/currency";
 import { usePermissions } from "@/hooks/usePermissions";
 

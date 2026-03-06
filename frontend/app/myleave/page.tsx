@@ -149,13 +149,13 @@ export default function MyLeavePage() {
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
               {/* Leave Statistics */}
               <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
-                <SectionCards details={cardDetails} />
+                <SectionCards details={cardDetails} loading={isLoading} error={null} />
               </div>
 
               {/* Days Summary */}
               {daysCards.length > 0 && (
                 <div className="peer-data-[state=expanded]:xl:grid-cols-2 peer-data-[state=collapsed]:xl:grid-cols-3">
-                  <SectionCards details={daysCards} />
+                  <SectionCards details={daysCards} loading={isLoading} error={null} />
                 </div>
               )}
 

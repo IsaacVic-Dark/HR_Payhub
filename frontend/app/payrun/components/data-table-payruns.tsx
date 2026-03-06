@@ -3,17 +3,14 @@
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Filter,
-  Search,
   Eye,
   Trash2,
-  ChevronDownIcon,
 } from "lucide-react";
 import { payrunAPI, PayrunType, PayrunFilters } from "@/services/api/payrun";
 import { Button } from "@/components/ui/button";
 import { PayrunViewDrawer } from "@/app/payrun/components/payrun-view-drawer";
 import { toast } from "sonner";
 import { DataTable, ColumnDef } from "@/components/table";
-import { format } from "date-fns";
 import { useAuth } from "@/lib/AuthContext";
 import { useRouter } from "next/navigation";
 
@@ -130,7 +127,7 @@ const PayrunTable: React.FC = () => {
       });
 
       return `${startFormatted} — ${endFormatted}`;
-    } catch (error) {
+    } catch{
       return "Invalid date";
     }
   };
@@ -194,7 +191,7 @@ const PayrunTable: React.FC = () => {
       } else {
         toast.error(response.error || "Failed to delete payrun");
       }
-    } catch (err) {
+    } catch {
       toast.error("An error occurred while deleting payrun");
     } finally {
       setDeleteLoading(false);

@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PayrunType } from "@/services/api/payrun";
-import { Calendar, User, DollarSign, Users, FileText, Clock, Trash2 } from "lucide-react";
+import { Calendar, User, DollarSign, Trash2 } from "lucide-react";
 
 interface PayrunViewDrawerProps {
   open: boolean;

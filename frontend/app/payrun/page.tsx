@@ -3,7 +3,6 @@
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SectionCards, type CardDetail } from "@/components/section-cards"
-import { IconTrendingDown, IconTrendingUp } from "@tabler/icons-react";
 import { usePathname } from "next/navigation";
 import {
   SidebarInset,
@@ -50,8 +49,6 @@ export default function Page() {
     },
   ];
 
-  const path = pathname.split("/").filter(Boolean).pop() || "Dashboard";
-  
   return (
     <SidebarProvider
       style={

@@ -15,7 +15,7 @@ import { DataTable, ColumnDef } from "@/components/table";
 import { DepartmentViewDrawer } from "@/app/employees/departments/components/department-view-drawer";
 import { DepartmentFormDialog } from "@/app/employees/departments/components/department-form-dialog";
 import { Button } from "@/components/ui/button";
-import { Eye, Pencil, Trash2, Filter, Plus, UserCog } from "lucide-react";
+import { Eye, Pencil, Trash2, Filter, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 export default function DepartmentsPage() {
@@ -258,7 +258,7 @@ export default function DepartmentsPage() {
             <div className="mt-4 mx-6 space-y-2">
               <h1 className="text-2xl font-medium">Departments</h1>
               <p className="text-base text-muted-foreground">
-                Manage your organisation's departments and team structure
+                Manage your organisation&apos;s departments and team structure
               </p>
             </div>
 

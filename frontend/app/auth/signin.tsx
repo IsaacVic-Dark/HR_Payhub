@@ -3,37 +3,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import {
-  ChevronLeft,
-  User,
-  Mail,
-  Shield,
-  Users,
-  ArrowRight,
-  Upload,
-} from "lucide-react";
 
 const Signin = () => {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<{
+    email: string;
+    password: string;
+  }>({
     email: "",
     password: "",
   });
-    const handleInputChange = () => {
-    setFormData((e) => ({ formData }));
+  const handleInputChange = (field: string, value: string | File | null) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
   const renderSidebar = () => (
