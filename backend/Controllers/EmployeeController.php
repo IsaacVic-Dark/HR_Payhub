@@ -4,6 +4,8 @@ namespace App\Controllers;
 
 use App\Services\DB;
 
+require_once __DIR__ . '/../helpers/tax.php';
+
 class EmployeeController
 {
     public function index($orgId)
@@ -25,7 +27,7 @@ class EmployeeController
 
             // Then apply user-provided filters
             $userFilters = [
-                'department' => $_GET['department'] ?? null,
+                'department_id' => $_GET['department_id'] ?? null,
                 'job_title' => $_GET['job_title'] ?? null,
                 'employee_number' => $_GET['employee_number'] ?? null, // NEW: Added employee number filter
             ];
@@ -50,9 +52,9 @@ class EmployeeController
             $params = $queryData['params'];
 
             // Apply user filters
-            if (!empty($userFilters['department'])) {
-                $query .= " AND e.department = :department";
-                $params[':department'] = $userFilters['department'];
+            if (!empty($userFilters['department_id'])) {
+                $query .= " AND e.department_id = :department_id";
+                $params[':department_id'] = $userFilters['department_id'];
             }
 
             if (!empty($userFilters['job_title'])) {
@@ -138,7 +140,7 @@ class EmployeeController
 
             $data = validate([
                 'user_id' => 'numeric',
-                'employee_number' => 'required,string', // NEW: Required employee number
+                'employee_number' => 'required,string',
                 'first_name' => 'required,string',
                 'middle_name' => 'string',
                 'surname' => 'required,string',
@@ -146,12 +148,18 @@ class EmployeeController
                 'phone' => 'string',
                 'hire_date' => 'required,string',
                 'job_title' => 'string',
-                'department' => 'string',
+                'department_id' => 'numeric',
                 'reports_to' => 'required,numeric',
                 'base_salary' => 'required,numeric',
                 'bank_account_number' => 'string',
                 'tax_id' => 'string'
             ]);
+
+            // Normalise: accept both "department" and "department_id" from payload
+            // TODO: In future, we should standardize on "department_id" in the frontend to avoid this confusion
+            if (!isset($data["department_id"]) && isset($data["department"])) {
+                $data["department_id"] = $data["department"];
+            }
 
             // NEW: Validate employee number uniqueness within organization
             $existingEmployeeNumber = DB::raw(
@@ -185,6 +193,22 @@ class EmployeeController
                         success: false,
                         message: "Invalid reports_to (manager)",
                         code: 400
+                    );
+                }
+            }
+
+            // Validate department_id belongs to this organization
+            if (!empty($data['department_id'])) {
+                $dept = DB::raw(
+                    "SELECT id FROM departments WHERE id = :dept_id AND organization_id = :org_id AND is_active = 1 LIMIT 1",
+                    [':dept_id' => $data['department_id'], ':org_id' => $orgId]
+                );
+                if (empty($dept)) {
+                    return responseJson(
+                        success: false,
+                        message: "Department not found or does not belong to this organization",
+                        code: 400,
+                        errors: ['department_id' => 'Invalid department_id']
                     );
                 }
             }
@@ -278,7 +302,7 @@ class EmployeeController
                     phone, 
                     hire_date, 
                     job_title, 
-                    department, 
+                    department_id,
                     reports_to, 
                     base_salary, 
                     bank_account_number, 
@@ -291,7 +315,7 @@ class EmployeeController
                     :phone, 
                     :hire_date, 
                     :job_title, 
-                    :department, 
+                    :department_id,
                     :reports_to, 
                     :base_salary, 
                     :bank_account_number, 
@@ -300,18 +324,95 @@ class EmployeeController
                 )";
 
                 DB::raw($insertEmployeeSQL, [
-                    ':org_id' => $orgId,
-                    ':user_id' => $user_id,
-                    ':employee_number' => $data['employee_number'], // NEW
-                    ':phone' => $data['phone'],
-                    ':hire_date' => $data['hire_date'],
-                    ':job_title' => $data['job_title'],
-                    ':department' => $data['department'],
-                    ':reports_to' => $data['reports_to'],
-                    ':base_salary' => $data['base_salary'],
+                    ':org_id'              => $orgId,
+                    ':user_id'             => $user_id,
+                    ':employee_number'     => $data['employee_number'],
+                    ':phone'               => $data['phone'],
+                    ':hire_date'           => $data['hire_date'],
+                    ':job_title'           => $data['job_title'],
+                    ':department_id'       => $data['department_id'] ?? null,
+                    ':reports_to'          => $data['reports_to'],
+                    ':base_salary'         => $data['base_salary'],
                     ':bank_account_number' => $data['bank_account_number'],
-                    ':tax_id' => $data['tax_id']
+                    ':tax_id'              => $data['tax_id']
                 ]);
+
+                // 7. Get the employee_id just inserted
+                $empResult  = DB::raw("SELECT LAST_INSERT_ID() as emp_id");
+                $employeeId = (int) $empResult[0]->emp_id;
+
+                // 8. Check for a draft payrun in the current pay period
+                $periodStart = date('Y-m-01');
+                $draftPayrun = DB::raw(
+                    "SELECT id FROM payruns
+                     WHERE organization_id = :org_id
+                       AND status = 'draft'
+                       AND pay_period_start = :period_start
+                       AND deleted_at IS NULL
+                     LIMIT 1",
+                    [':org_id' => $orgId, ':period_start' => $periodStart]
+                );
+
+                if (!empty($draftPayrun)) {
+                    $payrunId = (int) $draftPayrun[0]->id;
+
+                    // 9. Load org tax config and calculate
+                    $config   = loadTaxConfig($orgId);
+                    $salary   = (float) $data['base_salary'];
+                    $tax      = calculateNetPay($salary, $salary, $config);
+
+                    // 10. Insert payrun_detail row
+                    DB::raw(
+                        "INSERT INTO payrun_details (
+                            payrun_id, organization_id, employee_id,
+                            basic_salary, gross_pay,
+                            nssf, shif, housing_levy,
+                            taxable_income, tax_before_relief, personal_relief, paye,
+                            total_deductions, net_pay,
+                            created_at
+                        ) VALUES (
+                            :payrun_id, :org_id, :employee_id,
+                            :basic_salary, :gross_pay,
+                            :nssf, :shif, :housing_levy,
+                            :taxable_income, :tax_before_relief, :personal_relief, :paye,
+                            :total_deductions, :net_pay,
+                            NOW()
+                        )",
+                        [
+                            ':payrun_id'         => $payrunId,
+                            ':org_id'            => $orgId,
+                            ':employee_id'       => $employeeId,
+                            ':basic_salary'      => $tax['basic_salary'],
+                            ':gross_pay'         => $tax['gross_pay'],
+                            ':nssf'              => $tax['nssf'],
+                            ':shif'              => $tax['shif'],
+                            ':housing_levy'      => $tax['housing_levy'],
+                            ':taxable_income'    => $tax['taxable_income'],
+                            ':tax_before_relief' => $tax['tax_before_relief'],
+                            ':personal_relief'   => $tax['personal_relief'],
+                            ':paye'              => $tax['paye'],
+                            ':total_deductions'  => $tax['total_deductions'],
+                            ':net_pay'           => $tax['net_pay'],
+                        ]
+                    );
+
+                    // 11. Update payrun totals
+                    DB::raw(
+                        "UPDATE payruns SET
+                            total_gross_pay  = total_gross_pay  + :gross_pay,
+                            total_deductions = total_deductions + :total_deductions,
+                            total_net_pay    = total_net_pay    + :net_pay,
+                            employee_count   = employee_count   + 1,
+                            updated_at       = NOW()
+                         WHERE id = :payrun_id",
+                        [
+                            ':gross_pay'        => $tax['gross_pay'],
+                            ':total_deductions' => $tax['total_deductions'],
+                            ':net_pay'          => $tax['net_pay'],
+                            ':payrun_id'        => $payrunId,
+                        ]
+                    );
+                }
 
                 $inserted = true;
             });
@@ -501,7 +602,7 @@ class EmployeeController
                 'phone' => 'string',
                 'hire_date' => 'string',
                 'job_title' => 'string',
-                'department' => 'string',
+                'department_id' => 'numeric',
                 'reports_to' => 'numeric',
                 'base_salary' => 'numeric',
                 'bank_account_number' => 'string',
@@ -542,7 +643,7 @@ class EmployeeController
                 'phone' => $data['phone'] ?? null,
                 'hire_date' => $data['hire_date'] ?? null,
                 'job_title' => $data['job_title'] ?? null,
-                'department' => $data['department'] ?? null,
+                'department_id' => $data['department_id'] ?? null,
                 'reports_to' => $data['reports_to'] ?? null,
                 'base_salary' => $data['base_salary'] ?? null,
                 'bank_account_number' => $data['bank_account_number'] ?? null,
@@ -727,8 +828,8 @@ class EmployeeController
         ];
 
         // Department statistics
-        $departments = array_column($employees, 'department');
-        $stats['by_department'] = array_count_values($departments);
+        $departments = array_column($employees, 'department_id');
+        $stats['by_department'] = array_count_values(array_filter($departments));
         arsort($stats['by_department']);
 
         // Job title statistics
@@ -783,7 +884,7 @@ class EmployeeController
 
     private function buildRoleBasedQuery($orgId, $roleFilters)
     {
-        $baseFields = "e.id, e.organization_id, e.user_id, e.employee_number, e.phone, e.hire_date, e.job_title, e.department, e.reports_to, e.status, e.created_at"; // NEW: Added employee_number
+        $baseFields = "e.id, e.organization_id, e.user_id, e.employee_number, e.phone, e.hire_date, e.job_title, e.department_id, e.reports_to, e.status, e.created_at"; // NEW: Added employee_number
 
         // Field-level security based on role
         if (isset($roleFilters['payroll_access']) || isset($roleFilters['financial_access'])) {
