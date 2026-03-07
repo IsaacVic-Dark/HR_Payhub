@@ -12,10 +12,11 @@ import {
 import { payrunAPI, PayrunType } from "@/services/api/payrun";
 import { useAuth } from "@/lib/AuthContext";
 import { DataTable, ColumnDef } from "@/components/table";
-import { ArrowLeft, UserPlus, Filter } from "lucide-react";
+import { ArrowLeft, Eye, Filter } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { PayrollActionDialog } from "@/app/payrun/components/payroll-action-dialog";
+import { PayrunDetailDrawer } from "@/app/payrun/components/payrun-detail-drawer";
 import { formatCurrency } from "@/utils/currency";
 import { usePermissions } from "@/hooks/usePermissions";
 
@@ -39,6 +40,11 @@ export default function Page() {
   const [dialogAction, setDialogAction] = useState<"review" | "finalize">(
     "review",
   );
+
+  // Detail drawer state
+  const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
+  const [selectedDetail, setSelectedDetail] = useState<PayrunDetailType | null>(null);
+  const [detailLoading, setDetailLoading] = useState(false);
 
   const payrunId = searchParams.get("payrun_id");
 
@@ -222,11 +228,44 @@ export default function Page() {
     setProcessDialogOpen(true);
   };
 
+  const handleViewDetail = async (detail: PayrunDetailType) => {
+    if (!user?.organization_id || !payrunId) return;
+    console.log("Row data from table:", detail);
+    setSelectedDetail(null);
+    setDetailDrawerOpen(true);
+    setDetailLoading(true);
+    try {
+      const response = await payrunDetailAPI.getPayrunDetailById(
+        user.organization_id,
+        parseInt(payrunId),
+        detail.id,
+      );
+      if (response.success && response.data) {
+        setSelectedDetail(response.data);
+      } else {
+        toast.error(response.error || "Failed to load employee detail");
+        setDetailDrawerOpen(false);
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "An unexpected error occurred",
+      );
+      setDetailDrawerOpen(false);
+    } finally {
+      setDetailLoading(false);
+    }
+  };
+
   const columns: ColumnDef<PayrunDetailType>[] = [
     {
       key: "employee",
       header: "Employee",
-      cell: (detail) => detail.employee_full_name,
+      cell: (detail) => (
+        <div>
+          <p className="font-medium">{detail.employee_full_name}</p>
+          <p className="text-xs text-gray-500">{detail.job_title || "—"}</p>
+        </div>
+      ),
     },
     {
       key: "employee_number",
@@ -260,6 +299,19 @@ export default function Page() {
         <span className="font-semibold text-green-600">
           {formatCurrency(detail.net_pay)}
         </span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "Actions",
+      cell: (detail) => (
+        <button
+          onClick={() => handleViewDetail(detail)}
+          className="p-1.5 rounded-md text-gray-500 hover:text-blue-600 hover:bg-blue-50 transition-colors"
+          title="View detail"
+        >
+          <Eye className="h-4 w-4" />
+        </button>
       ),
     },
   ];
@@ -446,6 +498,12 @@ export default function Page() {
               : handleFinalizePayrun
           }
           loading={processLoading}
+        />
+        <PayrunDetailDrawer
+          open={detailDrawerOpen}
+          onOpenChange={setDetailDrawerOpen}
+          detail={selectedDetail}
+          loading={detailLoading}
         />
       </SidebarInset>
     </SidebarProvider>
