@@ -209,27 +209,27 @@ Router::get('api/v1/organizations/{org_id}/payrun/{payrun_id}/employees', Payrun
     'PayrunDetailAuthorizationMiddleware'
 ]);
 
-Router::get('api/v1/payruns/{payrun_id}/details', PayrunDetailController::class . '@index', [
+Router::get('api/v1/organizations/{org_id}/payrun/{payrun_id}/details', PayrunDetailController::class . '@index', [
     'AuthMiddleware',
     'PayrunDetailAuthorizationMiddleware'
 ]);
 
-Router::post('api/v1/payruns/{payrun_id}/details', PayrunDetailController::class . '@create', [
+Router::post('api/v1/organizations/{org_id}/payrun/{payrun_id}/details', PayrunDetailController::class . '@create', [
     'AuthMiddleware',
     'PayrunDetailAuthorizationMiddleware'
 ]);
 
-Router::get('api/v1/payruns/{payrun_id}/details/{id}', PayrunDetailController::class . '@show', [
+Router::get('api/v1/organizations/{org_id}/payrun/{payrun_id}/details/{id}', PayrunDetailController::class . '@show', [
     'AuthMiddleware',
     'PayrunDetailAuthorizationMiddleware'
 ]);
 
-Router::put('api/v1/payruns/{payrun_id}/details/{id}', PayrunDetailController::class . '@update', [
+Router::put('api/v1/organizations/{org_id}/payrun/{payrun_id}/details/{id}', PayrunDetailController::class . '@update', [
     'AuthMiddleware',
     'PayrunDetailAuthorizationMiddleware'
 ]);
 
-Router::delete('api/v1/payruns/{payrun_id}/details/{id}', PayrunDetailController::class . '@delete', [
+Router::delete('api/v1/organizations/{org_id}/payrun/{payrun_id}/details/{id}', PayrunDetailController::class . '@delete', [
     'AuthMiddleware',
     'PayrunDetailAuthorizationMiddleware'
 ]);

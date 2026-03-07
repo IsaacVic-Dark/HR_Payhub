@@ -1,14 +1,25 @@
 type PayrunDetailType = {
   id: number;
   payrun_id: number;
+  organization_id: number;
   employee_id: number;
   basic_salary: number;
   overtime_amount: number;
   bonus_amount: number;
   commission_amount: number;
+  // Statutory deductions
+  nssf: number;
+  shif: number;
+  housing_levy: number;
+  taxable_income: number;
+  tax_before_relief: number;
+  personal_relief: number;
+  paye: number;
+  // Totals
   gross_pay: number;
   total_deductions: number;
   net_pay: number;
+  // Employee info
   employee_number: string;
   job_title: string;
   department: string;
@@ -136,11 +147,12 @@ class PayrunDetailAPI {
   }
 
   async getPayrunDetailById(
+    organizationId: number,
     payrunId: number,
     detailId: number
   ): Promise<ApiResponse<PayrunDetailType>> {
     try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/payruns/${payrunId}/details/${detailId}`;
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/details/${detailId}`;
 
       const response = await fetch(url, {
         method: "GET",
@@ -161,6 +173,7 @@ class PayrunDetailAPI {
   }
 
   async createPayrunDetail(
+    organizationId: number,
     payrunId: number,
     detailData: {
       employee_id: number;
@@ -168,13 +181,11 @@ class PayrunDetailAPI {
       overtime_amount?: number;
       bonus_amount?: number;
       commission_amount?: number;
-      gross_pay: number;
-      total_deductions: number;
-      net_pay: number;
+      extra_deductions?: number;
     }
   ): Promise<ApiResponse> {
     try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/payruns/${payrunId}/details`;
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/details`;
 
       const response = await fetch(url, {
         method: "POST",
@@ -196,6 +207,7 @@ class PayrunDetailAPI {
   }
 
   async updatePayrunDetail(
+    organizationId: number,
     payrunId: number,
     detailId: number,
     detailData: {
@@ -204,13 +216,11 @@ class PayrunDetailAPI {
       overtime_amount?: number;
       bonus_amount?: number;
       commission_amount?: number;
-      gross_pay?: number;
-      total_deductions?: number;
-      net_pay?: number;
+      extra_deductions?: number;
     }
   ): Promise<ApiResponse> {
     try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/payruns/${payrunId}/details/${detailId}`;
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/details/${detailId}`;
 
       const response = await fetch(url, {
         method: "PUT",
@@ -232,11 +242,12 @@ class PayrunDetailAPI {
   }
 
   async deletePayrunDetail(
+    organizationId: number,
     payrunId: number,
     detailId: number
   ): Promise<ApiResponse> {
     try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/payruns/${payrunId}/details/${detailId}`;
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/details/${detailId}`;
 
       const response = await fetch(url, {
         method: "DELETE",
@@ -259,6 +270,3 @@ class PayrunDetailAPI {
 
 export const payrunDetailAPI = new PayrunDetailAPI();
 export type { PayrunDetailType, PayrunDetailFilters, ApiResponse };
-
-
-

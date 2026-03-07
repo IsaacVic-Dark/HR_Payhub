@@ -62,7 +62,7 @@ class PayrunDetailController
             $query = "
                 SELECT 
                     payrun_details.*,
-                    employees.id,
+                    employees.id as employee_db_id,
                     employees.job_title,
                     employees.employee_number,
                     employees.department_id,
@@ -144,9 +144,9 @@ class PayrunDetailController
     /**
      * Get all payrun details (existing method for backward compatibility)
      */
-    public function index($payrunId)
+    public function index($org_id, $payrunId)
     {
-        return $this->getEmployees(null, $payrunId);
+        return $this->getEmployees($org_id, $payrunId);
     }
 
     /**
@@ -154,8 +154,9 @@ class PayrunDetailController
      * NOTE: Under normal flow, details are auto-generated in PayrunController::finalizePayrun().
      * This endpoint is for manual corrections / one-off additions only.
      */
-    public function create($payrunId)
+    public function create($org_id, $payrunId)
     {
+
         try {
             $data = json_decode(file_get_contents('php://input'), true);
 
@@ -180,6 +181,15 @@ class PayrunDetailController
                     data: null,
                     message: "Invalid payrun_id",
                     code: 400
+                );
+            }
+
+            if ($payrun[0]->organization_id != $org_id) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Payrun not found or does not belong to this organization",
+                    code: 404
                 );
             }
 
@@ -258,7 +268,7 @@ class PayrunDetailController
     /**
      * Get a single payrun detail
      */
-    public function show($payrunId, $id)
+    public function show($org_id, $payrunId, $id)
     {
         try {
             $detail = DB::raw(
@@ -308,7 +318,7 @@ class PayrunDetailController
     /**
      * Update a payrun detail
      */
-    public function update($payrunId, $id)
+    public function update($org_id, $payrunId, $id)
     {
         try {
             $data = json_decode(file_get_contents('php://input'), true);
@@ -317,8 +327,10 @@ class PayrunDetailController
                 "SELECT payrun_details.*, payruns.organization_id
              FROM payrun_details
              INNER JOIN payruns ON payrun_details.payrun_id = payruns.id
-             WHERE payrun_details.id = :id AND payrun_details.payrun_id = :payrun_id",
-                [':id' => $id, ':payrun_id' => $payrunId]
+             WHERE payrun_details.id = :id 
+            AND payrun_details.payrun_id = :payrun_id
+            AND payruns.organization_id = :org_id",
+                [':id' => $id, ':payrun_id' => $payrunId, ':org_id' => $org_id]
             );
 
             if (empty($existingDetail)) {
@@ -404,13 +416,17 @@ class PayrunDetailController
     /**
      * Delete a payrun detail
      */
-    public function delete($payrunId, $id)
+    public function delete($org_id, $payrunId, $id)
     {
         try {
             // Check if detail exists
             $existingDetail = DB::raw(
-                "SELECT * FROM payrun_details WHERE id = :id AND payrun_id = :payrun_id",
-                [':id' => $id, ':payrun_id' => $payrunId]
+                "SELECT payrun_details.* FROM payrun_details
+                INNER JOIN payruns ON payrun_details.payrun_id = payruns.id
+                WHERE payrun_details.id = :id 
+                AND payrun_details.payrun_id = :payrun_id
+                AND payruns.organization_id = :org_id",
+                [':id' => $id, ':payrun_id' => $payrunId, ':org_id' => $org_id]
             );
 
             if (empty($existingDetail)) {
