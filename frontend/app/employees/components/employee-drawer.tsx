@@ -28,6 +28,7 @@ import {
   employeeAPI,
   EmployeeType as ApiEmployeeType,
 } from "@/services/api/employee";
+import { departmentAPI } from "@/services/api/department";
 import { toast } from "sonner";
 
 type EmploymentType = "full_time" | "part_time" | "contract";
@@ -48,7 +49,8 @@ export type Employee = {
     | "probation";
   name: string;
   position: string;
-  department: string;
+  // department: number | string;
+  department_id?: number;
   p_email: string;
   email: string;
   personal_email?: string;
@@ -101,6 +103,7 @@ export function EmployeeDrawerAdd({
   const { user } = useAuth();
 
   const [formData, setFormData] = React.useState({
+    employee_number: "",
     first_name: "",
     middle_name: "",
     surname: "",
@@ -119,6 +122,18 @@ export function EmployeeDrawerAdd({
   });
 
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [departments, setDepartments] = React.useState<
+    { id: number; name: string }[]
+  >([]);
+
+  React.useEffect(() => {
+    if (!user?.organization_id) return;
+    departmentAPI.getDepartments(user.organization_id).then((res) => {
+      if (res.success && res.data) {
+        setDepartments(res.data.map((d) => ({ id: d.id, name: d.name })));
+      }
+    });
+  }, [user?.organization_id]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -155,6 +170,10 @@ export function EmployeeDrawerAdd({
       newErrors.hire_date = "Hire date is required";
     }
 
+    if (!formData.employee_number.trim()) {
+      newErrors.employee_number = "Employee number is required";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -174,11 +193,12 @@ export function EmployeeDrawerAdd({
         middle_name?: string;
         surname: string;
         email: string;
+        employee_number: string;
         personal_email?: string;
         phone: string;
         hire_date: string;
         job_title: string;
-        department: string;
+        department_id: number;
         reports_to?: number;
         base_salary: string;
         bank_account_number?: string;
@@ -192,10 +212,11 @@ export function EmployeeDrawerAdd({
         first_name: formData.first_name,
         surname: formData.surname,
         email: formData.email,
+        employee_number: formData.employee_number,
         phone: formData.phone,
         hire_date: formData.hire_date,
         job_title: formData.job_title,
-        department: formData.department,
+        department: parseInt(formData.department),
         base_salary: formData.base_salary,
         status: formData.status as Employee["status"], // Cast to the correct type
         employment_type: formData.employment_type as EmploymentType,
@@ -213,7 +234,11 @@ export function EmployeeDrawerAdd({
         payload.personal_email = formData.personal_email;
       }
 
-      if (formData.reports_to && formData.reports_to.trim()) {
+      if (
+        formData.reports_to &&
+        formData.reports_to.trim() &&
+        formData.reports_to !== "none"
+      ) {
         payload.reports_to = parseInt(formData.reports_to);
       }
 
@@ -246,6 +271,7 @@ export function EmployeeDrawerAdd({
 
   const resetForm = () => {
     setFormData({
+      employee_number: "",
       first_name: "",
       middle_name: "",
       surname: "",
@@ -275,8 +301,16 @@ export function EmployeeDrawerAdd({
   const initials =
     `${formData.first_name[0] || ""}${formData.surname[0] || ""}`.toUpperCase();
 
-  const operationsManagers = employees.filter((emp) =>
-    emp.job_title?.toLowerCase().includes("manager"),
+  const operationsManagers =
+    employees?.filter((emp) =>
+      emp.job_title?.toLowerCase().includes("manager"),
+    ) || [];
+
+  console.log("Departments loaded in EmployeeDrawerAdd:", departments);
+  console.log("All employees for 'Reports To' dropdown:", employees);
+  console.log(
+    "Operations Managers for 'Reports To' dropdown:",
+    operationsManagers,
   );
 
   return (
@@ -326,11 +360,19 @@ export function EmployeeDrawerAdd({
                     <div className="absolute -bottom-1 -right-1 h-6 w-6 bg-green-500 rounded-full border-2 border-white"></div>
                   </div>
                   <div className="flex-1">
-                    <div className="flex items-center space-x-2 mb-1">
-                      <span className="text-xs text-gray-500 bg-white px-2 py-1 rounded">
-                        ID will be auto-generated
-                      </span>
-                    </div>
+<div className="flex items-center space-x-2 mb-1">
+  <div className="flex-1">
+    <Input
+      placeholder="Employee Number (e.g. EMP001)"
+      value={formData.employee_number}
+      onChange={(e) => handleInputChange("employee_number", e.target.value)}
+      className={errors.employee_number ? "border-red-500" : ""}
+    />
+    {errors.employee_number && (
+      <p className="text-xs text-red-500 mt-1">{errors.employee_number}</p>
+    )}
+  </div>
+</div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <Input
@@ -482,14 +524,34 @@ export function EmployeeDrawerAdd({
                     <label className="text-sm font-medium text-gray-700">
                       Department <span className="text-red-500">*</span>
                     </label>
-                    <Input
-                      placeholder="e.g., Engineering"
+                    <Select
                       value={formData.department}
-                      onChange={(e) =>
-                        handleInputChange("department", e.target.value)
+                      onValueChange={(value) =>
+                        handleInputChange("department", value)
                       }
-                      className={errors.department ? "border-red-500" : ""}
-                    />
+                    >
+                      <SelectTrigger
+                        className={errors.department ? "border-red-500" : ""}
+                      >
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.length > 0 ? (
+                          departments.map((dept) => (
+                            <SelectItem
+                              key={dept.id}
+                              value={dept.id.toString()}
+                            >
+                              {dept.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-departments" disabled>
+                            No departments found
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                     {errors.department && (
                       <p className="text-xs text-red-500">
                         {errors.department}
@@ -509,12 +571,19 @@ export function EmployeeDrawerAdd({
                       <SelectTrigger>
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
+
                       <SelectContent>
-                        {employmentTypes.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
+                        {employmentTypes && employmentTypes.length > 0 ? (
+                          employmentTypes.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>
+                              {type.label}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-employment-types" disabled>
+                            No employment types found
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -531,15 +600,22 @@ export function EmployeeDrawerAdd({
                       <SelectTrigger>
                         <SelectValue placeholder="Select location" />
                       </SelectTrigger>
+
                       <SelectContent>
-                        {workLocations.map((location) => (
-                          <SelectItem
-                            key={location.value}
-                            value={location.value}
-                          >
-                            {location.label}
+                        {workLocations && workLocations.length > 0 ? (
+                          workLocations.map((location) => (
+                            <SelectItem
+                              key={location.value}
+                              value={location.value}
+                            >
+                              {location.label}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-work-locations" disabled>
+                            No work locations found
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -556,17 +632,25 @@ export function EmployeeDrawerAdd({
                       <SelectTrigger>
                         <SelectValue placeholder="Select manager" />
                       </SelectTrigger>
+
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
-                        {operationsManagers.map((manager) => (
-                          <SelectItem
-                            key={manager.id}
-                            value={manager.id.toString()}
-                          >
-                            {manager.first_name} {manager.surname} -{" "}
-                            {manager.job_title}
+                        <SelectItem value="none">None</SelectItem>
+
+                        {operationsManagers && operationsManagers.length > 0 ? (
+                          operationsManagers.map((manager) => (
+                            <SelectItem
+                              key={manager.id}
+                              value={manager.id.toString()}
+                            >
+                              {manager.first_name} {manager.surname} -{" "}
+                              {manager.job_title}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-manager" disabled>
+                            No high rank employee found
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -915,7 +999,7 @@ export function EmployeeDrawerEdit({
     phone: employee.phone || "",
     hire_date: employee.hire_date || new Date().toISOString().split("T")[0],
     job_title: employee.position || "",
-    department: employee.department || "",
+    department: employee.department_id?.toString() || "",
     reports_to: employee.reports_to || "",
     base_salary: employee.salary.toString() || "",
     bank_account_number: employee.bank_account_number || "",
@@ -926,6 +1010,18 @@ export function EmployeeDrawerEdit({
   });
 
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+  const [departments, setDepartments] = React.useState<
+    { id: number; name: string }[]
+  >([]);
+
+  React.useEffect(() => {
+    if (!user?.organization_id) return;
+    departmentAPI.getDepartments(user.organization_id).then((res) => {
+      if (res.success && res.data) {
+        setDepartments(res.data.map((d) => ({ id: d.id, name: d.name })));
+      }
+    });
+  }, [user?.organization_id]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -978,11 +1074,12 @@ export function EmployeeDrawerEdit({
         middle_name?: string;
         surname?: string;
         email?: string;
+        employee_number: string;
         personal_email?: string;
         phone?: string;
         hire_date?: string;
         job_title?: string;
-        department?: string;
+        department_id?: number;
         reports_to?: number;
         base_salary?: string;
         bank_account_number?: string;
@@ -1027,8 +1124,8 @@ export function EmployeeDrawerEdit({
         payload.hire_date = formData.hire_date;
       if (formData.job_title !== employee.position)
         payload.job_title = formData.job_title;
-      if (formData.department !== employee.department)
-        payload.department = formData.department;
+      if (formData.department !== employee.department_id?.toString())
+        payload.department_id = parseInt(formData.department);
       if (formData.reports_to !== (employee.reports_to || "")) {
         payload.reports_to = formData.reports_to
           ? parseInt(formData.reports_to)
@@ -1300,14 +1397,34 @@ export function EmployeeDrawerEdit({
                     <label className="text-sm font-medium text-gray-700">
                       Department <span className="text-red-500">*</span>
                     </label>
-                    <Input
-                      placeholder="e.g., Engineering"
+                    <Select
                       value={formData.department}
-                      onChange={(e) =>
-                        handleInputChange("department", e.target.value)
+                      onValueChange={(value) =>
+                        handleInputChange("department", value)
                       }
-                      className={errors.department ? "border-red-500" : ""}
-                    />
+                    >
+                      <SelectTrigger
+                        className={errors.department ? "border-red-500" : ""}
+                      >
+                        <SelectValue placeholder="Select department" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {departments.length > 0 ? (
+                          departments.map((dept) => (
+                            <SelectItem
+                              key={dept.id}
+                              value={dept.id.toString()}
+                            >
+                              {dept.name}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-departments" disabled>
+                            No departments found
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                     {errors.department && (
                       <p className="text-xs text-red-500">
                         {errors.department}
@@ -1327,12 +1444,19 @@ export function EmployeeDrawerEdit({
                       <SelectTrigger>
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
+
                       <SelectContent>
-                        {employmentTypes.map((type) => (
-                          <SelectItem key={type.value} value={type.value}>
-                            {type.label}
+                        {employmentTypes && employmentTypes.length > 0 ? (
+                          employmentTypes.map((type) => (
+                            <SelectItem key={type.value} value={type.value}>
+                              {type.label}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-employment-types" disabled>
+                            No employment types found
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1349,15 +1473,22 @@ export function EmployeeDrawerEdit({
                       <SelectTrigger>
                         <SelectValue placeholder="Select location" />
                       </SelectTrigger>
+
                       <SelectContent>
-                        {workLocations.map((location) => (
-                          <SelectItem
-                            key={location.value}
-                            value={location.value}
-                          >
-                            {location.label}
+                        {workLocations && workLocations.length > 0 ? (
+                          workLocations.map((location) => (
+                            <SelectItem
+                              key={location.value}
+                              value={location.value}
+                            >
+                              {location.label}
+                            </SelectItem>
+                          ))
+                        ) : (
+                          <SelectItem value="no-locations" disabled>
+                            No work locations found
                           </SelectItem>
-                        ))}
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1472,4 +1603,3 @@ export function EmployeeDrawerEdit({
     </>
   );
 }
-// [file content end]

@@ -320,7 +320,7 @@ const filters: {
       key: "department",
       header: "Department",
       cell: (employee) => (
-        <span className="text-sm text-gray-700">{employee.department}</span>
+        <span className="text-sm text-gray-700">{employee.department_id}</span>
       ),
     },
     {

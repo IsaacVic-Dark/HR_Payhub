@@ -11,7 +11,7 @@ type EmployeeType = {
   phone: string;
   hire_date: string;
   job_title: string;
-  department: string;
+  department_id?: number;
   reports_to: number | null;
   base_salary: string;
   bank_account_number: string | null;
@@ -47,7 +47,7 @@ interface EmployeesResponseData {
 }
 
 interface EmployeeFilters {
-  department?: string;
+  department_id?: number;
   job_title?: string;
   status?: string;
   employment_type?: string;
@@ -57,12 +57,13 @@ interface EmployeeFilters {
 }
 
 interface CreateEmployeeData {
+  employee_number: string;
   user_id: number;
   email: string;
   phone: string;
   hire_date: string;
   job_title: string;
-  department: string;
+  department_id: number;
   reports_to?: number;
   base_salary: string;
   bank_account_number?: string;
@@ -82,7 +83,7 @@ interface UpdateEmployeeData {
   phone?: string;
   hire_date?: string;
   job_title?: string;
-  department?: string;
+  department_id?: number;
   reports_to?: number;
   base_salary?: string;
   bank_account_number?: string;
