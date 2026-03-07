@@ -4,6 +4,8 @@ namespace App\Controllers;
 
 use App\Services\DB;
 
+require_once __DIR__ . '/../helpers/tax.php';
+
 class PayrunDetailController
 {
     /**
@@ -148,15 +150,17 @@ class PayrunDetailController
     }
 
     /**
-     * Create a payrun detail
+     * Manually create a single payrun detail.
+     * NOTE: Under normal flow, details are auto-generated in PayrunController::finalizePayrun().
+     * This endpoint is for manual corrections / one-off additions only.
      */
     public function create($payrunId)
     {
         try {
             $data = json_decode(file_get_contents('php://input'), true);
 
-            // Validate required fields
-            $required = ['employee_id', 'basic_salary', 'gross_pay', 'total_deductions', 'net_pay'];
+            // Validate required fields — gross_pay/total_deductions/net_pay are now calculated
+            $required = ['employee_id', 'basic_salary'];
             foreach ($required as $field) {
                 if (!isset($data[$field])) {
                     return responseJson(
@@ -168,7 +172,7 @@ class PayrunDetailController
                 }
             }
 
-            // Verify payrun exists
+            // Verify payrun exists and get org_id
             $payrun = DB::table('payruns')->selectAllWhereID($payrunId);
             if (empty($payrun)) {
                 return responseJson(
@@ -190,16 +194,39 @@ class PayrunDetailController
                 );
             }
 
+            $basicSalary      = (float) $data['basic_salary'];
+            $overtimeAmount   = (float) ($data['overtime_amount']   ?? 0.00);
+            $bonusAmount      = (float) ($data['bonus_amount']      ?? 0.00);
+            $commissionAmount = (float) ($data['commission_amount'] ?? 0.00);
+            $extraDeductions  = (float) ($data['extra_deductions']  ?? 0.00);
+
+            $grossPay = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount;
+
+            // Load org tax config and calculate
+            $orgId  = $payrun[0]->organization_id;
+            $config = loadTaxConfig($orgId);
+            $tax    = calculateNetPay($basicSalary, $grossPay, $config, $extraDeductions);
+
+            var_dump($tax); // Debugging output
+
             $insertData = [
-                'payrun_id' => $payrunId,
-                'employee_id' => $data['employee_id'],
-                'basic_salary' => $data['basic_salary'],
-                'overtime_amount' => $data['overtime_amount'] ?? 0.00,
-                'bonus_amount' => $data['bonus_amount'] ?? 0.00,
-                'commission_amount' => $data['commission_amount'] ?? 0.00,
-                'gross_pay' => $data['gross_pay'],
-                'total_deductions' => $data['total_deductions'],
-                'net_pay' => $data['net_pay'],
+                'payrun_id'          => $payrunId,
+                'organization_id'    => $orgId,
+                'employee_id'        => $data['employee_id'],
+                'basic_salary'       => $tax['basic_salary'],
+                'overtime_amount'    => $overtimeAmount,
+                'bonus_amount'       => $bonusAmount,
+                'commission_amount'  => $commissionAmount,
+                'nssf'               => $tax['nssf'],
+                'shif'               => $tax['shif'],
+                'housing_levy'       => $tax['housing_levy'],
+                'taxable_income'     => $tax['taxable_income'],
+                'tax_before_relief'  => $tax['tax_before_relief'],
+                'personal_relief'    => $tax['personal_relief'],
+                'paye'               => $tax['paye'],
+                'gross_pay'          => $tax['gross_pay'],
+                'total_deductions'   => $tax['total_deductions'],
+                'net_pay'            => $tax['net_pay'],
             ];
 
             DB::table('payrun_details')->insert($insertData);
@@ -207,9 +234,16 @@ class PayrunDetailController
 
             return responseJson(
                 success: true,
-                data: ['id' => $detailId],
+                data: ['id' => $detailId, 'tax_breakdown' => $tax],
                 message: "Payrun detail created successfully",
                 code: 201
+            );
+        } catch (\InvalidArgumentException $e) {
+            return responseJson(
+                success: false,
+                data: null,
+                message: "Invalid salary data: " . $e->getMessage(),
+                code: 400
             );
         } catch (\Exception $e) {
             return responseJson(
@@ -279,9 +313,11 @@ class PayrunDetailController
         try {
             $data = json_decode(file_get_contents('php://input'), true);
 
-            // Check if detail exists
             $existingDetail = DB::raw(
-                "SELECT * FROM payrun_details WHERE id = :id AND payrun_id = :payrun_id",
+                "SELECT payrun_details.*, payruns.organization_id
+             FROM payrun_details
+             INNER JOIN payruns ON payrun_details.payrun_id = payruns.id
+             WHERE payrun_details.id = :id AND payrun_details.payrun_id = :payrun_id",
                 [':id' => $id, ':payrun_id' => $payrunId]
             );
 
@@ -294,32 +330,18 @@ class PayrunDetailController
                 );
             }
 
-            $updateData = [];
+            $current = $existingDetail[0];
 
-            // Build update data
-            $allowedFields = [
-                'employee_id', 'basic_salary', 'overtime_amount', 'bonus_amount',
-                'commission_amount', 'gross_pay', 'total_deductions', 'net_pay'
-            ];
+            // Merge incoming changes over existing values
+            $basicSalary      = (float) ($data['basic_salary']      ?? $current->basic_salary);
+            $overtimeAmount   = (float) ($data['overtime_amount']   ?? $current->overtime_amount);
+            $bonusAmount      = (float) ($data['bonus_amount']      ?? $current->bonus_amount);
+            $commissionAmount = (float) ($data['commission_amount'] ?? $current->commission_amount);
+            $extraDeductions  = (float) ($data['extra_deductions']  ?? 0.00);
 
-            foreach ($allowedFields as $field) {
-                if (isset($data[$field])) {
-                    $updateData[$field] = $data[$field];
-                }
-            }
-
-            if (empty($updateData)) {
-                return responseJson(
-                    success: false,
-                    data: null,
-                    message: "No fields to update",
-                    code: 400
-                );
-            }
-
-            // Validate employee if being updated
-            if (isset($updateData['employee_id'])) {
-                $employee = DB::table('employees')->selectAllWhereID($updateData['employee_id']);
+            // Validate employee if being changed
+            if (isset($data['employee_id'])) {
+                $employee = DB::table('employees')->selectAllWhereID($data['employee_id']);
                 if (empty($employee)) {
                     return responseJson(
                         success: false,
@@ -330,12 +352,44 @@ class PayrunDetailController
                 }
             }
 
+            $grossPay = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount;
+            $config   = loadTaxConfig($current->organization_id);
+            $tax      = calculateNetPay($basicSalary, $grossPay, $config, $extraDeductions);
+
+            $updateData = [
+                'basic_salary'      => $tax['basic_salary'],
+                'overtime_amount'   => $overtimeAmount,
+                'bonus_amount'      => $bonusAmount,
+                'commission_amount' => $commissionAmount,
+                'nssf'              => $tax['nssf'],
+                'shif'              => $tax['shif'],
+                'housing_levy'      => $tax['housing_levy'],
+                'taxable_income'    => $tax['taxable_income'],
+                'tax_before_relief' => $tax['tax_before_relief'],
+                'personal_relief'   => $tax['personal_relief'],
+                'paye'              => $tax['paye'],
+                'gross_pay'         => $tax['gross_pay'],
+                'total_deductions'  => $tax['total_deductions'],
+                'net_pay'           => $tax['net_pay'],
+            ];
+
+            if (isset($data['employee_id'])) {
+                $updateData['employee_id'] = $data['employee_id'];
+            }
+
             DB::table('payrun_details')->update($updateData, 'id', $id);
 
             return responseJson(
                 success: true,
-                data: null,
+                data: ['tax_breakdown' => $tax],
                 message: "Payrun detail updated successfully"
+            );
+        } catch (\InvalidArgumentException $e) {
+            return responseJson(
+                success: false,
+                data: null,
+                message: "Invalid salary data: " . $e->getMessage(),
+                code: 400
             );
         } catch (\Exception $e) {
             return responseJson(

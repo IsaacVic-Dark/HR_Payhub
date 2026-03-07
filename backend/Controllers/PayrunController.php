@@ -5,6 +5,8 @@ namespace App\Controllers;
 use App\Services\DB;
 use App\Services\PayrunProcessingService;
 
+require_once __DIR__ . '/../helpers/tax.php';
+
 class PayrunController
 {
     /**
@@ -976,7 +978,7 @@ class PayrunController
             $now = date('Y-m-d H:i:s');
 
             // ---- Wrap everything in a transaction ----
-            $nextPayrunId = DB::transaction(function () use ($payrun, $payrun_id, $org_id, $currentUser, $now) {
+            $transactionResult = DB::transaction(function () use ($payrun, $payrun_id, $org_id, $currentUser, $now) {
 
                 // 1. Finalize current payrun
                 DB::table('payruns')->update(
@@ -1016,58 +1018,98 @@ class PayrunController
                     return (int) $existing[0]->id;
                 }
 
-                // 5. Insert next payrun (draft, totals zeroed)
+                // 5. Insert next payrun (draft, totals start at zero — updated after details are inserted)
                 DB::table('payruns')->insert([
-                    'organization_id' => $org_id,
-                    'payrun_name'     => $nextPayrunName,
+                    'organization_id'  => $org_id,
+                    'payrun_name'      => $nextPayrunName,
                     'pay_period_start' => $nextStart,
-                    'pay_period_end'  => $nextEnd,
-                    'pay_frequency'   => $payrun->pay_frequency,
-                    'status'          => 'draft',
-                    'total_gross_pay' => 0.00,
+                    'pay_period_end'   => $nextEnd,
+                    'pay_frequency'    => $payrun->pay_frequency,
+                    'status'           => 'draft',
+                    'total_gross_pay'  => 0.00,
                     'total_deductions' => 0.00,
-                    'total_net_pay'   => 0.00,
-                    'employee_count'  => 0,
-                    'created_by'      => $currentUser['id'],
-                    'created_at'      => $now,
+                    'total_net_pay'    => 0.00,
+                    'employee_count'   => 0,
+                    'created_by'       => $currentUser['id'],
+                    'created_at'       => $now,
                 ]);
 
                 $nextPayrunId = DB::lastInsertId();
 
-                // 6. Copy employees from the finalized payrun,
-                //    carrying forward basic_salary only — resetting variable pay.
+                // 6. Copy employees from the finalized payrun, carrying forward basic_salary.
+                //    Variable pay (overtime/bonus/commission) resets to zero.
+                //    Tax figures are calculated fresh using the org's current tax config.
                 $employees = DB::raw(
                     "SELECT employee_id, basic_salary
-                     FROM payrun_details
-                     WHERE payrun_id = :payrun_id",
+     FROM payrun_details
+     WHERE payrun_id = :payrun_id",
                     [':payrun_id' => $payrun_id]
                 );
 
+                $config = loadTaxConfig((int) $org_id);
+
+                $totalGross      = 0.00;
+                $totalDeductions = 0.00;
+                $totalNet        = 0.00;
+                $skipped         = [];
+
                 foreach ($employees as $emp) {
-                    DB::table('payrun_details')->insert([
-                        'payrun_id'        => $nextPayrunId,
-                        'employee_id'      => $emp->employee_id,
-                        'basic_salary'     => $emp->basic_salary,
-                        // Variable pay — reset to zero
-                        'overtime_amount'  => 0.00,
-                        'bonus_amount'     => 0.00,
-                        'commission_amount' => 0.00,
-                        // Calculated figures — zeroed until next processPayrun
-                        'gross_pay'        => 0.00,
-                        'total_deductions' => 0.00,
-                        'net_pay'          => 0.00,
-                    ]);
+                    try {
+                        $basicSalary = (float) $emp->basic_salary;
+                        // Gross = basic only (variable pay is zero on a fresh draft)
+                        $grossPay = $basicSalary;
+
+                        $tax = calculateNetPay($basicSalary, $grossPay, $config);
+
+                        DB::table('payrun_details')->insert([
+                            'payrun_id'          => $nextPayrunId,
+                            'organization_id'    => $org_id,
+                            'employee_id'        => $emp->employee_id,
+                            'basic_salary'       => $tax['basic_salary'],
+                            'overtime_amount'    => 0.00,
+                            'bonus_amount'       => 0.00,
+                            'commission_amount'  => 0.00,
+                            'nssf'               => $tax['nssf'],
+                            'shif'               => $tax['shif'],
+                            'housing_levy'       => $tax['housing_levy'],
+                            'taxable_income'     => $tax['taxable_income'],
+                            'tax_before_relief'  => $tax['tax_before_relief'],
+                            'personal_relief'    => $tax['personal_relief'],
+                            'paye'               => $tax['paye'],
+                            'gross_pay'          => $tax['gross_pay'],
+                            'total_deductions'   => $tax['total_deductions'],
+                            'net_pay'            => $tax['net_pay'],
+                        ]);
+
+                        $totalGross      += $tax['gross_pay'];
+                        $totalDeductions += $tax['total_deductions'];
+                        $totalNet        += $tax['net_pay'];
+                    } catch (\InvalidArgumentException $e) {
+                        // Employee has invalid salary data — log and skip rather than aborting all
+                        error_log("finalizePayrun: skipping employee {$emp->employee_id} — " . $e->getMessage());
+                        $skipped[] = $emp->employee_id;
+                    }
                 }
 
-                // Update employee_count on the new payrun
+                $insertedCount = count($employees) - count($skipped);
+
+                // Update the new payrun's totals and employee count
                 DB::table('payruns')->update(
-                    ['employee_count' => count($employees)],
+                    [
+                        'employee_count'   => $insertedCount,
+                        'total_gross_pay'  => round($totalGross,      2),
+                        'total_deductions' => round($totalDeductions, 2),
+                        'total_net_pay'    => round($totalNet,         2),
+                    ],
                     'id',
                     $nextPayrunId
                 );
 
-                return (int) $nextPayrunId;
+                return ['next_payrun_id' => (int) $nextPayrunId, 'skipped' => $skipped];
             });
+
+            $nextPayrunId = $transactionResult['next_payrun_id'];
+            $skippedEmployees = $transactionResult['skipped'] ?? [];
 
             // ---- Audit: finalize ----
             $this->createAuditLog($org_id, $currentUser['id'], 'payruns', $payrun_id, 'finalize', [
@@ -1087,17 +1129,20 @@ class PayrunController
             return responseJson(
                 success: true,
                 data: [
-                    'payrun_id'      => (int) $payrun_id,
-                    'status'         => 'finalized',
-                    'finalized_by'   => $currentUser['id'],
-                    'finalized_at'   => $now,
-                    'next_payrun'    => [
-                        'id'               => $nextPayrunId,
-                        'status'           => 'draft',
-                        'message'          => 'Next payrun has been automatically created as a draft',
+                    'payrun_id'    => (int) $payrun_id,
+                    'status'       => 'finalized',
+                    'finalized_by' => $currentUser['id'],
+                    'finalized_at' => $now,
+                    'next_payrun'  => [
+                        'id'              => $nextPayrunId,
+                        'status'          => 'draft',
+                        'message'         => 'Next payrun has been automatically created as a draft with tax pre-calculated',
+                        'skipped_employees' => $skippedEmployees,
                     ],
                 ],
-                message: "Payrun finalized successfully. Next month's draft payrun has been created."
+                message: !empty($skippedEmployees)
+                    ? "Payrun finalized. Next draft created with " . count($skippedEmployees) . " employee(s) skipped due to invalid salary data."
+                    : "Payrun finalized successfully. Next month's draft payrun has been created with tax pre-calculated."
             );
         } catch (\Exception $e) {
             error_log("PayrunController::finalizePayrun error: " . $e->getMessage());
