@@ -193,6 +193,16 @@ class PayrunDetailController
                 );
             }
 
+            // Only create details for payruns that are not finalized
+            if ($payrun[0]->status === 'finalized') {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Cannot add details to a finalized payrun",
+                    code: 403
+                );
+            }
+
             // Verify employee exists
             $employee = DB::table('employees')->selectAllWhereID($data['employee_id']);
             if (empty($employee)) {
@@ -324,12 +334,12 @@ class PayrunDetailController
             $data = json_decode(file_get_contents('php://input'), true);
 
             $existingDetail = DB::raw(
-                "SELECT payrun_details.*, payruns.organization_id
+                "SELECT payrun_details.*, payruns.organization_id, payruns.status as payrun_status
              FROM payrun_details
              INNER JOIN payruns ON payrun_details.payrun_id = payruns.id
-             WHERE payrun_details.id = :id 
-            AND payrun_details.payrun_id = :payrun_id
-            AND payruns.organization_id = :org_id",
+             WHERE payrun_details.id = :id
+               AND payrun_details.payrun_id = :payrun_id
+               AND payruns.organization_id = :org_id",
                 [':id' => $id, ':payrun_id' => $payrunId, ':org_id' => $org_id]
             );
 
@@ -344,12 +354,15 @@ class PayrunDetailController
 
             $current = $existingDetail[0];
 
-            // Merge incoming changes over existing values
-            $basicSalary      = (float) ($data['basic_salary']      ?? $current->basic_salary);
-            $overtimeAmount   = (float) ($data['overtime_amount']   ?? $current->overtime_amount);
-            $bonusAmount      = (float) ($data['bonus_amount']      ?? $current->bonus_amount);
-            $commissionAmount = (float) ($data['commission_amount'] ?? $current->commission_amount);
-            $extraDeductions  = (float) ($data['extra_deductions']  ?? 0.00);
+            // Guard: finalized payruns are locked
+            if ($current->payrun_status === 'finalized') {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Cannot update details of a finalized payrun",
+                    code: 403
+                );
+            }
 
             // Validate employee if being changed
             if (isset($data['employee_id'])) {
@@ -364,25 +377,25 @@ class PayrunDetailController
                 }
             }
 
+            // Merge incoming changes over existing values
+            $basicSalary      = (float) ($data['basic_salary']      ?? $current->basic_salary);
+            $overtimeAmount   = (float) ($data['overtime_amount']   ?? $current->overtime_amount);
+            $bonusAmount      = (float) ($data['bonus_amount']      ?? $current->bonus_amount);
+            $commissionAmount = (float) ($data['commission_amount'] ?? $current->commission_amount);
+
+            // Recalculate gross from updated components.
+            // Tax figures are kept as stored — no recalculation.
+            // net_pay = new gross_pay − existing total_deductions
             $grossPay = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount;
-            $config   = loadTaxConfig($current->organization_id);
-            $tax      = calculateNetPay($basicSalary, $grossPay, $config, $extraDeductions);
+            $netPay   = $grossPay - (float) $current->total_deductions;
 
             $updateData = [
-                'basic_salary'      => $tax['basic_salary'],
-                'overtime_amount'   => $overtimeAmount,
-                'bonus_amount'      => $bonusAmount,
-                'commission_amount' => $commissionAmount,
-                'nssf'              => $tax['nssf'],
-                'shif'              => $tax['shif'],
-                'housing_levy'      => $tax['housing_levy'],
-                'taxable_income'    => $tax['taxable_income'],
-                'tax_before_relief' => $tax['tax_before_relief'],
-                'personal_relief'   => $tax['personal_relief'],
-                'paye'              => $tax['paye'],
-                'gross_pay'         => $tax['gross_pay'],
-                'total_deductions'  => $tax['total_deductions'],
-                'net_pay'           => $tax['net_pay'],
+                'basic_salary'      => round($basicSalary, 2),
+                'overtime_amount'   => round($overtimeAmount, 2),
+                'bonus_amount'      => round($bonusAmount, 2),
+                'commission_amount' => round($commissionAmount, 2),
+                'gross_pay'         => round($grossPay, 2),
+                'net_pay'           => round($netPay, 2),
             ];
 
             if (isset($data['employee_id'])) {
@@ -393,15 +406,11 @@ class PayrunDetailController
 
             return responseJson(
                 success: true,
-                data: ['tax_breakdown' => $tax],
+                data: [
+                    'gross_pay' => round($grossPay, 2),
+                    'net_pay'   => round($netPay, 2),
+                ],
                 message: "Payrun detail updated successfully"
-            );
-        } catch (\InvalidArgumentException $e) {
-            return responseJson(
-                success: false,
-                data: null,
-                message: "Invalid salary data: " . $e->getMessage(),
-                code: 400
             );
         } catch (\Exception $e) {
             return responseJson(
@@ -419,13 +428,13 @@ class PayrunDetailController
     public function delete($org_id, $payrunId, $id)
     {
         try {
-            // Check if detail exists
             $existingDetail = DB::raw(
-                "SELECT payrun_details.* FROM payrun_details
-                INNER JOIN payruns ON payrun_details.payrun_id = payruns.id
-                WHERE payrun_details.id = :id 
-                AND payrun_details.payrun_id = :payrun_id
-                AND payruns.organization_id = :org_id",
+                "SELECT payrun_details.*, payruns.status as payrun_status
+             FROM payrun_details
+             INNER JOIN payruns ON payrun_details.payrun_id = payruns.id
+             WHERE payrun_details.id = :id
+               AND payrun_details.payrun_id = :payrun_id
+               AND payruns.organization_id = :org_id",
                 [':id' => $id, ':payrun_id' => $payrunId, ':org_id' => $org_id]
             );
 
@@ -435,6 +444,16 @@ class PayrunDetailController
                     data: null,
                     message: "Payrun detail not found",
                     code: 404
+                );
+            }
+
+            // Guard: finalized payruns are locked
+            if ($existingDetail[0]->payrun_status === 'finalized') {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Cannot delete details from a finalized payrun",
+                    code: 403
                 );
             }
 
