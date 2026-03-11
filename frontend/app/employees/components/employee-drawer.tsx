@@ -897,6 +897,9 @@ export function EmployeeDrawer({
                     {formatDate(employee.hire_date)}
                   </p>
                 </div>
+
+                {/* TODO : Add start date input field and logic*/}
+
               </div>
             </div>
 
