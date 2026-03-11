@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `employee_number` varchar(50) NOT NULL,
   `phone` varchar(20) DEFAULT NULL,
   `hire_date` date NOT NULL,
+  `start_date` date NOT NULL,
   `job_title` varchar(100) DEFAULT NULL,
   `department_id` int DEFAULT NULL,
   `reports_to` int DEFAULT NULL,

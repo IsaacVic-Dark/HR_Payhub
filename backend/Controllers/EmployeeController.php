@@ -147,6 +147,8 @@ class EmployeeController
                 'personal_email' => 'email',
                 'phone' => 'string',
                 'hire_date' => 'required,string',
+                'start_date' => 'required,string',
+                'role' => 'required,string',
                 'job_title' => 'string',
                 'department_id' => 'numeric',
                 'reports_to' => 'required,numeric',
@@ -154,6 +156,16 @@ class EmployeeController
                 'bank_account_number' => 'string',
                 'tax_id' => 'string'
             ]);
+
+            // Validate role against allowed user_type values
+            $allowedRoles = ['admin', 'hr_manager', 'hr_officer', 'payroll_manager', 'payroll_officer', 'finance_manager', 'auditor', 'department_manager', 'employee'];
+            if (!in_array($data['role'], $allowedRoles)) {
+                return responseJson(
+                    success: false,
+                    message: "Invalid role '{$data['role']}'. Allowed values: " . implode(', ', $allowedRoles),
+                    code: 400
+                );
+            }
 
             // Normalise: accept both "department" and "department_id" from payload
             // TODO: In future, we should standardize on "department_id" in the frontend to avoid this confusion
@@ -214,7 +226,8 @@ class EmployeeController
             }
 
             $inserted = false;
-            $data['hire_date'] = date('Y-m-d', strtotime($data['hire_date']));
+            $data['hire_date']   = date('Y-m-d', strtotime($data['hire_date']));
+            $data['start_date']  = date('Y-m-d', strtotime($data['start_date']));
             $default_password = password_hash('password', PASSWORD_BCRYPT);
 
             DB::transaction(function () use ($data, $orgId, &$inserted, $default_password) {
@@ -276,7 +289,7 @@ class EmployeeController
                     :password_hash, 
                     :email, 
                     {$personalEmail}, 
-                    'employee', 
+                    :user_type, 
                     NOW()
                 )";
 
@@ -286,7 +299,8 @@ class EmployeeController
                     ':first_name' => $data['first_name'],
                     ':surname' => $data['surname'],
                     ':password_hash' => $default_password,
-                    ':email' => $email
+                    ':email' => $email,
+                    ':user_type' => $data['role']
                 ]);
 
                 // 5. Get the user ID we just inserted
@@ -300,7 +314,8 @@ class EmployeeController
                     user_id,
                     employee_number,
                     phone, 
-                    hire_date, 
+                    hire_date,
+                    start_date,
                     job_title, 
                     department_id,
                     reports_to, 
@@ -313,7 +328,8 @@ class EmployeeController
                     :user_id,
                     :employee_number,
                     :phone, 
-                    :hire_date, 
+                    :hire_date,
+                    :start_date,
                     :job_title, 
                     :department_id,
                     :reports_to, 
@@ -329,6 +345,7 @@ class EmployeeController
                     ':employee_number'     => $data['employee_number'],
                     ':phone'               => $data['phone'],
                     ':hire_date'           => $data['hire_date'],
+                    ':start_date'          => $data['start_date'] ?? null,
                     ':job_title'           => $data['job_title'],
                     ':department_id'       => $data['department_id'] ?? null,
                     ':reports_to'          => $data['reports_to'],
@@ -341,43 +358,67 @@ class EmployeeController
                 $empResult  = DB::raw("SELECT LAST_INSERT_ID() as emp_id");
                 $employeeId = (int) $empResult[0]->emp_id;
 
-                // 8. Check for a draft payrun in the current pay period
-                $periodStart = date('Y-m-01');
+                // 8. Find the latest draft payrun for this org and check if the new
+                //    employee's start_date falls on or before the pay_period_end.
+                //    We query the table directly (ORDER BY pay_period_start DESC) rather
+                //    than computing dates from PHP's "now", so payrun periods that don't
+                //    align with the calendar month are handled correctly.
                 $draftPayrun = DB::raw(
-                    "SELECT id FROM payruns
-                     WHERE organization_id = :org_id
-                       AND status = 'draft'
-                       AND pay_period_start = :period_start
-                       AND deleted_at IS NULL
-                     LIMIT 1",
-                    [':org_id' => $orgId, ':period_start' => $periodStart]
+                    "SELECT id, pay_period_start, pay_period_end FROM payruns
+     WHERE organization_id = :org_id
+       AND status = 'draft'
+       AND deleted_at IS NULL
+     ORDER BY pay_period_start DESC
+     LIMIT 1",
+                    [':org_id' => $orgId]
                 );
 
-                if (!empty($draftPayrun)) {
-                    $payrunId = (int) $draftPayrun[0]->id;
+                // Only generate a payrun detail when the employee's start_date is
+                // within (or before) the latest draft pay period.
+                // • start_date > pay_period_end  → employee hasn't started yet in this period, skip.
+                // • start_date <= pay_period_end → include and prorate from max(start_date, period_start).
+                if (!empty($draftPayrun) && $data['start_date'] <= $draftPayrun[0]->pay_period_end) {
+                    $payrunId       = (int) $draftPayrun[0]->id;
+                    $payPeriodStart = $draftPayrun[0]->pay_period_start;
+                    $payPeriodEnd   = $draftPayrun[0]->pay_period_end;
 
-                    // 9. Load org tax config and calculate
-                    $config   = loadTaxConfig($orgId);
-                    $salary   = (float) $data['base_salary'];
-                    $tax      = calculateNetPay($salary, $salary, $config);
+                    // 9. Prorate salary using calendar-day method.
+                    //    Effective start is clamped to period start (covers mid-period hires).
+                    //    Total days = actual span of the pay period (end - start + 1), which
+                    //    correctly handles periods shorter than a full month (e.g. Nov 1–28).
+                    $effectiveStart  = max($data['start_date'], $payPeriodStart);
 
-                    // 10. Insert payrun_detail row
+                    $periodStartDt   = new \DateTime($payPeriodStart);
+                    $periodEndDt     = new \DateTime($payPeriodEnd);
+                    $effectiveStartDt = new \DateTime($effectiveStart);
+
+                    // +1 because both start and end days are inclusive
+                    $totalDays  = (int) $periodStartDt->diff($periodEndDt)->days + 1;
+                    $workedDays = (int) $effectiveStartDt->diff($periodEndDt)->days + 1;
+
+                    $proratedSalary = round(((float) $data['base_salary'] / $totalDays) * $workedDays, 2);
+
+                    // 10. Calculate tax on the prorated salary
+                    $config = loadTaxConfig($orgId);
+                    $tax    = calculateNetPay($proratedSalary, $proratedSalary, $config);
+
+                    // 11. Insert payrun_detail row
                     DB::raw(
                         "INSERT INTO payrun_details (
-                            payrun_id, organization_id, employee_id,
-                            basic_salary, gross_pay,
-                            nssf, shif, housing_levy,
-                            taxable_income, tax_before_relief, personal_relief, paye,
-                            total_deductions, net_pay,
-                            created_at
-                        ) VALUES (
-                            :payrun_id, :org_id, :employee_id,
-                            :basic_salary, :gross_pay,
-                            :nssf, :shif, :housing_levy,
-                            :taxable_income, :tax_before_relief, :personal_relief, :paye,
-                            :total_deductions, :net_pay,
-                            NOW()
-                        )",
+            payrun_id, organization_id, employee_id,
+            basic_salary, gross_pay,
+            nssf, shif, housing_levy,
+            taxable_income, tax_before_relief, personal_relief, paye,
+            total_deductions, net_pay,
+            created_at
+        ) VALUES (
+            :payrun_id, :org_id, :employee_id,
+            :basic_salary, :gross_pay,
+            :nssf, :shif, :housing_levy,
+            :taxable_income, :tax_before_relief, :personal_relief, :paye,
+            :total_deductions, :net_pay,
+            NOW()
+        )",
                         [
                             ':payrun_id'         => $payrunId,
                             ':org_id'            => $orgId,
@@ -396,15 +437,15 @@ class EmployeeController
                         ]
                     );
 
-                    // 11. Update payrun totals
+                    // 12. Update payrun totals
                     DB::raw(
                         "UPDATE payruns SET
-                            total_gross_pay  = total_gross_pay  + :gross_pay,
-                            total_deductions = total_deductions + :total_deductions,
-                            total_net_pay    = total_net_pay    + :net_pay,
-                            employee_count   = employee_count   + 1,
-                            updated_at       = NOW()
-                         WHERE id = :payrun_id",
+            total_gross_pay  = total_gross_pay  + :gross_pay,
+            total_deductions = total_deductions + :total_deductions,
+            total_net_pay    = total_net_pay    + :net_pay,
+            employee_count   = employee_count   + 1,
+            updated_at       = NOW()
+         WHERE id = :payrun_id",
                         [
                             ':gross_pay'        => $tax['gross_pay'],
                             ':total_deductions' => $tax['total_deductions'],
@@ -601,6 +642,8 @@ class EmployeeController
                 'personal_email' => 'email',
                 'phone' => 'string',
                 'hire_date' => 'string',
+                'start_date' => 'string',
+                'role' => 'string',
                 'job_title' => 'string',
                 'department_id' => 'numeric',
                 'reports_to' => 'numeric',
@@ -608,6 +651,18 @@ class EmployeeController
                 'bank_account_number' => 'string',
                 'tax_id' => 'string'
             ]);
+
+            // Validate role if provided
+            if (isset($data['role'])) {
+                $allowedRoles = ['admin', 'hr_manager', 'hr_officer', 'payroll_manager', 'payroll_officer', 'finance_manager', 'auditor', 'department_manager', 'employee'];
+                if (!in_array($data['role'], $allowedRoles)) {
+                    return responseJson(
+                        success: false,
+                        message: "Invalid role '{$data['role']}'. Allowed values: " . implode(', ', $allowedRoles),
+                        code: 400
+                    );
+                }
+            }
 
             // NEW: Validate employee number uniqueness if being updated
             if (isset($data['employee_number'])) {
@@ -642,6 +697,7 @@ class EmployeeController
                 'employee_number' => $data['employee_number'] ?? null, // NEW
                 'phone' => $data['phone'] ?? null,
                 'hire_date' => $data['hire_date'] ?? null,
+                'start_date' => $data['start_date'] ?? null,
                 'job_title' => $data['job_title'] ?? null,
                 'department_id' => $data['department_id'] ?? null,
                 'reports_to' => $data['reports_to'] ?? null,
@@ -655,7 +711,8 @@ class EmployeeController
                 'middle_name' => $data['middle_name'] ?? null,
                 'surname' => $data['surname'] ?? null,
                 'email' => $data['email'] ?? null,
-                'personal_email' => $data['personal_email'] ?? null
+                'personal_email' => $data['personal_email'] ?? null,
+                'user_type' => $data['role'] ?? null  // role maps to user_type on users table
             ], fn($v) => $v !== null);
 
             if (isset($userData['email'])) {
@@ -884,7 +941,7 @@ class EmployeeController
 
     private function buildRoleBasedQuery($orgId, $roleFilters)
     {
-        $baseFields = "e.id, e.organization_id, e.user_id, e.employee_number, e.phone, e.hire_date, e.job_title, e.department_id, e.reports_to, e.status, e.created_at"; // NEW: Added employee_number
+        $baseFields = "e.id, e.organization_id, e.user_id, e.employee_number, e.phone, e.hire_date, e.start_date, e.job_title, e.department_id, e.reports_to, e.status, e.created_at"; // NEW: Added employee_number and start_date
 
         // Field-level security based on role
         if (isset($roleFilters['payroll_access']) || isset($roleFilters['financial_access'])) {
