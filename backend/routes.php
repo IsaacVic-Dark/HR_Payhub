@@ -14,6 +14,7 @@ use App\Controllers\NotificationController;
 use App\Controllers\AuthController;
 use App\Controllers\PayrollController;
 use App\Controllers\DepartmentController;
+use App\Controllers\P9Controller;
 
 // Authentication routes - NO authentication required
 Router::post('/api/v1/auth/login', [AuthController::getInstance(), 'login']);
@@ -232,6 +233,97 @@ Router::put('api/v1/organizations/{org_id}/payrun/{payrun_id}/details/{id}', Pay
 Router::delete('api/v1/organizations/{org_id}/payrun/{payrun_id}/details/{id}', PayrunDetailController::class . '@delete', [
     'AuthMiddleware',
     'PayrunDetailAuthorizationMiddleware'
+]);
+
+// GET /api/v1/organizations/{org_id}/p9-forms/statistics
+// Aggregate totals grouped by year and status (uses 4 stored total columns directly).
+// Roles: admin, hr_manager, payroll_manager, payroll_officer, finance_manager, auditor
+Router::get('api/v1/organizations/{org_id}/p9-forms/statistics', P9Controller::class . '@statistics', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager', 'payroll_officer', 'finance_manager', 'auditor']],
+    'P9AuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/p9-forms/bulk-send
+// Mark all 'generated' P9 forms for a given year as 'sent' in one call.
+// Body: { "year": 2024 }
+// Roles: admin, payroll_manager
+// NOTE: replaces old bulk-finalize — status lifecycle is generated→sent→filed
+Router::post('api/v1/organizations/{org_id}/p9-forms/bulk-send', P9Controller::class . '@bulkSend', [
+    ['AuthMiddleware', ['admin', 'payroll_manager']],
+    'P9AuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/p9-forms/generate
+// Generate (or re-generate) P9 forms for a given year.
+// Body: { "year": 2024, "employee_ids": [1,2,3], "regenerate": false }
+// Roles: admin, payroll_manager, payroll_officer
+Router::post('api/v1/organizations/{org_id}/p9-forms/generate', P9Controller::class . '@generate', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'P9AuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Collection
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/p9-forms
+// Paginated list. Supports ?year, ?employee_id, ?status, ?department_id, ?page, ?per_page
+// Roles: all authenticated org members (employees scoped to own records by middleware)
+Router::get('api/v1/organizations/{org_id}/p9-forms', P9Controller::class . '@index', [
+    'AuthMiddleware',
+    'P9AuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Single P9 form
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/p9-forms/{id}
+// Returns header + decoded monthly_data breakdown.
+// Roles: all authenticated (employees own only, dept managers team only — enforced by middleware)
+Router::get('api/v1/organizations/{org_id}/p9-forms/{id}', P9Controller::class . '@show', [
+    'AuthMiddleware',
+    'P9AuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/p9-forms/{id}/send
+// Advance status: generated → sent (P9 distributed to employee).
+// NOTE: replaces old /finalize — lifecycle step is now 'sent' not 'finalized'
+// Roles: admin, payroll_manager, payroll_officer
+Router::post('api/v1/organizations/{org_id}/p9-forms/{id}/send', P9Controller::class . '@markSent', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'P9AuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/p9-forms/{id}/file
+// Advance status: sent → filed (submitted to KRA).
+// Body (optional): { "pdfpath": "/storage/p9/2024/P9-2024-EMP001.pdf" }
+// NOTE: replaces old /mark-submitted — maps to p9forms.status = 'filed'
+// Roles: admin, payroll_manager
+Router::post('api/v1/organizations/{org_id}/p9-forms/{id}/file', P9Controller::class . '@markFiled', [
+    ['AuthMiddleware', ['admin', 'payroll_manager']],
+    'P9AuthorizationMiddleware',
+]);
+
+// PATCH /api/v1/organizations/{org_id}/p9-forms/{id}/pdf-path
+// Store the server PDF path after PDF generation.
+// Body: { "pdfpath": "/storage/p9/2024/P9-2024-EMP001.pdf" }
+// Roles: admin, payroll_manager, payroll_officer
+Router::patch('api/v1/organizations/{org_id}/p9-forms/{id}/pdf-path', P9Controller::class . '@updatePdfPath', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'P9AuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Employee-scoped
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/employees/{id}/p9-forms
+// All P9 forms for one employee across all years (monthly_data excluded from list).
+// Roles: all authenticated (employees own only — enforced by middleware)
+Router::get('api/v1/organizations/{org_id}/employees/{id}/p9-forms', P9Controller::class . '@employeeP9s', [
+    'AuthMiddleware',
+    'P9AuthorizationMiddleware',
 ]);
 
 // Department routes

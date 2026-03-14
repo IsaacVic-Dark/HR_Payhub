@@ -471,6 +471,28 @@ CREATE TABLE IF NOT EXISTS `payrun_details` (
 
 -- Data exporting was unselected.
 
+-- Dumping structure for table payhub.p9forms
+CREATE TABLE p9forms (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `organizationid` INT NOT NULL,
+    `employeeid` INT NOT NULL,
+    `year` INT NOT NULL,
+    `p9number` VARCHAR(50) NOT NULL,
+    `employee_pin` VARCHAR(11),
+    `total_basic_salary` DECIMAL(15,2),
+    `total_gross_pay` DECIMAL(15,2),
+    `total_taxable_pay` DECIMAL(15,2),
+    `total_paye` DECIMAL(15,2),
+    `monthly_data` JSON,  -- Array of 12 months' breakdowns
+    `pdfpath` VARCHAR(500),
+    `status` ENUM('generated','sent','filed') DEFAULT 'generated',
+    `generatedat` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (organizationid) REFERENCES organizations(id) ON DELETE CASCADE,
+    FOREIGN KEY (employeeid) REFERENCES employees(id) ON DELETE CASCADE,
+    UNIQUE KEY unique_p9 (organizationid, employeeid, year)
+);
+
+
 -- Dumping structure for table payhub.per_diems
 CREATE TABLE IF NOT EXISTS `per_diems` (
   `id` int NOT NULL AUTO_INCREMENT,
