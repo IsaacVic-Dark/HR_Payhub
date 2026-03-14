@@ -55,8 +55,10 @@ function loadTaxConfig(int $org_id): array
         'shif_rate'        => $pct('SHIF Rate',          0.0275),
         'housing_levy_rate'=> $pct('Housing Levy Rate',  0.015),
         'personal_relief'  => $fixed('Personal Relief',  2400.00),
-        'nssf_tier1_max'   => $fixed('NSSF Tier I Max',  8000.00),
-        'nssf_tier2_max'   => $fixed('NSSF Tier II Max', 72000.00),
+
+        // TODO :// This data depends on default values instead of data from database
+        'nssf_tier1_max'   => $fixed('NSSF Tier I Max',  9000.00),
+        'nssf_tier2_max'   => $fixed('NSSF Tier II Max', 108000.00),
     ];
 }
 
