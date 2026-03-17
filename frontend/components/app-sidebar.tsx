@@ -539,7 +539,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <CollapsibleTrigger asChild>
               <SidebarMenuButton
                 isActive={isActive}
-                className="hover:bg-[#be2ed6] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff]"
+                className="hover:bg-[#be2ed6] hover:text-[#feedff] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff] data-[state=open]:bg-[#be2ed6] data-[state=open]:text-[#feedff] data-[state=open]:hover:bg-[#be2ed6]"
               >
                 <item.icon className="h-4 w-4" />
                 <span>{item.title}</span>
@@ -560,7 +560,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                         <SidebarMenuSubButton
                           asChild
                           isActive={isSubActive}
-                          className="hover:bg-[#be2ed6] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff]"
+                          className="hover:bg-[#be2ed6] hover:text-[#feedff] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff] data-[state=open]:bg-[#be2ed6] data-[state=open]:text-[#feedff] data-[state=open]:hover:bg-[#be2ed6]"
                         >
                           <Link href={subItem.url}>{subItem.title}</Link>
                         </SidebarMenuSubButton>
@@ -580,7 +580,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenuButton
           asChild
           isActive={isActive}
-          className="hover:bg-[#be2ed6] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff]"
+          className="hover:bg-[#be2ed6] hover:text-[#feedff] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff] data-[state=open]:bg-[#be2ed6] data-[state=open]:text-[#feedff] data-[state=open]:hover:bg-[#be2ed6]"
         >
           <Link href={item.url}>
             <item.icon className="h-4 w-4" />
