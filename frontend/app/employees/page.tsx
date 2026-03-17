@@ -10,6 +10,12 @@ import { DataTableEmployees } from "@/app/employees/components/data-table-employ
 import { employeeAPI } from "@/services/api/employee";
 import { useAuth } from "@/lib/AuthContext";
 import { formatCurrency } from "@/lib/utils";
+import { Upload, Download } from "lucide-react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface Statistics {
   total: number;
@@ -33,46 +39,46 @@ export default function Page() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-useEffect(() => {
-  const fetchStatistics = async () => {
-    if (!user?.organization_id) {
-      setIsLoading(false);
-      setError("No organization ID found");
-      return;
-    }
+  useEffect(() => {
+    const fetchStatistics = async () => {
+      if (!user?.organization_id) {
+        setIsLoading(false);
+        setError("No organization ID found");
+        return;
+      }
 
-    try {
-      setIsLoading(true);
-      setError(null);
+      try {
+        setIsLoading(true);
+        setError(null);
 
-      const response = await employeeAPI.getEmployees(user.organization_id);
+        const response = await employeeAPI.getEmployees(user.organization_id);
 
-      if (!response.success) {
-        throw new Error(
-          `Failed to fetch: ${response.error || response.message || "Unknown error"}`
+        if (!response.success) {
+          throw new Error(
+            `Failed to fetch: ${response.error || response.message || "Unknown error"}`,
+          );
+        }
+
+        // Check for metadata at the top level of the response
+        if (response.metadata?.statistics) {
+          setStatistics(response.metadata.statistics);
+        } else {
+          // If no statistics in metadata, you might need to calculate them from the employees data
+          console.log("No statistics found in metadata");
+          setStatistics(null);
+        }
+      } catch (error) {
+        console.error("Failed to fetch statistics:", error);
+        setError(
+          error instanceof Error ? error.message : "Failed to fetch statistics",
         );
+      } finally {
+        setIsLoading(false);
       }
+    };
 
-      // Check for metadata at the top level of the response
-      if (response.metadata?.statistics) {
-        setStatistics(response.metadata.statistics);
-      } else {
-        // If no statistics in metadata, you might need to calculate them from the employees data
-        console.log("No statistics found in metadata");
-        setStatistics(null);
-      }
-    } catch (error) {
-      console.error("Failed to fetch statistics:", error);
-      setError(
-        error instanceof Error ? error.message : "Failed to fetch statistics"
-      );
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  fetchStatistics();
-}, [user?.organization_id]);
+    fetchStatistics();
+  }, [user?.organization_id]);
 
   // Generate card details dynamically from statistics
   const cardDetails: CardDetail[] = [];
@@ -129,16 +135,47 @@ useEffect(() => {
         <SiteHeader />
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="mt-4 mx-6 space-y-2">
-              <h1 className="text-2xl font-medium">Employees Management</h1>
-              <p className="text-base text-muted-foreground">
-                This page shows all employees in your organization:
-              </p>
+            <div className="mt-4 mx-6 flex items-start justify-between">
+              <div className="space-y-2">
+                <h1 className="text-2xl font-medium">Employees Management</h1>
+                <p className="text-base text-muted-foreground">
+                  This page shows all employees in your organization:
+                </p>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Import Button */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => console.log("Import clicked")}
+                      className="flex items-center gap-1.5 rounded-md bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+                    >
+                      <Upload className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+
+                  <TooltipContent>Import data</TooltipContent>
+                </Tooltip>
+
+                {/* Export Button */}
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => console.log("Export clicked")}
+                      className="flex items-center gap-1.5 rounded-md bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
+                    >
+                      <Download className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+
+                  <TooltipContent>Export data</TooltipContent>
+                </Tooltip>
+              </div>
             </div>
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
               <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
-                <SectionCards 
-                  details={cardDetails} 
+                <SectionCards
+                  details={cardDetails}
                   loading={isLoading}
                   error={error}
                 />
