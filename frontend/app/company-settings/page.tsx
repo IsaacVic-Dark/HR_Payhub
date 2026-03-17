@@ -16,6 +16,7 @@ import {
   IconBell,
   IconCreditCard,
   IconDownload,
+  IconCalendarTime,
 } from "@tabler/icons-react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
@@ -54,6 +55,7 @@ const sidebarItems = [
   { key: "loan", label: "Loans", icon: IconCurrencyDollar },
   { key: "benefit", label: "Benefits", icon: IconGift },
   { key: "per_diem", label: "Per Diem", icon: IconPlane },
+  { key: "leave", label: "Leave Settings", icon: IconCalendarTime },
   { key: "advance", label: "Advances", icon: IconArrowForward },
   { key: "refund", label: "Refunds", icon: IconCreditCard },
   { key: "notifications", label: "Notifications", icon: IconBell },
@@ -272,6 +274,410 @@ function NotificationsSection() {
             <Separator className="mt-6" />
           </div>
         ))}
+      </div>
+    </div>
+  );
+}
+
+// Leave Settings Section Component
+function LeaveSettingsSection() {
+  const [leaveTypes, setLeaveTypes] = useState([
+    {
+      id: 1,
+      name: "Annual Leave",
+      days: 21,
+      carryOver: true,
+      maxCarryOver: 10,
+      paid: true,
+      accrual: "monthly",
+      requiresApproval: true,
+      minNoticeDays: 7,
+      enabled: true,
+    },
+    {
+      id: 2,
+      name: "Sick Leave",
+      days: 14,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: true,
+      accrual: "upfront",
+      requiresApproval: false,
+      minNoticeDays: 0,
+      enabled: true,
+    },
+    {
+      id: 3,
+      name: "Maternity Leave",
+      days: 90,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: true,
+      accrual: "upfront",
+      requiresApproval: true,
+      minNoticeDays: 30,
+      enabled: true,
+    },
+    {
+      id: 4,
+      name: "Paternity Leave",
+      days: 14,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: true,
+      accrual: "upfront",
+      requiresApproval: true,
+      minNoticeDays: 14,
+      enabled: true,
+    },
+    {
+      id: 5,
+      name: "Compassionate Leave",
+      days: 3,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: true,
+      accrual: "upfront",
+      requiresApproval: false,
+      minNoticeDays: 0,
+      enabled: true,
+    },
+    {
+      id: 6,
+      name: "Study Leave",
+      days: 10,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: false,
+      accrual: "upfront",
+      requiresApproval: true,
+      minNoticeDays: 14,
+      enabled: false,
+    },
+    {
+      id: 7,
+      name: "Unpaid Leave",
+      days: 30,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: false,
+      accrual: "upfront",
+      requiresApproval: true,
+      minNoticeDays: 7,
+      enabled: true,
+    },
+  ]);
+
+  const [generalSettings, setGeneralSettings] = useState({
+    leaveYearStart: "01-01",           // MM-DD
+    allowNegativeBalance: false,
+    autoApproveAfterDays: 0,           // 0 = disabled
+    publicHolidaysExcluded: true,
+    weekendsExcluded: true,
+    notifyManagerOnRequest: true,
+    notifyEmployeeOnApproval: true,
+    requireMedicalCertificate: true,   // for sick leave > 3 days
+    medicalCertThresholdDays: 3,
+    allowHalfDayLeave: true,
+  });
+
+  return (
+    <div className="p-6 space-y-10">
+      {/* ── General Leave Policy ──────────────────────────────────── */}
+      <div>
+        <h2 className="text-lg font-semibold mb-1">Leave Settings</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Configure leave policies, accrual rules, and approval workflows for
+          your organisation.
+        </p>
+        <Separator className="mb-6" />
+
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          General Policy
+        </h3>
+        <div className="space-y-5">
+          {/* Leave year start */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Leave Year Start</p>
+              <p className="text-xs text-muted-foreground">
+                The date each leave year resets (affects carry-over and accrual)
+              </p>
+            </div>
+            <Select
+              value={generalSettings.leaveYearStart}
+              onValueChange={(v) =>
+                setGeneralSettings({ ...generalSettings, leaveYearStart: v })
+              }
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="01-01">1 January</SelectItem>
+                <SelectItem value="04-01">1 April</SelectItem>
+                <SelectItem value="07-01">1 July</SelectItem>
+                <SelectItem value="10-01">1 October</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Separator />
+
+          {/* Weekends excluded */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Exclude Weekends</p>
+              <p className="text-xs text-muted-foreground">
+                Weekends do not count as leave days when calculating duration
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.weekendsExcluded}
+              onCheckedChange={(v) =>
+                setGeneralSettings({ ...generalSettings, weekendsExcluded: v })
+              }
+            />
+          </div>
+          <Separator />
+
+          {/* Public holidays excluded */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Exclude Public Holidays</p>
+              <p className="text-xs text-muted-foreground">
+                Public holidays do not count as leave days
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.publicHolidaysExcluded}
+              onCheckedChange={(v) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  publicHolidaysExcluded: v,
+                })
+              }
+            />
+          </div>
+          <Separator />
+
+          {/* Half-day leave */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Allow Half-Day Leave</p>
+              <p className="text-xs text-muted-foreground">
+                Employees can request morning or afternoon half-days
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.allowHalfDayLeave}
+              onCheckedChange={(v) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  allowHalfDayLeave: v,
+                })
+              }
+            />
+          </div>
+          <Separator />
+
+          {/* Negative balance */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Allow Negative Balance</p>
+              <p className="text-xs text-muted-foreground">
+                Employees can take leave even when their balance is zero
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.allowNegativeBalance}
+              onCheckedChange={(v) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  allowNegativeBalance: v,
+                })
+              }
+            />
+          </div>
+          <Separator />
+
+          {/* Medical certificate threshold */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">
+                Medical Certificate Required After
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Number of consecutive sick-leave days before a certificate is
+                mandatory (0 = never required)
+              </p>
+            </div>
+            <Input
+              type="number"
+              min={0}
+              className="w-20 text-right"
+              value={generalSettings.medicalCertThresholdDays}
+              onChange={(e) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  medicalCertThresholdDays: parseInt(e.target.value) || 0,
+                })
+              }
+            />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          Notifications
+        </h3>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Notify Manager on Request</p>
+              <p className="text-xs text-muted-foreground">
+                Send an email/notification to the line manager when a leave
+                request is submitted
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.notifyManagerOnRequest}
+              onCheckedChange={(v) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  notifyManagerOnRequest: v,
+                })
+              }
+            />
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">
+                Notify Employee on Approval / Rejection
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Send an email/notification to the employee when their request
+                is approved or rejected
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.notifyEmployeeOnApproval}
+              onCheckedChange={(v) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  notifyEmployeeOnApproval: v,
+                })
+              }
+            />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Leave Types
+          </h3>
+          <Button size="sm" variant="outline">
+            <IconPlus size={14} className="mr-1" />
+            Add Leave Type
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          {leaveTypes.map((lt) => (
+            <div
+              key={lt.id}
+              className="rounded-lg border border-border p-4 space-y-3"
+            >
+              {/* Row 1 — name + toggles */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Switch
+                    checked={lt.enabled}
+                    onCheckedChange={(v) =>
+                      setLeaveTypes((prev) =>
+                        prev.map((x) =>
+                          x.id === lt.id ? { ...x, enabled: v } : x,
+                        ),
+                      )
+                    }
+                  />
+                  <div>
+                    <p className="font-medium text-sm">{lt.name}</p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <Badge
+                        variant={lt.paid ? "default" : "secondary"}
+                        className="text-xs"
+                      >
+                        {lt.paid ? "Paid" : "Unpaid"}
+                      </Badge>
+                      {lt.carryOver && (
+                        <Badge variant="outline" className="text-xs">
+                          Carry-over: {lt.maxCarryOver}d
+                        </Badge>
+                      )}
+                      {lt.requiresApproval && (
+                        <Badge variant="outline" className="text-xs">
+                          Approval required
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button variant="outline" size="sm" disabled={!lt.enabled}>
+                    <IconEdit size={13} className="mr-1" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <IconTrash size={13} />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Row 2 — quick stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                <div className="text-xs">
+                  <span className="text-muted-foreground block">
+                    Days per year
+                  </span>
+                  <span className="font-medium">{lt.days}</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-muted-foreground block">Accrual</span>
+                  <span className="font-medium capitalize">{lt.accrual}</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-muted-foreground block">
+                    Min. notice
+                  </span>
+                  <span className="font-medium">
+                    {lt.minNoticeDays === 0 ? "None" : `${lt.minNoticeDays}d`}
+                  </span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-muted-foreground block">Carry-over</span>
+                  <span className="font-medium">
+                    {lt.carryOver ? `Up to ${lt.maxCarryOver}d` : "None"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-2">
+        <Button onClick={() => toast.success("Leave settings saved")}>
+          Save Settings
+        </Button>
       </div>
     </div>
   );
@@ -702,6 +1108,8 @@ export default function OrganizationConfigPage() {
                       <BillingSection />
                     ) : activeSection === "export" ? (
                       <DataExportSection />
+                    ) : activeSection === "leave" ? (
+                      <LeaveSettingsSection />
                     ) : configsLoading ? (
                       <ConfigSkeleton />
                     ) : error ? (
