@@ -222,24 +222,119 @@ CREATE TABLE IF NOT EXISTS `benefits` (
 
 -- Updated structure for table payhub.leaves
 CREATE TABLE IF NOT EXISTS `leaves` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `employee_id` INT NOT NULL,
-  `approver_id` INT DEFAULT NULL,     -- Employee who approves the leave
-  `reliever_id` INT DEFAULT NULL,     -- Employee who takes the workload
-  `leave_type` ENUM('sick','casual','annual','maternity','paternity','other') NOT NULL,
-  `start_date` DATE NOT NULL,
-  `end_date` DATE NOT NULL,
-  `status` ENUM('pending','approved','rejected','expired') DEFAULT 'pending',
-  `reason` TEXT NULL,
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `id`              INT       NOT NULL AUTO_INCREMENT,
+  `organization_id` INT       NOT NULL,                    -- added: avoids sub-select on every query
+  `employee_id`     INT       NOT NULL,
+  `approver_id`     INT       DEFAULT NULL,                -- Employee who approves the leave
+  `reliever_id`     INT       DEFAULT NULL,                -- Employee who takes the workload
+  `leave_type_id`   INT       NOT NULL,                    -- replaces the old ENUM leave_type
+  `start_date`      DATE      NOT NULL,
+  `end_date`        DATE      NOT NULL,
+  `duration_days`   DECIMAL(5,1) DEFAULT NULL,             -- computed & stored: accounts for weekends/half-days
+  `is_half_day`     TINYINT(1)   DEFAULT 0,
+  `half_day_period` ENUM('morning','afternoon') DEFAULT NULL,  -- only set when is_half_day = 1
+  `status`          ENUM('pending','approved','rejected','cancelled','expired') DEFAULT 'pending',
+  `reason`          TEXT      NULL,
+  `rejection_reason` TEXT     NULL,                        -- populated when status = rejected
+  `document_path`   VARCHAR(500) DEFAULT NULL,             -- uploaded medical cert or supporting doc
+  `approved_at`     TIMESTAMP NULL DEFAULT NULL,
+  `rejected_at`     TIMESTAMP NULL DEFAULT NULL,
+  `created_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
   PRIMARY KEY (`id`),
-  KEY `employee_id` (`employee_id`),
-  KEY `approver_id` (`approver_id`),
-  KEY `reliever_id` (`reliever_id`),
-  CONSTRAINT `leaves_employee_fk` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `leaves_approver_fk` FOREIGN KEY (`approver_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `leaves_reliever_fk` FOREIGN KEY (`reliever_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL
+  KEY `idx_leaves_org`          (`organization_id`),
+  KEY `idx_leaves_employee`     (`employee_id`),
+  KEY `idx_leaves_leave_type`   (`leave_type_id`),
+  KEY `idx_leaves_approver`     (`approver_id`),
+  KEY `idx_leaves_reliever`     (`reliever_id`),
+  KEY `idx_leaves_status`       (`status`),
+  KEY `idx_leaves_dates`        (`start_date`, `end_date`),
+
+  CONSTRAINT `leaves_org_fk`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `leaves_employee_fk`
+    FOREIGN KEY (`employee_id`)     REFERENCES `employees`    (`id`) ON DELETE CASCADE,
+  CONSTRAINT `leaves_type_fk`
+    FOREIGN KEY (`leave_type_id`)   REFERENCES `leave_types`  (`id`) ON DELETE RESTRICT,
+  CONSTRAINT `leaves_approver_fk`
+    FOREIGN KEY (`approver_id`)     REFERENCES `employees`    (`id`) ON DELETE SET NULL,
+  CONSTRAINT `leaves_reliever_fk`
+    FOREIGN KEY (`reliever_id`)     REFERENCES `employees`    (`id`) ON DELETE SET NULL
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- This is used incase user needs to create new leave types or edit existing ones. The actual leave requests are stored in the `leaves` table, which references the type via the `leave_type` field (which is currently an ENUM for simplicity but could be changed to a foreign key if more flexibility is needed).
+CREATE TABLE IF NOT EXISTS `leave_types` (
+  `id`                    INT           NOT NULL AUTO_INCREMENT,
+  `organization_id`       INT           NOT NULL,
+  `name`                  VARCHAR(100)  NOT NULL,
+  `code`                  VARCHAR(30)   NOT NULL  COMMENT 'Short code e.g. ANNUAL, SICK, MAT',
+  `description`           TEXT          DEFAULT NULL,
+
+  -- Entitlement
+  `days_per_year`         DECIMAL(5,1)  DEFAULT NULL  COMMENT 'NULL = unlimited / managed by accrual',
+  `is_paid`               TINYINT(1)    DEFAULT 1,
+  `is_accrued`            TINYINT(1)    DEFAULT 0     COMMENT '1 = days build up over time',
+  `accrual_rate`          DECIMAL(5,2)  DEFAULT NULL  COMMENT 'Days per accrual cycle',
+  `accrual_frequency`     ENUM('daily','weekly','monthly') DEFAULT 'monthly',
+
+  -- Rules
+  `allow_carry_over`      TINYINT(1)    DEFAULT 0,
+  `max_carry_over_days`   DECIMAL(5,1)  DEFAULT 0,
+  `allow_half_day`        TINYINT(1)    DEFAULT 1,
+  `allow_negative_balance` TINYINT(1)  DEFAULT 0,
+  `min_notice_days`       INT           DEFAULT 0     COMMENT 'Days in advance required',
+  `max_consecutive_days`  INT           DEFAULT NULL  COMMENT 'NULL = no cap',
+  `requires_document`     TINYINT(1)    DEFAULT 0     COMMENT 'e.g. medical cert for sick leave',
+  `document_threshold_days` INT         DEFAULT NULL  COMMENT 'Require doc only if > N days',
+
+  -- Approval
+  `requires_approval`     TINYINT(1)    DEFAULT 1,
+  `approval_workflow`     JSON          DEFAULT NULL  COMMENT 'e.g. ["manager","hr_manager"]',
+
+  -- Eligibility
+  `applicable_gender`     ENUM('all','male','female') DEFAULT 'all',
+  `probation_eligible`    TINYINT(1)    DEFAULT 0     COMMENT '1 = can be taken during probation',
+
+  -- System
+  `is_system_default`     TINYINT(1)    DEFAULT 0     COMMENT '1 = seeded by system, not user-created',
+  `is_active`             TINYINT(1)    DEFAULT 1,
+  `created_at`            TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`            TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_leave_type_per_org` (`organization_id`, `code`),
+
+  CONSTRAINT `leave_types_org_fk`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- shows the leave balance an employee has for each leave type, updated in real-time as leave is taken or accrued. This allows for quick reference without needing to calculate on the fly.
+CREATE TABLE IF NOT EXISTS `leave_balances` (
+  `id`               INT           NOT NULL AUTO_INCREMENT,
+  `organization_id`  INT           NOT NULL,
+  `employee_id`      INT           NOT NULL,
+  `leave_type_id`    INT           NOT NULL,
+  `leave_year`       YEAR          NOT NULL  COMMENT 'The leave year this balance belongs to',
+  `entitled_days`    DECIMAL(5,1)  DEFAULT 0 COMMENT 'Days granted for this year',
+  `accrued_days`     DECIMAL(5,1)  DEFAULT 0 COMMENT 'Days built up so far (if accrued type)',
+  `used_days`        DECIMAL(5,1)  DEFAULT 0,
+  `pending_days`     DECIMAL(5,1)  DEFAULT 0 COMMENT 'Days in pending requests',
+  `carried_over`     DECIMAL(5,1)  DEFAULT 0 COMMENT 'Days brought forward from previous year',
+  `encashed_days`    DECIMAL(5,1)  DEFAULT 0,
+  `created_at`       TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`       TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_balance` (`employee_id`, `leave_type_id`, `leave_year`),
+  KEY `lb_org`  (`organization_id`),
+
+  CONSTRAINT `lb_org_fk`  FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `lb_emp_fk`  FOREIGN KEY (`employee_id`)     REFERENCES `employees`     (`id`) ON DELETE CASCADE,
+  CONSTRAINT `lb_type_fk` FOREIGN KEY (`leave_type_id`)   REFERENCES `leave_types`   (`id`) ON DELETE RESTRICT
+
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
@@ -338,41 +433,42 @@ CREATE TABLE IF NOT EXISTS `organizations` (
 -- Data exporting was unselected.
 
 CREATE TABLE IF NOT EXISTS `organization_configs` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-  `organization_id` INT NOT NULL,
-  `config_type` ENUM('tax','deduction','loan','benefit','per_diem','advance','refund') NOT NULL,
-  `name` VARCHAR(100) NOT NULL,
-  `percentage` DECIMAL(5,2) DEFAULT NULL,
-  `fixed_amount` DECIMAL(15,2) DEFAULT NULL,
-  `status` ENUM('pending', 'approved', 'rejected', 'deleted_pending') NOT NULL DEFAULT 'approved',
-  `created_by` INT NULL,
-  `approved_by` INT NULL,
-  `rejected_by` INT NULL,
-  `approved_at` TIMESTAMP NULL,
-  `rejected_at` TIMESTAMP NULL,
+  `id`               INT          NOT NULL AUTO_INCREMENT,
+  `organization_id`  INT          NOT NULL,
+  `config_type`      ENUM('tax','deduction','loan','benefit','per_diem','advance','refund','leave') NOT NULL,
+  `name`             VARCHAR(100) NOT NULL,
+  `percentage`       DECIMAL(5,2)  DEFAULT NULL,
+  `fixed_amount`     DECIMAL(15,2) DEFAULT NULL,
+  `value_text`       VARCHAR(100)  DEFAULT NULL  COMMENT 'Scalar text value for settings that are not numeric (e.g. "monthly", "true", "01-01")',
+  `settings`         JSON          DEFAULT NULL  COMMENT 'Structured / array values (e.g. approval workflow roles)',
+  `status`           ENUM('pending','approved','rejected','deleted_pending') NOT NULL DEFAULT 'approved',
+  `created_by`       INT NULL,
+  `approved_by`      INT NULL,
+  `rejected_by`      INT NULL,
+  `approved_at`      TIMESTAMP NULL,
+  `rejected_at`      TIMESTAMP NULL,
   `rejection_reason` TEXT NULL,
-  `is_active` TINYINT(1) DEFAULT '1',
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `is_active`        TINYINT(1)   DEFAULT '1',
+  `created_at`       TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`       TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_config` (`organization_id`,`config_type`,`name`),
 
-  /* Foreign keys */
   CONSTRAINT `organization_configs_ibfk_1`
-    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) 
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`)
     ON DELETE CASCADE,
 
   CONSTRAINT `organization_configs_created_by_fk`
-    FOREIGN KEY (`created_by`) REFERENCES `users`(`id`) 
+    FOREIGN KEY (`created_by`)  REFERENCES `users`(`id`)
     ON DELETE SET NULL,
 
   CONSTRAINT `organization_configs_approved_by_fk`
-    FOREIGN KEY (`approved_by`) REFERENCES `users`(`id`) 
+    FOREIGN KEY (`approved_by`) REFERENCES `users`(`id`)
     ON DELETE SET NULL,
 
   CONSTRAINT `organization_configs_rejected_by_fk`
-    FOREIGN KEY (`rejected_by`) REFERENCES `users`(`id`) 
+    FOREIGN KEY (`rejected_by`) REFERENCES `users`(`id`)
     ON DELETE SET NULL
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -614,3 +710,102 @@ CREATE TABLE IF NOT EXISTS `users` (
 /*!40014 SET FOREIGN_KEY_CHECKS=IFNULL(@OLD_FOREIGN_KEY_CHECKS, 1) */;
 /*!40101 SET CHARACTER_SET_CLIENT=@OLD_CHARACTER_SET_CLIENT */;
 /*!40111 SET SQL_NOTES=IFNULL(@OLD_SQL_NOTES, 1) */;
+
+
+-- Insert queries for data when company starts
+
+-- ============================================================
+-- Leave Configuration INSERT queries
+-- organization_id : 221
+-- config_type     : leave
+-- ============================================================
+
+INSERT INTO `organization_configs`
+  (`organization_id`, `config_type`, `name`, `percentage`, `fixed_amount`, `value_text`, `settings`, `status`, `is_active`)
+VALUES
+
+-- ── Annual Leave ─────────────────────────────────────────────
+-- Total days an employee is entitled to per leave year.
+(221, 'leave', 'Annual Leave Allowance',
+  NULL, 21.00, NULL, NULL,
+  'approved', 1),
+
+-- ── Accrual Rules ────────────────────────────────────────────
+-- Number of days accrued each frequency cycle (e.g. 2 days/month).
+(221, 'leave', 'Accrual Rate (Days Per Cycle)',
+  NULL, 2.00, NULL, NULL,
+  'approved', 1),
+
+-- How often accrual is calculated: daily | weekly | monthly.
+(221, 'leave', 'Accrual Frequency',
+  NULL, NULL, 'monthly', NULL,
+  'approved', 1),
+
+-- Maximum days that can be carried forward into the next leave year.
+(221, 'leave', 'Carry-Forward Limit (Days)',
+  NULL, 10.00, NULL, NULL,
+  'approved', 1),
+
+-- Whether unused leave days can be cashed out: true | false.
+(221, 'leave', 'Encashment Option',
+  NULL, NULL, 'false', NULL,
+  'approved', 1),
+
+-- ── Requests & Approvals ─────────────────────────────────────
+-- Allow employees to request days beyond their current balance: true | false.
+(221, 'leave', 'Allow Extra Days Request',
+  NULL, NULL, 'false', NULL,
+  'approved', 1),
+
+-- How many days in the past an employee can back-date a leave request.
+(221, 'leave', 'Past Application Limit (Days)',
+  NULL, 7.00, NULL, NULL,
+  'approved', 1),
+
+-- How many days into the future an employee can apply for leave in advance.
+(221, 'leave', 'Future Application Limit (Days)',
+  NULL, 90.00, NULL, NULL,
+  'approved', 1),
+
+-- Ordered list of roles that must approve a leave request.
+-- Supported role values: manager | department_manager | hr_manager | hr_officer | auto
+(221, 'leave', 'Approval Workflow',
+  NULL, NULL, NULL,
+  JSON_ARRAY('manager', 'hr_manager'),
+  'approved', 1),
+
+-- ── Leave Year ───────────────────────────────────────────────
+-- The date (MM-DD) on which the leave year resets each year.
+-- Affects carry-over calculations and accrual cycle restarts.
+(221, 'leave', 'Leave Year Start',
+  NULL, NULL, '01-01', NULL,
+  'approved', 1),
+
+-- ── Duration Calculation ─────────────────────────────────────
+-- When true, Saturday and Sunday are excluded from leave day counts: true | false.
+(221, 'leave', 'Exclude Weekends',
+  NULL, NULL, 'true', NULL,
+  'approved', 1),
+
+-- ── Half-Day ─────────────────────────────────────────────────
+-- Allow employees to apply for a morning or afternoon half-day: true | false.
+(221, 'leave', 'Allow Half-Day Leave',
+  NULL, NULL, 'true', NULL,
+  'approved', 1),
+
+-- ── Balance ──────────────────────────────────────────────────
+-- Allow leave requests when balance is zero or negative: true | false.
+(221, 'leave', 'Allow Negative Balance',
+  NULL, NULL, 'false', NULL,
+  'approved', 1),
+
+-- ── Notifications ────────────────────────────────────────────
+-- Send a notification to the line manager when a leave request is submitted: true | false.
+(221, 'leave', 'Notify Manager on Request',
+  NULL, NULL, 'true', NULL,
+  'approved', 1),
+
+-- Send a notification to the employee when their request is approved or rejected: true | false.
+(221, 'leave', 'Notify Employee on Approval/Rejection',
+  NULL, NULL, 'true', NULL,
+  'approved', 1);

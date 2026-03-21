@@ -1,5 +1,4 @@
 <?php
-// routes.php (Updated)
 
 use App\Services\Router;
 use App\Controllers\OrganizationController;
@@ -381,11 +380,6 @@ Router::get('api/v1/organizations/{org_id}/leaves', LeaveController::class . '@i
     'LeaveAuthorizationMiddleware'
 ]);
 
-Router::get('api/v1/organizations/{org_id}/leaves/statistics', LeaveController::class . '@statistics', [
-    'AuthMiddleware', 
-    'LeaveAuthorizationMiddleware'
-]);
-
 Router::get('api/v1/organizations/{org_id}/leaves/{id}', LeaveController::class . '@show', [
     'AuthMiddleware',
     'LeaveAuthorizationMiddleware'
@@ -429,6 +423,50 @@ Router::get('api/v1/organizations/{org_id}/employees/{id}/leaves', LeaveControll
 
 Router::post('api/v1/organizations/{org_id}/employees/{id}/leaves', LeaveController::class . '@applyLeave', [
     'AuthMiddleware'
+]);
+
+// 1. CANCEL — employee cancels their own pending leave
+Router::patch('api/v1/organizations/{org_id}/leaves/{id}/cancel', LeaveController::class . '@cancel', [
+    'AuthMiddleware',
+    'LeaveAuthorizationMiddleware'
+]);
+
+// 2. ASSIGN RELIEVER — update reliever on an existing leave
+//    Was assignReliever($id) scoped only by leave ID — now also scoped by org
+Router::put('api/v1/organizations/{org_id}/leaves/{id}/assign-reliever', LeaveController::class . '@assignReliever', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'hr_officer', 'department_manager']],
+    'LeaveAuthorizationMiddleware'
+]);
+
+// 5. LEAVE TYPES — list all active leave types for an org
+Router::get('api/v1/organizations/{org_id}/leave-types', LeaveController::class . '@getLeaveTypes', [
+    'AuthMiddleware',
+    'LeaveAuthorizationMiddleware'
+]);
+
+// ADD THESE THREE BELOW:
+
+// Create a new leave type — admin, hr_manager only
+Router::post('api/v1/organizations/{org_id}/leave-types', LeaveController::class . '@storeLeaveType', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'LeaveAuthorizationMiddleware'
+]);
+
+// Update a leave type — admin, hr_manager only
+Router::put('api/v1/organizations/{org_id}/leave-types/{type_id}', LeaveController::class . '@updateLeaveType', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'LeaveAuthorizationMiddleware'
+]);
+
+Router::patch('api/v1/organizations/{org_id}/leave-types/{type_id}', LeaveController::class . '@updateLeaveType', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'LeaveAuthorizationMiddleware'
+]);
+
+// Delete (deactivate) a leave type — admin only
+Router::delete('api/v1/organizations/{org_id}/leave-types/{type_id}', LeaveController::class . '@destroyLeaveType', [
+    ['AuthMiddleware', ['admin']],
+    'LeaveAuthorizationMiddleware'
 ]);
 
 // Notification routes with comprehensive authentication and authorization
