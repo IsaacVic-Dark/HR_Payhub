@@ -11,13 +11,14 @@ import { Label } from "@/components/ui/label";
 const TEST_USERS = {
   super_admin: { email: "max@example.com", password: "password" },
   admin: { email: "nyzigilev@example.com", password: "password" },
-  hr_manager: { email: "hr@example.com", password: "password" },
+  hr_manager: { email: "srui@gmail.com", password: "password" },
   employee: { email: "s.doe@klinebaxteras.com", password: "password" },
   payroll_manager: { email: "payroll@example.com", password: "password" },
-  finance_manager: { email: "finance@example.com", password: "password" },
+  finance_manager: { email: "raki@gmail.com", password: "password" },
   auditor: { email: "auditor@example.com", password: "password" },
   department_manager: { email: "dept@example.com", password: "password" },
   payroll_officer: { email: "officer@example.com", password: "password" },
+  hr_officer: { email: "sruwi@gmail.com", password: "password" },
 };
 
 export function LoginForm() {
@@ -297,6 +298,46 @@ export function LoginForm() {
               className="capitalize"
             >
               Employee
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleTestUser("payroll_officer")}
+              disabled={isLoading}
+              className="capitalize"
+            >
+              Payroll Officer
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleTestUser("department_manager")}
+              disabled={isLoading}
+              className="capitalize"
+            >
+              Department Manager
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleTestUser("auditor")}
+              disabled={isLoading}
+              className="capitalize"
+            >
+              Auditor
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleTestUser("finance_manager")}
+              disabled={isLoading}
+              className="capitalize"
+            >
+              Finance manager
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => handleTestUser("payroll_manager")}
+              disabled={isLoading}
+              className="capitalize"
+            >
+              Payroll manager
             </Button>
           </div>
         </div>
