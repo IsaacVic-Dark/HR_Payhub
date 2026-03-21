@@ -14,10 +14,6 @@ class LeaveController
     {
         return "
             leaves.id               AS leave_id,
-            leaves.employee_id,
-            leaves.approver_id,
-            leaves.reliever_id,
-            leaves.leave_type_id,
             leaves.start_date,
             leaves.end_date,
             leaves.duration_days,
@@ -40,9 +36,6 @@ class LeaveController
 
             -- Employee details
             emp_users.email        AS employee_email,
-            emp_users.first_name   AS employee_first_name,
-            emp_users.middle_name  AS employee_middle_name,
-            emp_users.surname      AS employee_surname,
             CONCAT(
                 emp_users.first_name, ' ',
                 COALESCE(emp_users.middle_name, ''), ' ',
@@ -51,9 +44,6 @@ class LeaveController
 
             -- Approver details
             approver_users.email       AS approver_email,
-            approver_users.first_name  AS approver_first_name,
-            approver_users.middle_name AS approver_middle_name,
-            approver_users.surname     AS approver_surname,
             CONCAT(
                 approver_users.first_name, ' ',
                 COALESCE(approver_users.middle_name, ''), ' ',
@@ -62,9 +52,6 @@ class LeaveController
 
             -- Reliever details
             reliever_users.email       AS reliever_email,
-            reliever_users.first_name  AS reliever_first_name,
-            reliever_users.middle_name AS reliever_middle_name,
-            reliever_users.surname     AS reliever_surname,
             CONCAT(
                 reliever_users.first_name, ' ',
                 COALESCE(reliever_users.middle_name, ''), ' ',
