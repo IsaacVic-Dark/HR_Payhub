@@ -464,7 +464,7 @@ const LeaveTable: React.FC = () => {
     {
       key: "leave_type",
       header: "Leave Type",
-      cell: (leave) => <span className="capitalize">{leave.leave_type}</span>,
+      cell: (leave) => <span className="capitalize">{leave.leave_type_name}</span>,
     },
     {
       key: "period",

@@ -14,9 +14,7 @@ import { useAuth } from "@/lib/AuthContext";
 export default function Page() {
   const pathname = usePathname();
   const { user } = useAuth();
-  const [statistics, setStatistics] = useState<
-    LeavesResponseData["statistics"] | null
-  >(null);
+const [statistics, setStatistics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -26,8 +24,8 @@ export default function Page() {
       try {
         const response = await leaveAPI.getLeaves(user.organization_id);
 
-      if (response.success && response.data) {
-        setStatistics(response.metadata?.statistics);
+      if (response.success) {
+        setStatistics(response.metadata?.statistics ?? null);
       }
       } catch (error) {
         console.error("Failed to fetch leave statistics:", error);
@@ -71,26 +69,24 @@ export default function Page() {
   };
 
   // Generate card details dynamically from statistics
-  const cardDetails: CardDetail[] = statistics
-    ? Object.keys(statistics)
-        .filter((key) => key !== "total_leaves") // Exclude total_leaves
-        .map((key) => {
-          const leaveType = key as keyof typeof statistics;
-          const config = leaveTypeConfig[leaveType] || {
-            description: `${leaveType} leave requests.`,
+  const cardDetails: CardDetail[] = statistics?.by_type
+    ? (statistics.by_type as Array<{ leave_type_name: string; code: string; count: number; total_days: string }>).map(
+        (item) => {
+          const key = item.leave_type_name.toLowerCase().replace(" leave", "").trim();
+          const config = leaveTypeConfig[key] || {
+            description: `${item.leave_type_name} requests.`,
             footerText: "",
           };
-
           return {
-            title:
-              leaveType.charAt(0).toUpperCase() + leaveType.slice(1) + " Leave",
-            value: statistics[leaveType]?.toString() || "0",
-            change: "",
+            title: item.leave_type_name,
+            value: item.count.toString(),
+            change: `${parseFloat(item.total_days).toFixed(1)} days`,
             changeIcon: null,
             description: config.description,
             footerText: config.footerText,
           };
-        })
+        }
+      )
     : [];
 
   const path = pathname.split("/").filter(Boolean).pop() || "Dashboard";

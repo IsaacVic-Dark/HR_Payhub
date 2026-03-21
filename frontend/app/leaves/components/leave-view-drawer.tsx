@@ -73,7 +73,7 @@ export function LeaveViewDrawer({
                 Leave Request Details
               </DrawerTitle>
               <DrawerDescription>
-                {leave.first_name} {leave.surname}
+                {leave.employee_full_name}
               </DrawerDescription>
             </div>
           </div>
@@ -89,10 +89,7 @@ export function LeaveViewDrawer({
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-600">Full Name</span>
-                <p className="font-medium">
-                  {leave.employee_first_name} {leave.employee_middle_name}{" "}
-                  {leave.employee_surname}
-                </p>
+<p className="font-medium">{leave.employee_full_name}</p>
               </div>
               <div>
                 <span className="text-gray-600">Email</span>
@@ -114,7 +111,7 @@ export function LeaveViewDrawer({
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-600">Leave Type</span>
-                <p className="font-medium capitalize">{leave.leave_type}</p>
+                <p className="font-medium">{leave.leave_type_name}</p>
               </div>
               <div>
                 <span className="text-gray-600">Status</span>
@@ -123,25 +120,13 @@ export function LeaveViewDrawer({
               <div>
                 <span className="text-gray-600">Approver</span>
                 <p className="font-medium">
-                  {leave.approver_first_name ||
-                  leave.approver_middle_name ||
-                  leave.approver_surname
-                    ? `${leave.approver_first_name ?? ""} ${
-                        leave.approver_middle_name ?? ""
-                      } ${leave.approver_surname ?? ""}`.trim()
-                    : "-"}
+                  {leave.approver_full_name || "-"}
                 </p>
               </div>
               <div>
                 <span className="text-gray-600">Reliver</span>
                 <p className="font-medium">
-                  {leave.reliever_first_name ||
-                  leave.reliever_middle_name ||
-                  leave.reliever_surname
-                    ? `${leave.reliever_first_name ?? ""} ${
-                        leave.reliever_middle_name ?? ""
-                      } ${leave.reliever_surname ?? ""}`.trim()
-                    : "-"}
+                  {leave.reliever_full_name || "-"}
                 </p>
               </div>
               <div>

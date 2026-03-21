@@ -6,7 +6,18 @@ type LeaveType = {
   surname: string;
   approver_id: number | null;
   reliever_id: number | null;
-  leave_type: string;
+ leave_type_id: number;
+  leave_type_name: string;
+  leave_type_code: string;
+  leave_type_is_paid: number;
+  leave_type_requires_approval: number;
+  duration_days: string;
+  is_half_day: number;
+  half_day_period: string | null;
+  rejection_reason: string | null;
+  document_path: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
   start_date: string;
   end_date: string;
   status: string;
@@ -35,10 +46,20 @@ type EmployeeLeaveType = {
   employee_id: number;
   approver_id: number | null;
   reliever_id: number | null;
-  leave_type: string;
+ leave_type_id: number;
+  leave_type_name: string;
+  leave_type_code: string;
+  leave_type_is_paid: number;
+  leave_type_requires_approval: number;
+  duration_days: string;
+  is_half_day: number;
+  half_day_period: string | null;
+  rejection_reason: string | null;
+  document_path: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
   start_date: string;
   end_date: string;
-  duration_days: number;
   status: string;
   reason: string | null;
   created_at: string;
@@ -130,7 +151,7 @@ interface EmployeeLeavesResponseData {
 
 interface LeaveFilters {
   status?: string;
-  leave_type?: string;
+  leave_type_id?: string;
   name?: string;
   month?: string;
   year?: string;
@@ -188,8 +209,8 @@ class LeaveAPI {
     if (filters.status) {
       params.append("status", filters.status);
     }
-    if (filters.leave_type) {
-      params.append("leave_type", filters.leave_type);
+    if (filters.leave_type_id) {
+      params.append("leave_type_id", filters.leave_type_id);
     }
     if (filters.name) {
       params.append("name", filters.name);
@@ -374,7 +395,18 @@ class LeaveAPI {
     organizationId: number,
     leaveData: {
       employee_id: number;
-      leave_type: string;
+     leave_type_id: number;
+  leave_type_name: string;
+  leave_type_code: string;
+  leave_type_is_paid: number;
+  leave_type_requires_approval: number;
+  duration_days: string;
+  is_half_day: number;
+  half_day_period: string | null;
+  rejection_reason: string | null;
+  document_path: string | null;
+  approved_at: string | null;
+  rejected_at: string | null;
       start_date: string;
       end_date: string;
       reason?: string;
@@ -443,6 +475,188 @@ class LeaveAPI {
         success: false,
         error:
           error instanceof Error ? error.message : "Failed to delete leave",
+      };
+    }
+  }
+
+  async cancelLeave(
+    organizationId: number,
+    leaveId: number
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves/${leaveId}/cancel`;
+      const response = await fetch(url, {
+        method: "PATCH",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to cancel leave",
+      };
+    }
+  }
+
+  async updateLeave(
+    organizationId: number,
+    leaveId: number,
+    leaveData: Partial<{
+      reason: string;
+      approver_id: number | null;
+      reliever_id: number | null;
+      document_path: string | null;
+      start_date: string;
+      end_date: string;
+      is_half_day: boolean;
+      half_day_period: string | null;
+      leave_type_id: number;
+    }>
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves/${leaveId}`;
+      const response = await fetch(url, {
+        method: "PATCH",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(leaveData),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update leave",
+      };
+    }
+  }
+
+  async assignReliever(
+    organizationId: number,
+    leaveId: number,
+    relieverId: number
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves/${leaveId}/assign-reliever`;
+      const response = await fetch(url, {
+        method: "PUT",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ reliever_id: relieverId }),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to assign reliever",
+      };
+    }
+  }
+
+  async getPendingApprovals(
+    organizationId: number,
+    approverId: number
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves/pending-approvals?approver_id=${approverId}`;
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to fetch pending approvals",
+      };
+    }
+  }
+
+  async getLeaveTypes(organizationId: number): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leave-types`;
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to fetch leave types",
+      };
+    }
+  }
+
+  async createLeaveType(
+    organizationId: number,
+    data: {
+      name: string;
+      code: string;
+      description?: string;
+      days_per_year?: number;
+      is_paid?: number;
+      requires_approval?: number;
+      [key: string]: any;
+    }
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leave-types`;
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to create leave type",
+      };
+    }
+  }
+
+  async updateLeaveType(
+    organizationId: number,
+    typeId: number,
+    data: Record<string, any>
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leave-types/${typeId}`;
+      const response = await fetch(url, {
+        method: "PATCH",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(data),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to update leave type",
+      };
+    }
+  }
+
+  async deleteLeaveType(
+    organizationId: number,
+    typeId: number
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leave-types/${typeId}`;
+      const response = await fetch(url, {
+        method: "DELETE",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to delete leave type",
       };
     }
   }
