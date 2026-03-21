@@ -51,7 +51,21 @@ class OrganizationConfigController
             $params = [':org_id' => $org_id];
 
             // Apply filters
-            if ($configType) {
+            // AFTER
+            $validConfigTypes = ['tax', 'deduction', 'loan', 'benefit', 'per_diem', 'advance', 'refund', 'leave'];
+
+            if ($configType !== null && $configType !== '') {
+                if (!in_array($configType, $validConfigTypes)) {
+                    return responseJson(
+                        success: false,
+                        data: null,
+                        message: "Invalid config_type filter",
+                        code: 400,
+                        errors: [
+                            'config_type' => "Must be one of: " . implode(', ', $validConfigTypes)
+                        ]
+                    );
+                }
                 $whereConditions[] = "config_type = :config_type";
                 $params[':config_type'] = $configType;
             }
@@ -83,6 +97,7 @@ class OrganizationConfigController
                     SUM(CASE WHEN config_type = 'per_diem' THEN 1 ELSE 0 END) as per_diem_configs,
                     SUM(CASE WHEN config_type = 'advance' THEN 1 ELSE 0 END) as advance_configs,
                     SUM(CASE WHEN config_type = 'refund' THEN 1 ELSE 0 END) as refund_configs,
+                    SUM(CASE WHEN config_type = 'leave'  THEN 1 ELSE 0 END) as leave_configs,
                     SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active_configs
                 FROM organization_configs
                 $whereClause
@@ -100,13 +115,14 @@ class OrganizationConfigController
                     'statistics' => [
                         'total' => (int) ($stats->total_configs ?? 0),
                         'by_type' => [
-                            'tax' => (int) ($stats->tax_configs ?? 0),
+                            'tax'       => (int) ($stats->tax_configs ?? 0),
                             'deduction' => (int) ($stats->deduction_configs ?? 0),
-                            'loan' => (int) ($stats->loan_configs ?? 0),
-                            'benefit' => (int) ($stats->benefit_configs ?? 0),
-                            'per_diem' => (int) ($stats->per_diem_configs ?? 0),
-                            'advance' => (int) ($stats->advance_configs ?? 0),
-                            'refund' => (int) ($stats->refund_configs ?? 0)
+                            'loan'      => (int) ($stats->loan_configs ?? 0),
+                            'benefit'   => (int) ($stats->benefit_configs ?? 0),
+                            'per_diem'  => (int) ($stats->per_diem_configs ?? 0),
+                            'advance'   => (int) ($stats->advance_configs ?? 0),
+                            'refund'    => (int) ($stats->refund_configs ?? 0),
+                            'leave'     => (int) ($stats->leave_configs ?? 0)
                         ],
                         'active_configs' => (int) ($stats->active_configs ?? 0),
                         'inactive_configs' => (int) ($stats->total_configs ?? 0) - (int) ($stats->active_configs ?? 0)
@@ -350,7 +366,7 @@ class OrganizationConfigController
             // Validate percentage and fixed_amount are not both set
             $newPercentage = $updateData['percentage'] ?? $config->percentage;
             $newFixedAmount = $updateData['fixed_amount'] ?? $config->fixed_amount;
-            
+
             if ($newPercentage !== null && $newFixedAmount !== null) {
                 return responseJson(
                     success: false,
@@ -364,7 +380,7 @@ class OrganizationConfigController
             if (isset($updateData['name']) || isset($updateData['config_type'])) {
                 $newName = $updateData['name'] ?? $config->name;
                 $newType = $updateData['config_type'] ?? $config->config_type;
-                
+
                 $duplicateCheckQuery  = "
                     SELECT * FROM organization_configs 
                     WHERE organization_id = :org_id 
@@ -695,13 +711,14 @@ class OrganizationConfigController
     private function checkConfigInUse($configId, $configType)
     {
         $tables = [
-            'tax' => ['payrun_deductions'],
+            'tax'       => ['payrun_deductions'],
             'deduction' => ['payrun_deductions'],
-            'loan' => ['loans'],
-            'benefit' => ['benefits'],
-            'per_diem' => ['per_diems'],
-            'advance' => ['advances'],
-            'refund' => ['refunds']
+            'loan'      => ['loans'],
+            'benefit'   => ['benefits'],
+            'per_diem'  => ['per_diems'],
+            'advance'   => ['advances'],
+            'refund'    => ['refunds'],
+            'leave'     => [] // no linked transaction table yet; add 'leaves' here once config_id is used
         ];
 
         if (!isset($tables[$configType])) {
@@ -711,7 +728,7 @@ class OrganizationConfigController
         foreach ($tables[$configType] as $table) {
             $checkQuery = "SELECT COUNT(*) as count FROM $table WHERE config_id = :config_id";
             $result = DB::raw($checkQuery, [':config_id' => $configId]);
-            
+
             if (($result[0]->count ?? 0) > 0) {
                 return true;
             }
@@ -727,7 +744,7 @@ class OrganizationConfigController
     {
         try {
             $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
-            
+
             $details = [
                 'action' => $action,
                 'timestamp' => date('Y-m-d H:i:s'),

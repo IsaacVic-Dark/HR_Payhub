@@ -280,7 +280,37 @@ function NotificationsSection() {
 }
 
 // Leave Settings Section Component
-function LeaveSettingsSection() {
+// AFTER
+interface LeaveSettingsSectionProps {
+  configs: UIConfigItem[]; // the 15 leave rows from organization_configs
+  isLoading: boolean;
+}
+
+function LeaveSettingsSection({
+  configs,
+  isLoading,
+}: LeaveSettingsSectionProps) {
+  // Helper: find a config value by name
+  const getConfigValue = (name: string) => configs.find((c) => c.name === name);
+
+  // Derive general settings from live API data, fall back to defaults
+  const [generalSettings, setGeneralSettings] = useState({
+    leaveYearStart:
+      getConfigValue("Leave Year Start")?.fixed_amount?.toString() ?? "01-01",
+    allowNegativeBalance:
+      getConfigValue("Allow Negative Balance")?.name !== undefined
+        ? getConfigValue("Allow Negative Balance")!.is_active
+        : false,
+    weekendsExcluded: getConfigValue("Exclude Weekends")?.is_active ?? true,
+    allowHalfDayLeave:
+      getConfigValue("Allow Half-Day Leave")?.is_active ?? true,
+    notifyManagerOnRequest:
+      getConfigValue("Notify Manager on Request")?.is_active ?? true,
+    notifyEmployeeOnApproval:
+      getConfigValue("Notify Employee on Approval/Rejection")?.is_active ??
+      true,
+    publicHolidaysExcluded: true,
+  });
   const [leaveTypes, setLeaveTypes] = useState([
     {
       id: 1,
@@ -367,19 +397,6 @@ function LeaveSettingsSection() {
       enabled: true,
     },
   ]);
-
-  const [generalSettings, setGeneralSettings] = useState({
-    leaveYearStart: "01-01",           // MM-DD
-    allowNegativeBalance: false,
-    autoApproveAfterDays: 0,           // 0 = disabled
-    publicHolidaysExcluded: true,
-    weekendsExcluded: true,
-    notifyManagerOnRequest: true,
-    notifyEmployeeOnApproval: true,
-    requireMedicalCertificate: true,   // for sick leave > 3 days
-    medicalCertThresholdDays: 3,
-    allowHalfDayLeave: true,
-  });
 
   return (
     <div className="p-6 space-y-10">
@@ -499,31 +516,6 @@ function LeaveSettingsSection() {
             />
           </div>
           <Separator />
-
-          {/* Medical certificate threshold */}
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-sm">
-                Medical Certificate Required After
-              </p>
-              <p className="text-xs text-muted-foreground">
-                Number of consecutive sick-leave days before a certificate is
-                mandatory (0 = never required)
-              </p>
-            </div>
-            <Input
-              type="number"
-              min={0}
-              className="w-20 text-right"
-              value={generalSettings.medicalCertThresholdDays}
-              onChange={(e) =>
-                setGeneralSettings({
-                  ...generalSettings,
-                  medicalCertThresholdDays: parseInt(e.target.value) || 0,
-                })
-              }
-            />
-          </div>
         </div>
       </div>
 
@@ -558,8 +550,8 @@ function LeaveSettingsSection() {
                 Notify Employee on Approval / Rejection
               </p>
               <p className="text-xs text-muted-foreground">
-                Send an email/notification to the employee when their request
-                is approved or rejected
+                Send an email/notification to the employee when their request is
+                approved or rejected
               </p>
             </div>
             <Switch
@@ -663,7 +655,9 @@ function LeaveSettingsSection() {
                   </span>
                 </div>
                 <div className="text-xs">
-                  <span className="text-muted-foreground block">Carry-over</span>
+                  <span className="text-muted-foreground block">
+                    Carry-over
+                  </span>
                   <span className="font-medium">
                     {lt.carryOver ? `Up to ${lt.maxCarryOver}d` : "None"}
                   </span>
@@ -1028,6 +1022,7 @@ export default function OrganizationConfigPage() {
       per_diem: "per_diem",
       advance: "advance",
       refund: "refund",
+      leave: "leave",
     };
 
     const configType = configTypeMap[activeSection];
@@ -1108,9 +1103,14 @@ export default function OrganizationConfigPage() {
                       <BillingSection />
                     ) : activeSection === "export" ? (
                       <DataExportSection />
-                    ) : activeSection === "leave" ? (
-                      <LeaveSettingsSection />
+                    ) : // AFTER — add this branch just before the configsLoading check, after the existing special cases
+                    activeSection === "leave" ? (
+                      <LeaveSettingsSection
+                        configs={activeConfigs}
+                        isLoading={configsLoading}
+                      />
                     ) : configsLoading ? (
+                      // ) : configsLoading ? (
                       <ConfigSkeleton />
                     ) : error ? (
                       <div className="p-6">

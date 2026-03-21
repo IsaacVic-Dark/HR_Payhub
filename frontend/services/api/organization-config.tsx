@@ -9,7 +9,8 @@ export interface OrganizationConfig {
     | "benefit"
     | "per_diem"
     | "advance"
-    | "refund";
+    | "refund"
+    | "leave";
   name: string;
   percentage: string | null;
   fixed_amount: string | null;
@@ -42,6 +43,7 @@ export interface OrganizationConfigResponse {
         per_diem: number;
         advance: number;
         refund: number;
+          leave: number;
       };
       active_configs: number;
       inactive_configs: number;
@@ -97,6 +99,7 @@ export interface ConfigsByType {
   per_diem: UIConfigItem[];
   advance: UIConfigItem[];
   refund: UIConfigItem[];
+  leave: UIConfigItem[];
 }
 
 export interface ApprovalData {
@@ -460,6 +463,7 @@ class OrganizationConfigAPI {
       per_diem: [],
       advance: [],
       refund: [],
+      leave: [],
     };
 
     configs.forEach((config) => {
