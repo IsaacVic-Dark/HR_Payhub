@@ -197,8 +197,15 @@ const data = {
         "super_admin",
         "admin",
         "hr_manager",
-        "department_manager",
-        "employee",
+        "department_manager"
+      ]
+    },
+    {
+      title: "My Leaves",
+      url: "/myleave",
+      icon: IconCalendar,
+      roles: [
+        "employee"
       ]
     },
     {

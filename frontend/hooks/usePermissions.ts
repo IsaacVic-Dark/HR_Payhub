@@ -1,9 +1,8 @@
-// hooks/usePermissions.ts - Updated version
-import { useAuth } from '@/lib/AuthContext';  // Changed import
+import { useAuth } from '@/lib/AuthContext';
 import { canAccessPage, getAccessiblePages, hasAnyRole } from '@/utils/permissions';
 
 export function usePermissions() {
-  const { user } = useAuth();  // Now using AuthContext
+  const { user } = useAuth();
 
   const userRole = user?.user_type || null;
 

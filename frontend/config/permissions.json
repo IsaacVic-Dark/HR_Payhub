@@ -266,7 +266,6 @@
         "/my-contact/update",
         "/my-bank-details/update",
         "/my-contract",
-        "/leaves",
         "/myleave",
         "/myleave/apply",
         "/myleave/balance",
