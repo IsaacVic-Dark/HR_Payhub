@@ -1,5 +1,4 @@
 <?php
-// app/Middleware/EmployeeAuthorizationMiddleware.php
 
 namespace App\Middleware;
 

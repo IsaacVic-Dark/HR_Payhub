@@ -1,6 +1,5 @@
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -8,7 +7,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import {useState,useEffect} from "react";
+import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react";
 
 interface LeaveActionDialogProps {
   open: boolean;
@@ -16,7 +16,7 @@ interface LeaveActionDialogProps {
   action: "approve" | "reject" | "apply";
   leavePeriod?: string;
   employeeName?: string;
-  onConfirm: (rejectionReason?: string) => void; // ADD rejectionReason parameter
+  onConfirm: (rejectionReason?: string) => void;
   loading?: boolean;
   children?: React.ReactNode;
 }
@@ -31,11 +31,11 @@ export function LeaveActionDialog({
   loading = false,
   children,
 }: LeaveActionDialogProps) {
-  const [rejectionReason, setRejectionReason] = useState(""); // ADD this state
+  const [rejectionReason, setRejectionReason] = useState("");
 
   const isApprove = action === "approve";
   const isApply = action === "apply";
-  const isReject = action === "reject"; // ADD this
+  const isReject = action === "reject";
 
   // Reset rejection reason when dialog closes
   useEffect(() => {
@@ -71,10 +71,10 @@ export function LeaveActionDialog({
   };
 
   const getButtonClass = () => {
-    if (isApply) return "bg-blue-600 hover:bg-blue-700";
+    if (isApply) return "bg-blue-600 hover:bg-blue-700 text-white";
     return isApprove
-      ? "bg-green-600 hover:bg-green-700"
-      : "bg-red-600 hover:bg-red-700";
+      ? "bg-green-600 hover:bg-green-700 text-white"
+      : "bg-red-600 hover:bg-red-700 text-white";
   };
 
   return (
@@ -90,8 +90,8 @@ export function LeaveActionDialog({
         {/* Custom content for apply action */}
         {isApply && children && <div className="py-4">{children}</div>}
 
-        {/* ADD: Rejection reason textarea for reject action */}
-        {/* {isReject && (
+        {/* Rejection reason textarea for reject action */}
+        {isReject && (
           <div className="py-4 space-y-2">
             <label className="text-sm font-medium text-gray-700">
               Rejection Reason (Optional)
@@ -105,17 +105,25 @@ export function LeaveActionDialog({
               disabled={loading}
             />
           </div>
-        )} */}
+        )}
 
         <AlertDialogFooter>
           <AlertDialogCancel disabled={loading}>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => onConfirm(rejectionReason)} // PASS rejectionReason
+
+          {/*
+            Use a plain Button instead of AlertDialogAction for the apply case.
+            AlertDialogAction auto-closes the dialog the moment it is clicked,
+            which fires the form-reset useEffect in the parent BEFORE the API
+            call reads formData — so the payload arrives empty.
+            A plain Button lets onConfirm control when the dialog closes.
+          */}
+          <Button
+            onClick={() => onConfirm(rejectionReason)}
             disabled={loading}
             className={getButtonClass()}
           >
             {getButtonText()}
-          </AlertDialogAction>
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>

@@ -14,7 +14,7 @@ import { useAuth } from "@/lib/AuthContext";
 export default function Page() {
   const pathname = usePathname();
   const { user } = useAuth();
-const [statistics, setStatistics] = useState<any>(null);
+  const [statistics, setStatistics] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
@@ -24,9 +24,9 @@ const [statistics, setStatistics] = useState<any>(null);
       try {
         const response = await leaveAPI.getLeaves(user.organization_id);
 
-      if (response.success) {
-        setStatistics(response.metadata?.statistics ?? null);
-      }
+        if (response.success) {
+          setStatistics(response.metadata?.statistics ?? null);
+        }
       } catch (error) {
         console.error("Failed to fetch leave statistics:", error);
       } finally {
@@ -70,23 +70,31 @@ const [statistics, setStatistics] = useState<any>(null);
 
   // Generate card details dynamically from statistics
   const cardDetails: CardDetail[] = statistics?.by_type
-    ? (statistics.by_type as Array<{ leave_type_name: string; code: string; count: number; total_days: string }>).map(
-        (item) => {
-          const key = item.leave_type_name.toLowerCase().replace(" leave", "").trim();
-          const config = leaveTypeConfig[key] || {
-            description: `${item.leave_type_name} requests.`,
-            footerText: "",
-          };
-          return {
-            title: item.leave_type_name,
-            value: item.count.toString(),
-            change: `${parseFloat(item.total_days).toFixed(1)} days`,
-            changeIcon: null,
-            description: config.description,
-            footerText: config.footerText,
-          };
-        }
-      )
+    ? (
+        statistics.by_type as Array<{
+          leave_type_name: string;
+          code: string;
+          count: number;
+          total_days: string;
+        }>
+      ).map((item) => {
+        const key = item.leave_type_name
+          .toLowerCase()
+          .replace(" leave", "")
+          .trim();
+        const config = leaveTypeConfig[key] || {
+          description: `${item.leave_type_name} requests.`,
+          footerText: "",
+        };
+        return {
+          title: item.leave_type_name,
+          value: item.count.toString(),
+          change: `${parseFloat(item.total_days).toFixed(1)} days`,
+          changeIcon: null,
+          description: config.description,
+          footerText: config.footerText,
+        };
+      })
     : [];
 
   const path = pathname.split("/").filter(Boolean).pop() || "Dashboard";
