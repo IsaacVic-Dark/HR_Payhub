@@ -1959,22 +1959,27 @@ class LeaveController
     public function getLeaveTypes(int $orgId): mixed
     {
         try {
+            $withMainOnly = isset($_GET['with_minimal']) && $_GET['with_minimal'] == '1';
+
+            $columns = $withMainOnly
+                ? "id, name"
+                : "id, name, code, description,
+               days_per_year, is_paid, is_accrued,
+               accrual_rate, accrual_frequency,
+               allow_carry_over, max_carry_over_days,
+               allow_half_day, allow_negative_balance,
+               min_notice_days, max_consecutive_days,
+               requires_document, document_threshold_days,
+               requires_approval, approval_workflow,
+               applicable_gender, probation_eligible,
+               is_system_default, is_active,
+               created_at, updated_at";
+
             $leaveTypes = DB::raw(
-                "SELECT
-                    id, name, code, description,
-                    days_per_year, is_paid, is_accrued,
-                    accrual_rate, accrual_frequency,
-                    allow_carry_over, max_carry_over_days,
-                    allow_half_day, allow_negative_balance,
-                    min_notice_days, max_consecutive_days,
-                    requires_document, document_threshold_days,
-                    requires_approval, approval_workflow,
-                    applicable_gender, probation_eligible,
-                    is_system_default, is_active,
-                    created_at, updated_at
-                 FROM leave_types
-                 WHERE organization_id = :org_id
-                 ORDER BY is_system_default DESC, name ASC",
+                "SELECT {$columns}
+             FROM leave_types
+             WHERE organization_id = :org_id
+             ORDER BY is_system_default DESC, name ASC",
                 [':org_id' => $orgId]
             );
 

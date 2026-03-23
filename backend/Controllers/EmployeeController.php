@@ -22,14 +22,17 @@ class EmployeeController
                 );
             }
 
+            // Minimal mode — returns only id, first_name, middle_name, surname, department_id
+            $withMinimal = isset($_GET['with_minimal']) && $_GET['with_minimal'] == '1';
+
             // Apply role-based filters FIRST
             $roleFilters = $this->applyRoleBasedFilters($orgId);
 
             // Then apply user-provided filters
             $userFilters = [
-                'department_id' => $_GET['department_id'] ?? null,
-                'job_title' => $_GET['job_title'] ?? null,
-                'employee_number' => $_GET['employee_number'] ?? null, // NEW: Added employee number filter
+                'department_id'   => $_GET['department_id']   ?? null,
+                'job_title'       => $_GET['job_title']       ?? null,
+                'employee_number' => $_GET['employee_number'] ?? null,
             ];
 
             // Cleanup user filters
@@ -46,12 +49,21 @@ class EmployeeController
                 }
             });
 
-            // Build base query with role-based filtering
-            $queryData = $this->buildRoleBasedQuery($orgId, $roleFilters);
-            $query = $queryData['query'];
-            $params = $queryData['params'];
+            if ($withMinimal) {
+                // Lightweight query — skip role-based field logic entirely
+                $query = "SELECT e.id, u.first_name, u.middle_name, u.surname, e.department_id
+                      FROM employees e
+                      LEFT JOIN users u ON e.user_id = u.id
+                      WHERE e.organization_id = :org_id";
+                $params = [':org_id' => $orgId];
+            } else {
+                // Full query with role-based column selection
+                $queryData = $this->buildRoleBasedQuery($orgId, $roleFilters);
+                $query     = $queryData['query'];
+                $params    = $queryData['params'];
+            }
 
-            // Apply user filters
+            // Apply user filters (shared for both modes)
             if (!empty($userFilters['department_id'])) {
                 $query .= " AND e.department_id = :department_id";
                 $params[':department_id'] = $userFilters['department_id'];
@@ -62,13 +74,12 @@ class EmployeeController
                 $params[':job_title'] = $userFilters['job_title'];
             }
 
-            // NEW: Employee number filter
             if (!empty($userFilters['employee_number'])) {
                 $query .= " AND e.employee_number = :employee_number";
                 $params[':employee_number'] = $userFilters['employee_number'];
             }
 
-            // Execute query with parameters to prevent SQL injection
+            // Execute query
             $employees = empty($params) ? DB::raw($query) : DB::raw($query, $params);
 
             // If no employees found
@@ -78,40 +89,40 @@ class EmployeeController
                     message: "No employees found",
                     code: 404,
                     metadata: [
-                        'filters' => array_merge($userFilters, ['role_filters' => $roleFilters]),
-                        'total' => 0,
+                        'filters'  => array_merge($userFilters, ['role_filters' => $roleFilters]),
+                        'total'    => 0,
                         'duration' => (microtime(true) - $startTime)
                     ]
                 );
             }
 
-            // Calculate statistics
-            $statistics = $this->calculateStatistics($employees, $orgId);
+            // Skip statistics, sorting, and field security for minimal mode
+            if (!$withMinimal) {
+                $statistics = $this->calculateStatistics($employees, $orgId);
 
-            // Apply sorting
-            $userFilters['sort_by'] = $_GET['sort_by'] ?? null;
-            $userFilters['sort_order'] = $_GET['sort_order'] ?? null;
+                $userFilters['sort_by']    = $_GET['sort_by']    ?? null;
+                $userFilters['sort_order'] = $_GET['sort_order'] ?? null;
 
-            if (isset($userFilters['sort_by']) && isset($userFilters['sort_order'])) {
-                $sortBy = $userFilters['sort_by'];
-                $sortOrder = strtolower($userFilters['sort_order']) === 'desc' ? SORT_DESC : SORT_ASC;
-                usort($employees, function ($a, $b) use ($sortBy, $sortOrder) {
-                    return $sortOrder === SORT_DESC ? $b->$sortBy <=> $a->$sortBy : $a->$sortBy <=> $b->$sortBy;
-                });
+                if (isset($userFilters['sort_by']) && isset($userFilters['sort_order'])) {
+                    $sortBy    = $userFilters['sort_by'];
+                    $sortOrder = strtolower($userFilters['sort_order']) === 'desc' ? SORT_DESC : SORT_ASC;
+                    usort($employees, function ($a, $b) use ($sortBy, $sortOrder) {
+                        return $sortOrder === SORT_DESC ? $b->$sortBy <=> $a->$sortBy : $a->$sortBy <=> $b->$sortBy;
+                    });
+                }
+
+                $employees = $this->applyFieldLevelSecurity($employees, $roleFilters);
             }
-
-            // Apply field-level security based on role
-            $employees = $this->applyFieldLevelSecurity($employees, $roleFilters);
 
             return responseJson(
                 success: true,
                 data: array_values($employees),
                 message: "Successfully fetched " . count($employees) . " employees",
                 metadata: [
-                    'filters' => array_merge($userFilters, ['role_filters' => $roleFilters]),
-                    'total' => count($employees),
-                    'duration' => (microtime(true) - $startTime),
-                    'statistics' => $statistics ?? null,
+                    'filters'    => array_merge($userFilters, ['role_filters' => $roleFilters]),
+                    'total'      => count($employees),
+                    'duration'   => (microtime(true) - $startTime),
+                    'statistics' => $withMinimal ? null : ($statistics ?? null),
                 ],
                 code: 200
             );
