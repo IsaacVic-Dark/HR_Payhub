@@ -136,8 +136,8 @@ class EmployeeAPI {
   private buildQueryParams(filters: EmployeeFilters): string {
     const params = new URLSearchParams();
 
-    if (filters.department) {
-      params.append("department", filters.department);
+    if (filters.department_id) {
+      params.append("department_id", filters.department_id.toString());
     }
     if (filters.job_title) {
       params.append("job_title", filters.job_title);
@@ -187,7 +187,7 @@ class EmployeeAPI {
 
       const response = await fetch(url, {
         method: "GET",
-        credentials: "include", // Send cookies with request
+        credentials: "include",
         headers: this.getAuthHeaders(),
       });
 
