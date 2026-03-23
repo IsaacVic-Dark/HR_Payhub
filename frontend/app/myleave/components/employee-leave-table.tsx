@@ -6,6 +6,7 @@ import {
   leaveAPI,
   EmployeeLeaveType,
   LeaveFilters,
+  MinimalLeaveType,
 } from "@/services/api/leave";
 import { Button } from "@/components/ui/button";
 import { LeaveActionDialog } from "@/app/leaves/components/leave-action-dialog";
@@ -62,13 +63,17 @@ const EmployeeLeaveTable: React.FC = () => {
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
   const [applyLoading, setApplyLoading] = useState(false);
 
+  // Leave types for dropdowns
+  const [leaveTypes, setLeaveTypes] = useState<MinimalLeaveType[]>([]);
+  const [loadingLeaveTypes, setLoadingLeaveTypes] = useState(false);
+
   // Apply Leave Form state
   const [employees, setEmployees] = useState<any[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [formData, setFormData] = useState({
     employee_id: 0,
+    leave_type_id: 0,
     reliever_id: null as number | null,
-    leave_type: "",
     start_date: "",
     end_date: "",
     reason: "",
@@ -76,6 +81,29 @@ const EmployeeLeaveTable: React.FC = () => {
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [dateRangePopoverOpen, setDateRangePopoverOpen] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  // Fetch minimal leave types once on mount (used for both the form dropdown and filter sidebar)
+  useEffect(() => {
+    const fetchLeaveTypes = async () => {
+      if (!user?.organization_id) return;
+      setLoadingLeaveTypes(true);
+      try {
+        const response = await leaveAPI.getLeaveTypes(
+          user.organization_id,
+          true,
+        );
+        if (response.success && response.data) {
+          setLeaveTypes(Array.isArray(response.data) ? response.data : []);
+        }
+      } catch {
+        // silently fail — dropdowns will just be empty
+      } finally {
+        setLoadingLeaveTypes(false);
+      }
+    };
+
+    fetchLeaveTypes();
+  }, [user?.organization_id]);
 
   const fetchLeaves = useCallback(async () => {
     if (!user?.organization_id || !user?.employee?.id) {
@@ -100,7 +128,7 @@ const EmployeeLeaveTable: React.FC = () => {
       const response = await leaveAPI.getEmployeeLeaves(
         user.organization_id,
         user.employee.id,
-        apiFilters
+        apiFilters,
       );
 
       if (response.success && response.data) {
@@ -155,22 +183,32 @@ const EmployeeLeaveTable: React.FC = () => {
     const fetchEmployees = async () => {
       if (!applyDialogOpen || !user?.organization_id) return;
 
+      console.log("Fetching employees for reliever dropdown..."); // add this line
+
       setLoadingEmployees(true);
       try {
-        const response = await employeeAPI.getEmployees(user.organization_id);
+        const response = await employeeAPI.getEmployees(user.organization_id, {
+          department_id: user.employee?.department_id,
+        });
 
         if (response.success && response.data) {
           const employeesArray = Array.isArray(response.data)
             ? response.data
-            : [];
+            : (response.data as any)?.employees || [];
+          console.log("raw response.data:", response.data); // add this temporarily
+          console.log("employeesArray:", employeesArray);
           const filteredEmployees = employeesArray.filter(
-            (emp: any) => emp.id !== user?.employee?.id
+            (emp: any) => emp.id !== user?.employee?.id,
+          );
+          console.log(
+            "Fetched employees for reliever dropdown:",
+            filteredEmployees,
           );
           setEmployees(filteredEmployees);
         } else {
           setEmployees([]);
         }
-      } catch (error) {
+      } catch {
         setEmployees([]);
       } finally {
         setLoadingEmployees(false);
@@ -185,8 +223,8 @@ const EmployeeLeaveTable: React.FC = () => {
     if (!applyDialogOpen) {
       setFormData({
         employee_id: user?.employee?.id || 0,
+        leave_type_id: 0,
         reliever_id: null,
-        leave_type: "",
         start_date: "",
         end_date: "",
         reason: "",
@@ -194,7 +232,6 @@ const EmployeeLeaveTable: React.FC = () => {
       setDateRange(undefined);
       setFormErrors({});
     } else {
-      // Set employee_id when dialog opens
       setFormData((prev) => ({
         ...prev,
         employee_id: user?.employee?.id || 0,
@@ -220,7 +257,7 @@ const EmployeeLeaveTable: React.FC = () => {
       });
 
       return `${startFormatted} — ${endFormatted}`;
-    } catch (error) {
+    } catch {
       return "Invalid date";
     }
   };
@@ -295,19 +332,19 @@ const EmployeeLeaveTable: React.FC = () => {
     if (range?.from) {
       setFormData((prev) => ({
         ...prev,
-        start_date: format(range.from, "yyyy-MM-dd"),
+        start_date: format(range.from!, "yyyy-MM-dd"),
         end_date: range.to
           ? format(range.to, "yyyy-MM-dd")
-          : format(range.from, "yyyy-MM-dd"),
+          : format(range.from!, "yyyy-MM-dd"),
       }));
-      setFormErrors((prev) => ({ ...prev, start_date: "", end_date: "" }));
+      setFormErrors((prev) => ({ ...prev, date_range: "" }));
     }
   };
 
   const validateApplyForm = (): boolean => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.leave_type) {
+    if (!formData.leave_type_id) {
       newErrors.leave_type = "Please select a leave type";
     }
     if (!formData.start_date) {
@@ -336,10 +373,21 @@ const EmployeeLeaveTable: React.FC = () => {
 
     setApplyLoading(true);
     try {
-      console.log("Submitting leave data:", formData);
+      const payload = {
+        employee_id: formData.employee_id,
+        leave_type_id: formData.leave_type_id,
+        start_date: formData.start_date,
+        end_date: formData.end_date,
+        reason: formData.reason || null,
+        document_path: null,
+        is_half_day: 0,
+        approver_id: null,
+        reliever_id: formData.reliever_id,
+      };
+
       const response = await leaveAPI.createLeave(
         user.organization_id,
-        formData
+        payload,
       );
 
       if (response.success) {
@@ -371,7 +419,7 @@ const EmployeeLeaveTable: React.FC = () => {
 
     return `${format(dateRange.from, "MMM dd, yyyy")} - ${format(
       dateRange.to,
-      "MMM dd, yyyy"
+      "MMM dd, yyyy",
     )}`;
   };
 
@@ -391,7 +439,9 @@ const EmployeeLeaveTable: React.FC = () => {
     {
       key: "leave_type",
       header: "Leave Type",
-      cell: (leave) => <span className="capitalize">{leave.leave_type}</span>,
+      cell: (leave) => (
+        <span className="capitalize">{leave.leave_type_name}</span>
+      ),
     },
     {
       key: "period",
@@ -402,7 +452,7 @@ const EmployeeLeaveTable: React.FC = () => {
       key: "duration",
       header: "Duration",
       cell: (leave) =>
-        `${leave.duration_days} day${leave.duration_days !== 1 ? "s" : ""}`,
+        `${leave.duration_days} day${leave.duration_days !== "1" ? "s" : ""}`,
     },
     {
       key: "status",
@@ -479,14 +529,14 @@ const EmployeeLeaveTable: React.FC = () => {
                     value={selectedLeaveType}
                     onChange={(e) => setSelectedLeaveType(e.target.value)}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    disabled={loadingLeaveTypes}
                   >
                     <option value="">All Types</option>
-                    <option value="annual">Annual</option>
-                    <option value="sick">Sick</option>
-                    <option value="casual">Casual</option>
-                    <option value="maternity">Maternity</option>
-                    <option value="paternity">Paternity</option>
-                    <option value="other">Other</option>
+                    {leaveTypes.map((lt) => (
+                      <option key={lt.id} value={lt.id.toString()}>
+                        {lt.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -590,30 +640,40 @@ const EmployeeLeaveTable: React.FC = () => {
               Leave Type <span className="text-red-500">*</span>
             </label>
             <Select
-              value={formData.leave_type}
+              value={
+                formData.leave_type_id ? formData.leave_type_id.toString() : ""
+              }
               onValueChange={(value) => {
-                setFormData((prev) => ({ ...prev, leave_type: value }));
+                setFormData((prev) => ({
+                  ...prev,
+                  leave_type_id: Number(value),
+                }));
                 setFormErrors((prev) => ({ ...prev, leave_type: "" }));
               }}
-              disabled={applyLoading}
+              disabled={applyLoading || loadingLeaveTypes}
             >
               <SelectTrigger
                 className={cn(
                   "w-full",
-                  formErrors.leave_type && "border-red-500"
+                  formErrors.leave_type && "border-red-500",
                 )}
               >
-                <SelectValue placeholder="Select leave type" />
+                <SelectValue
+                  placeholder={
+                    loadingLeaveTypes
+                      ? "Loading leave types..."
+                      : "Select leave type"
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectGroup>
                   <SelectLabel>Leave Types</SelectLabel>
-                  <SelectItem value="sick">Sick Leave</SelectItem>
-                  <SelectItem value="casual">Casual Leave</SelectItem>
-                  <SelectItem value="annual">Annual Leave</SelectItem>
-                  <SelectItem value="maternity">Maternity Leave</SelectItem>
-                  <SelectItem value="paternity">Paternity Leave</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  {leaveTypes.map((lt) => (
+                    <SelectItem key={lt.id} value={lt.id.toString()}>
+                      {lt.name}
+                    </SelectItem>
+                  ))}
                 </SelectGroup>
               </SelectContent>
             </Select>
@@ -638,7 +698,7 @@ const EmployeeLeaveTable: React.FC = () => {
                   className={cn(
                     "w-full justify-between font-normal",
                     !dateRange?.from && "text-muted-foreground",
-                    formErrors.date_range && "border-red-500"
+                    formErrors.date_range && "border-red-500",
                   )}
                   disabled={applyLoading}
                 >
@@ -665,7 +725,7 @@ const EmployeeLeaveTable: React.FC = () => {
           {/* Reliever */}
           <div className="space-y-2">
             <label className="text-sm font-medium text-gray-700">
-              Reliever (Optional)
+              Reliever (Optional) admin leave
             </label>
             <Select
               value={formData.reliever_id?.toString() || "none"}
@@ -717,7 +777,7 @@ const EmployeeLeaveTable: React.FC = () => {
               rows={3}
               className={cn(
                 "w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none",
-                formErrors.reason ? "border-red-500" : "border-gray-300"
+                formErrors.reason ? "border-red-500" : "border-gray-300",
               )}
               disabled={applyLoading}
             />
@@ -728,7 +788,6 @@ const EmployeeLeaveTable: React.FC = () => {
         </div>
       </LeaveActionDialog>
 
-      {/* Note: You might need to create an EmployeeLeaveViewDrawer or adapt the existing one */}
       <LeaveViewDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}

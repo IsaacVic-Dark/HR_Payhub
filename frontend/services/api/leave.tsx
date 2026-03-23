@@ -6,7 +6,7 @@ type LeaveType = {
   surname: string;
   approver_id: number | null;
   reliever_id: number | null;
- leave_type_id: number;
+  leave_type_id: number;
   leave_type_name: string;
   leave_type_code: string;
   leave_type_is_paid: number;
@@ -46,7 +46,7 @@ type EmployeeLeaveType = {
   employee_id: number;
   approver_id: number | null;
   reliever_id: number | null;
- leave_type_id: number;
+  leave_type_id: number;
   leave_type_name: string;
   leave_type_code: string;
   leave_type_is_paid: number;
@@ -76,19 +76,24 @@ type EmployeeLeaveType = {
   reliever_full_name: string | null;
 };
 
+// Minimal leave type returned when with_minimal=1
+type MinimalLeaveType = {
+  id: number;
+  name: string;
+};
+
 interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
   message?: string;
   error?: string;
-  errors?: Record<string, string[]>; // Add errors field
-  metadata?: any; // This now comes from response.meta
+  errors?: Record<string, string[]>;
+  metadata?: any;
 }
 
 interface LeavesResponseData {
   leaves: LeaveType[];
   statistics?: {
-    // Make optional since it's now in meta
     total_leaves: number;
     sick: number;
     casual: number;
@@ -98,7 +103,6 @@ interface LeavesResponseData {
     other: number;
   };
   pagination?: {
-    // Make optional since it's now in meta
     current_page: number;
     per_page: number;
     total: number;
@@ -151,6 +155,7 @@ interface EmployeeLeavesResponseData {
 
 interface LeaveFilters {
   status?: string;
+  leave_type?: string;
   leave_type_id?: string;
   name?: string;
   month?: string;
@@ -161,37 +166,48 @@ interface LeaveFilters {
   per_page?: number;
 }
 
+// Payload for creating a leave request
+interface CreateLeavePayload {
+  employee_id: number;
+  leave_type_id: number;
+  start_date: string;
+  end_date: string;
+  reason?: string | null;
+  document_path?: string | null;
+  is_half_day?: number;
+  approver_id?: number | null;
+  reliever_id?: number | null;
+}
+
 class LeaveAPI {
   private async handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
     try {
       const data = await response.json();
 
       if (!response.ok) {
-        // New error format
         return {
           success: false,
           error: data.message || `HTTP error! status: ${response.status}`,
-          errors: data.errors || {}, // Add errors field
-          data: data.data, // Keep data if present
+          errors: data.errors || {},
+          data: data.data,
           message: data.message,
           metadata: data.metadata || {},
         };
       }
 
-      // New success format
       return {
         success: true,
-        data: data.data, // Data from response
+        data: data.data,
         message: data.message,
-        metadata: data.metadata || {}, // Changed from data.metadata to data.meta
-        error: undefined, // Ensure error is undefined
+        metadata: data.metadata || {},
+        error: undefined,
       };
     } catch (error) {
       return {
         success: false,
         error:
           error instanceof Error ? error.message : "Unknown error occurred",
-        errors: {}, // Add empty errors object
+        errors: {},
       };
     }
   }
@@ -208,6 +224,9 @@ class LeaveAPI {
 
     if (filters.status) {
       params.append("status", filters.status);
+    }
+    if (filters.leave_type) {
+      params.append("leave_type", filters.leave_type);
     }
     if (filters.leave_type_id) {
       params.append("leave_type_id", filters.leave_type_id);
@@ -238,14 +257,12 @@ class LeaveAPI {
   }
 
   private getAuthHeaders(): HeadersInit {
-    // Get token from cookie
     const token = this.getCookie("access_token");
 
     const headers: HeadersInit = {
       "Content-Type": "application/json",
     };
 
-    // Add Authorization header if token exists
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
@@ -267,7 +284,7 @@ class LeaveAPI {
 
       const response = await fetch(url, {
         method: "GET",
-        credentials: "include", // Send cookies with request
+        credentials: "include",
         headers: this.getAuthHeaders(),
       });
 
@@ -302,18 +319,14 @@ class LeaveAPI {
 
       const apiResponse = await this.handleResponse<any>(response);
 
-      // Transform the response to match the expected structure
       if (apiResponse.success && apiResponse.data) {
-        // Check if apiResponse.data is an array (like in Postman) or an object (like in your frontend)
         let leaves = [];
         let metadata = {};
 
         if (Array.isArray(apiResponse.data)) {
-          // If data is an array (like Postman response)
           leaves = apiResponse.data;
           metadata = apiResponse.metadata || {};
         } else {
-          // If data is an object with leaves property (like your frontend response)
           leaves = apiResponse.data.leaves || [];
           metadata = apiResponse.data.metadata || apiResponse.metadata || {};
         }
@@ -393,26 +406,7 @@ class LeaveAPI {
 
   async createLeave(
     organizationId: number,
-    leaveData: {
-      employee_id: number;
-     leave_type_id: number;
-  leave_type_name: string;
-  leave_type_code: string;
-  leave_type_is_paid: number;
-  leave_type_requires_approval: number;
-  duration_days: string;
-  is_half_day: number;
-  half_day_period: string | null;
-  rejection_reason: string | null;
-  document_path: string | null;
-  approved_at: string | null;
-  rejected_at: string | null;
-      start_date: string;
-      end_date: string;
-      reason?: string;
-      approver_id?: number;
-      reliever_id?: number;
-    }
+    leaveData: CreateLeavePayload
   ): Promise<ApiResponse> {
     try {
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leaves`;
@@ -573,15 +567,27 @@ class LeaveAPI {
     }
   }
 
-  async getLeaveTypes(organizationId: number): Promise<ApiResponse> {
+  // Pass with_minimal=true to get id+name only (used for dropdowns).
+  // Omit or pass false to get full leave type data.
+  async getLeaveTypes(
+    organizationId: number,
+    with_minimal?: boolean
+  ): Promise<ApiResponse<MinimalLeaveType[]>> {
     try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leave-types`;
+      const params = new URLSearchParams();
+      if (with_minimal) {
+        params.append("with_minimal", "1");
+      }
+      const query = params.toString();
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/leave-types${
+        query ? `?${query}` : ""
+      }`;
       const response = await fetch(url, {
         method: "GET",
         credentials: "include",
         headers: this.getAuthHeaders(),
       });
-      return this.handleResponse(response);
+      return this.handleResponse<MinimalLeaveType[]>(response);
     } catch (error) {
       return {
         success: false,
@@ -665,9 +671,11 @@ class LeaveAPI {
 export const leaveAPI = new LeaveAPI();
 export type {
   LeaveType,
+  EmployeeLeaveType,
+  MinimalLeaveType,
   LeaveFilters,
   ApiResponse,
   LeavesResponseData,
-  EmployeeLeaveType,
   EmployeeLeavesResponseData,
+  CreateLeavePayload,
 };
