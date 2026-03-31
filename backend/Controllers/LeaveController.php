@@ -13,56 +13,61 @@ class LeaveController
     private function leaveSelectColumns(): string
     {
         return "
-            leaves.id               AS leave_id,
-            leaves.start_date,
-            leaves.end_date,
-            leaves.duration_days,
-            leaves.is_half_day,
-            leaves.half_day_period,
-            leaves.status,
-            leaves.reason,
-            leaves.rejection_reason,
-            leaves.document_path,
-            leaves.approved_at,
-            leaves.rejected_at,
-            leaves.created_at,
-            leaves.updated_at,
+        leaves.id               AS leave_id,
+        leaves.employee_id,
+        leaves.approver_id,
+        leaves.reliever_id,
+        leaves.leave_type_id,
+        leaves.start_date,
+        leaves.end_date,
+        leaves.duration_days,
+        leaves.is_half_day,
+        leaves.half_day_period,
+        leaves.status,
+        leaves.reason,
+        leaves.rejection_reason,
+        leaves.document_path,
+        leaves.approved_at,
+        leaves.rejected_at,
+        leaves.created_at,
+        leaves.updated_at,
 
-            -- Leave type details
-            lt.name        AS leave_type_name,
-            lt.code        AS leave_type_code,
-            lt.is_paid     AS leave_type_is_paid,
-            lt.requires_approval AS leave_type_requires_approval,
+        -- Leave type details (raw — will be nested by formatLeave())
+        lt.name                  AS leave_type_name,
+        lt.code                  AS leave_type_code,
+        lt.is_paid               AS leave_type_is_paid,
+        lt.requires_approval     AS leave_type_requires_approval,
 
-            -- Employee details
-            emp_users.email        AS employee_email,
-            CONCAT(
-                emp_users.first_name, ' ',
-                COALESCE(emp_users.middle_name, ''), ' ',
-                emp_users.surname
-            ) AS employee_full_name,
+        -- Employee details (raw — will be nested by formatLeave())
+        emp_users.email AS employee_email,
+        CONCAT(
+            emp_users.first_name, ' ',
+            COALESCE(emp_users.middle_name, ''), ' ',
+            emp_users.surname
+        ) AS employee_full_name,
 
-            -- Approver details
-            approver_users.email       AS approver_email,
-            CONCAT(
-                approver_users.first_name, ' ',
-                COALESCE(approver_users.middle_name, ''), ' ',
-                approver_users.surname
-            ) AS approver_full_name,
+        -- Approver details (raw — will be nested by formatLeave())
+        approver_users.email AS approver_email,
+        CONCAT(
+            approver_users.first_name, ' ',
+            COALESCE(approver_users.middle_name, ''), ' ',
+            approver_users.surname
+        ) AS approver_full_name,
 
-            -- Reliever details
-            reliever_users.email       AS reliever_email,
-            CONCAT(
-                reliever_users.first_name, ' ',
-                COALESCE(reliever_users.middle_name, ''), ' ',
-                reliever_users.surname
-            ) AS reliever_full_name
-        ";
+        -- Reliever details (raw — will be nested by formatLeave())
+        reliever_users.email AS reliever_email,
+        CONCAT(
+            reliever_users.first_name, ' ',
+            COALESCE(reliever_users.middle_name, ''), ' ',
+            reliever_users.surname
+        ) AS reliever_full_name
+    ";
     }
 
     // -------------------------------------------------------------------------
     // Reusable JOINs for all leave queries
     // -------------------------------------------------------------------------
+
     private function leaveJoins(): string
     {
         return "
@@ -81,6 +86,57 @@ class LeaveController
             LEFT JOIN users reliever_users
                 ON reliever_emp.user_id = reliever_users.id
         ";
+    }
+
+    // -------------------------------------------------------------------------
+    // Reshape a flat leave row into nested leave_type / employee / approver / reliever objects
+    // -------------------------------------------------------------------------
+    private function formatLeave(object $leave): object
+    {
+        $leave->leave_type = [
+            'id'                  => $leave->leave_type_id,
+            'name'                => $leave->leave_type_name,
+            'is_paid'             => (bool) $leave->leave_type_is_paid,
+            'requires_approval'   => (bool) $leave->leave_type_requires_approval,
+        ];
+
+        $leave->employee = [
+            'id'        => $leave->employee_id,
+            'full_name' => trim($leave->employee_full_name),
+            'email'     => $leave->employee_email,
+        ];
+
+        $leave->approver = $leave->approver_id ? [
+            'id'        => $leave->approver_id,
+            'full_name' => trim($leave->approver_full_name),
+            'email'     => $leave->approver_email,
+        ] : null;
+
+        $leave->reliever = $leave->reliever_id ? [
+            'id'        => $leave->reliever_id,
+            'full_name' => trim($leave->reliever_full_name),
+            'email'     => $leave->reliever_email,
+        ] : null;
+
+        // Remove the now-redundant flat fields
+        unset(
+            $leave->leave_type_id,
+            $leave->leave_type_name,
+            $leave->leave_type_code,
+            $leave->leave_type_is_paid,
+            $leave->leave_type_requires_approval,
+            $leave->employee_id,
+            $leave->employee_full_name,
+            $leave->employee_email,
+            $leave->approver_id,
+            $leave->approver_full_name,
+            $leave->approver_email,
+            $leave->reliever_id,
+            $leave->reliever_full_name,
+            $leave->reliever_email
+        );
+
+        return $leave;
     }
 
     // -------------------------------------------------------------------------
@@ -360,6 +416,44 @@ class LeaveController
                 ':emp_id' => $employeeId,
                 ':type_id' => $leaveTypeId,
                 ':year' => (int) date('Y')
+            ]
+        );
+    }
+
+    private function ensureAndConfirmBalance(int $employeeId, int $orgId, int $leaveTypeId, float $days): void
+    {
+        $currentYear = (int) date('Y');
+
+        // Fetch entitled days from leave_type
+        $leaveType = DB::raw(
+            "SELECT days_per_year FROM leave_types WHERE id = :id LIMIT 1",
+            [':id' => $leaveTypeId]
+        );
+        $entitledDays = (float) ($leaveType[0]->days_per_year ?? 0);
+
+        // Upsert: create the row if it doesn't exist, then move pending → used
+        DB::raw(
+            "INSERT INTO leave_balances (
+            organization_id, employee_id, leave_type_id, leave_year,
+            entitled_days, accrued_days, used_days, pending_days,
+            carried_over, encashed_days, created_at
+        ) VALUES (
+            :org_id, :employee_id, :leave_type_id, :leave_year,
+            :entitled_days, 0, :used_days, 0, 0, 0, NOW()
+        )
+        ON DUPLICATE KEY UPDATE
+            pending_days = GREATEST(pending_days - :pending_deduct, 0),
+            used_days    = used_days + :used_add,
+            updated_at   = NOW()",
+            [
+                ':org_id'          => $orgId,
+                ':employee_id'     => $employeeId,
+                ':leave_type_id'   => $leaveTypeId,
+                ':leave_year'      => $currentYear,
+                ':entitled_days'   => $entitledDays,
+                ':used_days'       => $days,      // used if INSERT path
+                ':pending_deduct'  => $days,      // used if UPDATE path
+                ':used_add'        => $days,      // used if UPDATE path
             ]
         );
     }
@@ -703,9 +797,11 @@ class LeaveController
                 $dataParams
             );
 
+            $leaves = array_map(fn($l) => $this->formatLeave($l), $leaves);
+
             return responseJson(
                 success: true,
-                data: $leaves,
+                data: array_values($leaves),
                 message: "Leaves fetched successfully",
                 code: 200,
                 metadata: [
@@ -764,7 +860,7 @@ class LeaveController
                 return responseJson(success: false, data: null, message: "Leave not found", code: 404);
             }
 
-            return responseJson(success: true, data: $result[0], message: "Leave fetched successfully");
+            return responseJson(success: true, data: $this->formatLeave($result[0]), message: "Leave fetched successfully");
         } catch (\Exception $e) {
             return responseJson(
                 success: false,
@@ -882,9 +978,14 @@ class LeaveController
                 $duration
             );
 
+            $created = DB::raw(
+                "SELECT {$this->leaveSelectColumns()} FROM leaves {$this->leaveJoins()} WHERE leaves.id = :id",
+                [':id' => $leaveId]
+            );
+
             return responseJson(
                 success: true,
-                data: ['id' => $leaveId],
+                data: $this->formatLeave($created[0]),
                 message: "Leave created successfully",
                 code: 201
             );
@@ -1122,8 +1223,9 @@ class LeaveController
             ], 'id', $leaveId);
 
             // Confirm balance: pending → used
-            $this->confirmUsedBalance(
+            $this->ensureAndConfirmBalance(
                 (int) $leaveData->employee_id,
+                $orgId,
                 (int) $leaveData->leave_type_id,
                 (float) ($leaveData->duration_days ?? 0)
             );
@@ -1601,19 +1703,25 @@ class LeaveController
             return responseJson(
                 success: true,
                 data: [
-                    'leave_id'         => $leaveId,
-                    'employee_id'      => $empId,
-                    'leave_type_id'    => $leaveTypeId,
-                    'leave_type_name'  => $leaveType->name,
-                    'leave_type_code'  => $leaveType->code,
-                    'start_date'       => $data['start_date'],
-                    'end_date'         => $data['end_date'],
-                    'duration_days'    => $duration,
-                    'is_half_day'      => $isHalfDay,
-                    'half_day_period'  => $isHalfDay ? ($data['half_day_period'] ?? null) : null,
-                    'status'           => $status,
-                    'approver_id'      => $approverId,
-                    'reliever_id'      => $data['reliever_id'] ?? null,
+                    'leave_id'      => $leaveId,
+                    'leave_type'    => [                        // ← nested
+                        'id'                => $leaveTypeId,
+                        'name'              => $leaveType->name,
+                        'is_paid'           => (bool) $leaveType->is_paid,
+                        'requires_approval' => (bool) $leaveType->requires_approval,
+                    ],
+                    'employee'      => [                        // ← nested
+                        'id'        => $empId,
+                        'full_name' => trim(($user->first_name ?? '') . ' ' . ($user->middle_name ? $user->middle_name . ' ' : '') . ($user->surname ?? '')),
+                        'email'     => $user->email ?? null,
+                    ],
+                    'approver_id'   => $approverId,             // approver object not available here without extra query — keep as ID or fetch separately
+                    'start_date'    => $data['start_date'],
+                    'end_date'      => $data['end_date'],
+                    'duration_days' => $duration,
+                    'is_half_day'   => $isHalfDay,
+                    'half_day_period' => $isHalfDay ? ($data['half_day_period'] ?? null) : null,
+                    'status'        => $status,
                     'balance_remaining' => round(($balanceCheck['available'] ?? 0) - $duration, 1),
                 ],
                 message: $status === 'approved'
@@ -1841,9 +1949,11 @@ class LeaveController
                 $dataParams
             );
 
+            $leaves = array_map(fn($l) => $this->formatLeave($l), $leaves);
+
             return responseJson(
                 success: true,
-                data: $leaves,
+                data: array_values($leaves),
                 message: "Employee leaves fetched successfully",
                 code: 200,
                 metadata: [
