@@ -51,10 +51,12 @@ class EmployeeController
 
             if ($withMinimal) {
                 // Lightweight query — skip role-based field logic entirely
-                $query = "SELECT e.id, u.first_name, u.middle_name, u.surname, e.department_id
-                      FROM employees e
-                      LEFT JOIN users u ON e.user_id = u.id
-                      WHERE e.organization_id = :org_id";
+                $query = "SELECT e.id, u.first_name, u.middle_name, u.surname,
+                    e.department_id, d.name AS department_name
+                    FROM employees e
+                    LEFT JOIN users u ON e.user_id = u.id
+                    LEFT JOIN departments d ON e.department_id = d.id
+                    WHERE e.organization_id = :org_id";
                 $params = [':org_id' => $orgId];
             } else {
                 // Full query with role-based column selection
@@ -81,6 +83,16 @@ class EmployeeController
 
             // Execute query
             $employees = empty($params) ? DB::raw($query) : DB::raw($query, $params);
+
+            // Map department_id + department_name into a department object
+            $employees = array_map(function ($employee) {
+                $employee->department = [
+                    'id'   => $employee->department_id,
+                    'name' => $employee->department_name ?? null,
+                ];
+                unset($employee->department_id, $employee->department_name);
+                return $employee;
+            }, $employees);
 
             // If no employees found
             if (empty($employees)) {
@@ -165,7 +177,8 @@ class EmployeeController
                 'reports_to' => 'required,numeric',
                 'base_salary' => 'required,numeric',
                 'bank_account_number' => 'string',
-                'tax_id' => 'string'
+                'tax_id' => 'string',
+                'has_user' => 'boolean'
             ]);
 
             // Validate role against allowed user_type values
@@ -241,118 +254,84 @@ class EmployeeController
             $data['start_date']  = date('Y-m-d', strtotime($data['start_date']));
             $default_password = password_hash('password', PASSWORD_BCRYPT);
 
-            DB::transaction(function () use ($data, $orgId, &$inserted, $default_password) {
+            $hasUser = isset($data['has_user']) ? (bool) $data['has_user'] : false;
 
-                // 1. Get organization domain first (we need it for email generation)
-                $getOrgSQL = "SELECT domain FROM organizations WHERE id = :org_id";
-                $orgResult = DB::raw($getOrgSQL, [':org_id' => $orgId]);
+            DB::transaction(function () use ($data, $orgId, &$inserted, $default_password, $hasUser) {
 
-                if (empty($orgResult) || !$orgResult[0]->domain) {
-                    throw new \Exception("Organization not found or domain is null");
-                }
+                $user_id = null;
 
-                $domain = $orgResult[0]->domain;
+                if ($hasUser) {
+                    // 1. Get organization domain first (we need it for email generation)
+                    $getOrgSQL = "SELECT domain FROM organizations WHERE id = :org_id";
+                    $orgResult = DB::raw($getOrgSQL, [':org_id' => $orgId]);
 
-                // 2. Generate email and username
-                $baseEmail = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['surname']);
-                $baseUsername = $baseEmail;
-                $email = $baseEmail . '@' . $domain;
-                $username = $baseUsername;
-
-                // 3. Handle email/username conflicts by adding numeric suffix
-                $emailSuffix = 1;
-                while (true) {
-                    $existingEmail = DB::raw(
-                        "SELECT id FROM users WHERE email = :email LIMIT 1",
-                        [':email' => $email]
-                    );
-
-                    if (empty($existingEmail)) {
-                        break; // Email is unique, we can use it
+                    if (empty($orgResult) || !$orgResult[0]->domain) {
+                        throw new \Exception("Organization not found or domain is null");
                     }
 
-                    $emailSuffix++;
-                    $email = $baseEmail . $emailSuffix . '@' . $domain;
-                    $username = $baseUsername . $emailSuffix;
+                    $domain = $orgResult[0]->domain;
+
+                    // 2. Generate email and username
+                    $baseEmail    = strtolower(substr($data['first_name'], 0, 1)) . '.' . strtolower($data['surname']);
+                    $baseUsername = $baseEmail;
+                    $email        = $baseEmail . '@' . $domain;
+                    $username     = $baseUsername;
+
+                    // 3. Handle email/username conflicts by adding numeric suffix
+                    $emailSuffix = 1;
+                    while (true) {
+                        $existingEmail = DB::raw(
+                            "SELECT id FROM users WHERE email = :email LIMIT 1",
+                            [':email' => $email]
+                        );
+                        if (empty($existingEmail)) break;
+                        $emailSuffix++;
+                        $email    = $baseEmail . $emailSuffix . '@' . $domain;
+                        $username = $baseUsername . $emailSuffix;
+                    }
+
+                    // 4. Insert user with the unique email
+                    $personalEmail = !empty($data['personal_email']) ? "'{$data['personal_email']}'" : 'NULL';
+                    $middleName    = !empty($data['middle_name'])    ? "'{$data['middle_name']}'"    : 'NULL';
+
+                    $insertUserSQL = "INSERT INTO users (
+                        organization_id, username, first_name, middle_name, surname,
+                        password_hash, email, personal_email, user_type, created_at
+                    ) VALUES (
+                        :org_id, :username, :first_name, {$middleName}, :surname,
+                        :password_hash, :email, {$personalEmail}, :user_type, NOW()
+                    )";
+
+                    DB::raw($insertUserSQL, [
+                        ':org_id'        => $orgId,
+                        ':username'      => $username,
+                        ':first_name'    => $data['first_name'],
+                        ':surname'       => $data['surname'],
+                        ':password_hash' => $default_password,
+                        ':email'         => $email,
+                        ':user_type'     => $data['role']
+                    ]);
+
+                    // 5. Get the user ID we just inserted
+                    $userResult = DB::raw("SELECT LAST_INSERT_ID() as user_id");
+                    $user_id    = $userResult[0]->user_id;
                 }
 
-                // 4. Insert user with the unique email
-                $personalEmail = !empty($data['personal_email']) ? "'{$data['personal_email']}'" : 'NULL';
-                $middleName = !empty($data['middle_name']) ? "'{$data['middle_name']}'" : 'NULL';
-
-                $insertUserSQL = "INSERT INTO users (
-                    organization_id, 
-                    username, 
-                    first_name, 
-                    middle_name, 
-                    surname, 
-                    password_hash, 
-                    email, 
-                    personal_email, 
-                    user_type, 
-                    created_at
-                ) VALUES (
-                    :org_id, 
-                    :username, 
-                    :first_name, 
-                    {$middleName}, 
-                    :surname, 
-                    :password_hash, 
-                    :email, 
-                    {$personalEmail}, 
-                    :user_type, 
-                    NOW()
-                )";
-
-                DB::raw($insertUserSQL, [
-                    ':org_id' => $orgId,
-                    ':username' => $username,
-                    ':first_name' => $data['first_name'],
-                    ':surname' => $data['surname'],
-                    ':password_hash' => $default_password,
-                    ':email' => $email,
-                    ':user_type' => $data['role']
-                ]);
-
-                // 5. Get the user ID we just inserted
-                $getUserIdSQL = "SELECT LAST_INSERT_ID() as user_id";
-                $userResult = DB::raw($getUserIdSQL);
-                $user_id = $userResult[0]->user_id;
-
-                // 6. Insert employee with employee_number (NEW: Added employee_number field)
+                // 6. Insert employee — user_id will be null if has_user is false
                 $insertEmployeeSQL = "INSERT INTO employees (
-                    organization_id, 
-                    user_id,
-                    employee_number,
-                    phone, 
-                    hire_date,
-                    start_date,
-                    job_title, 
-                    department_id,
-                    reports_to, 
-                    base_salary, 
-                    bank_account_number, 
-                    tax_id, 
-                    created_at
+                    organization_id, user_id, has_user, employee_number, phone,
+                    hire_date, start_date, job_title, department_id, reports_to,
+                    base_salary, bank_account_number, tax_id, created_at
                 ) VALUES (
-                    :org_id,
-                    :user_id,
-                    :employee_number,
-                    :phone, 
-                    :hire_date,
-                    :start_date,
-                    :job_title, 
-                    :department_id,
-                    :reports_to, 
-                    :base_salary, 
-                    :bank_account_number, 
-                    :tax_id, 
-                    NOW()
+                    :org_id, :user_id, :has_user, :employee_number, :phone,
+                    :hire_date, :start_date, :job_title, :department_id, :reports_to,
+                    :base_salary, :bank_account_number, :tax_id, NOW()
                 )";
 
                 DB::raw($insertEmployeeSQL, [
                     ':org_id'              => $orgId,
                     ':user_id'             => $user_id,
+                    ':has_user'            => $hasUser ? 1 : 0,
                     ':employee_number'     => $data['employee_number'],
                     ':phone'               => $data['phone'],
                     ':hire_date'           => $data['hire_date'],
@@ -364,6 +343,7 @@ class EmployeeController
                     ':bank_account_number' => $data['bank_account_number'],
                     ':tax_id'              => $data['tax_id']
                 ]);
+
 
                 // 7. Get the employee_id just inserted
                 $empResult  = DB::raw("SELECT LAST_INSERT_ID() as emp_id");
@@ -451,12 +431,12 @@ class EmployeeController
                     // 12. Update payrun totals
                     DB::raw(
                         "UPDATE payruns SET
-            total_gross_pay  = total_gross_pay  + :gross_pay,
-            total_deductions = total_deductions + :total_deductions,
-            total_net_pay    = total_net_pay    + :net_pay,
-            employee_count   = employee_count   + 1,
-            updated_at       = NOW()
-         WHERE id = :payrun_id",
+                            total_gross_pay  = total_gross_pay  + :gross_pay,
+                            total_deductions = total_deductions + :total_deductions,
+                            total_net_pay    = total_net_pay    + :net_pay,
+                            employee_count   = employee_count   + 1,
+                            updated_at       = NOW()
+                        WHERE id = :payrun_id",
                         [
                             ':gross_pay'        => $tax['gross_pay'],
                             ':total_deductions' => $tax['total_deductions'],
@@ -465,6 +445,47 @@ class EmployeeController
                         ]
                     );
                 }
+
+                // 13. Seed leave_balances for all active leave types in this org
+$activeLeaveTypes = DB::raw(
+    "SELECT id, days_per_year FROM leave_types
+     WHERE organization_id = :org_id AND is_active = 1",
+    [':org_id' => $orgId]
+);
+
+$currentYear = (int) date('Y');
+foreach ($activeLeaveTypes as $leaveType) {
+    DB::raw(
+        "INSERT IGNORE INTO leave_balances (
+            organization_id,
+            employee_id,
+            leave_type_id,
+            leave_year,
+            entitled_days,
+            accrued_days,
+            used_days,
+            pending_days,
+            carried_over,
+            encashed_days,
+            created_at
+        ) VALUES (
+            :org_id,
+            :employee_id,
+            :leave_type_id,
+            :leave_year,
+            :entitled_days,
+            0, 0, 0, 0, 0,
+            NOW()
+        )",
+        [
+            ':org_id'        => $orgId,
+            ':employee_id'   => $employeeId,
+            ':leave_type_id' => $leaveType->id,
+            ':leave_year'    => $currentYear,
+            ':entitled_days' => $leaveType->days_per_year ?? 0,
+        ]
+    );
+}
 
                 $inserted = true;
             });
@@ -965,10 +986,12 @@ class EmployeeController
             $baseFields = "e.*";
         }
 
-        $query = "SELECT {$baseFields}, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
-                  FROM employees e 
-                  LEFT JOIN users u ON e.user_id = u.id 
-                  WHERE e.organization_id = :org_id";
+        $query = "SELECT {$baseFields}, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname,
+                 d.name AS department_name
+          FROM employees e 
+          LEFT JOIN users u ON e.user_id = u.id
+          LEFT JOIN departments d ON e.department_id = d.id
+          WHERE e.organization_id = :org_id";
         $params = [':org_id' => $orgId];
 
         // Apply role-based WHERE conditions
