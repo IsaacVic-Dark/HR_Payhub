@@ -232,6 +232,21 @@ class AuthController
                 // Generate unique employee number
                 $employeeNumber = $this->generateEmployeeNumber($organizationId);
                 
+                // Resolve job_title_id: look up or insert 'Administrator' for this org
+                $existingJt = DB::table('job_titles')
+                    ->where(['organization_id' => $organizationId, 'title' => 'Administrator'])
+                    ->get(['id']);
+
+                if (!empty($existingJt)) {
+                    $jobTitleId = (int) $existingJt[0]->id;
+                } else {
+                    DB::table('job_titles')->insert([
+                        'organization_id' => $organizationId,
+                        'title'           => 'Administrator'
+                    ]);
+                    $jobTitleId = (int) DB::lastInsertId();
+                }
+
                 $employeeData = [
                     'organization_id' => $organizationId,
                     'user_id' => $userId,
@@ -244,7 +259,7 @@ class AuthController
                     'phone' => $data['phone'] ?? null,
                     'hire_date' => date('Y-m-d'),
                     'start_date' => date('Y-m-d'),
-                    'job_title' => $data['job_title'] ?? 'Administrator',
+                    'job_title_id' => $jobTitleId,
                     'base_salary' => $data['base_salary'] ?? 0,
                     'status' => 'active',
                     'employment_type' => $data['employment_type'] ?? 'full_time',
@@ -309,7 +324,7 @@ class AuthController
         $data = json_decode(file_get_contents('php://input'), true);
 
         // Validate required fields
-        $required = ['email', 'password', 'firstname', 'surname', 'organization_id', 'job_title', 'base_salary'];
+        $required = ['email', 'password', 'firstname', 'surname', 'organization_id', 'job_title_id', 'base_salary'];
         foreach ($required as $field) {
             if (!isset($data[$field]) || empty(trim($data[$field]))) {
                 http_response_code(400);
@@ -402,9 +417,9 @@ class AuthController
             // Create employee record
             $employeeStmt = $db->prepare("
                 INSERT INTO employees 
-                (organization_id, user_id, has_user, employee_number, firstname, middlename, surname, personalemail, phone, hire_date, start_date, job_title, department_id, reports_to, base_salary, status, employment_type, work_location) 
+                (organization_id, user_id, has_user, employee_number, firstname, middlename, surname, personalemail, phone, hire_date, start_date, job_title_id, department_id, reports_to, base_salary, status, employment_type, work_location) 
                 VALUES 
-                (:organization_id, :user_id, 1, :employee_number, :firstname, :middlename, :surname, :personalemail, :phone, :hire_date, :start_date, :job_title, :department_id, :reports_to, :base_salary, :status, :employment_type, :work_location)
+                (:organization_id, :user_id, 1, :employee_number, :firstname, :middlename, :surname, :personalemail, :phone, :hire_date, :start_date, :job_title_id, :department_id, :reports_to, :base_salary, :status, :employment_type, :work_location)
             ");
 
             $employeeStmt->execute([
@@ -418,7 +433,7 @@ class AuthController
                 ':phone' => $data['phone'] ?? null,
                 ':hire_date' => $data['hire_date'] ?? date('Y-m-d'),
                 ':start_date' => $data['start_date'] ?? date('Y-m-d'),
-                ':job_title' => $data['job_title'],
+                ':job_title_id' => $data['job_title_id'],
                 ':department_id' => $data['department_id'] ?? null,
                 ':reports_to' => $data['reports_to'] ?? null,
                 ':base_salary' => $data['base_salary'],
@@ -442,7 +457,7 @@ class AuthController
                     'personalemail' => $data['personalemail'] ?? null,
                     'firstname' => $data['firstname'],
                     'surname' => $data['surname'],
-                    'job_title' => $data['job_title'],
+                    'job_title_id' => $data['job_title_id'],
                     'status' => $data['status'] ?? 'active'
                 ]
             ]);
@@ -704,7 +719,6 @@ class AuthController
                         'personalemail' => $employee['personalemail'],
                         'phone' => $employee['phone'],
                         'job_title' => $employee['job_title'],
-                        'department_id' => $employee['department_id'],
                         'status' => $employee['status'],
                         'employment_type' => $employee['employment_type'],
                         'work_location' => $employee['work_location']
@@ -740,10 +754,31 @@ class AuthController
 
     private function getEmployeeByUserId($userId)
     {
+        // Use the same query builder pattern proven to work elsewhere in this controller
         $result = DB::table('employees')
             ->where(['user_id' => $userId])
             ->get(['*']);
 
-        return !empty($result) ? (array)$result[0] : null;
+        if (empty($result)) {
+            return null;
+        }
+
+        $row = (array) $result[0];
+
+        // Fetch the related job title if set
+        $jobTitleId = $row['job_title_id'] ?? null;
+        if ($jobTitleId) {
+            $jtResult = DB::table('job_titles')
+                ->where(['id' => $jobTitleId])
+                ->get(['id', 'title']);
+            $jt = !empty($jtResult) ? (array) $jtResult[0] : null;
+            $row['job_title'] = $jt
+                ? ['id' => (int)$jt['id'], 'title' => $jt['title']]
+                : null;
+        } else {
+            $row['job_title'] = null;
+        }
+
+        return $row;
     }
 }

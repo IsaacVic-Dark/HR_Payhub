@@ -33,11 +33,12 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `phone` varchar(20) DEFAULT NULL,
   `hire_date` date NOT NULL,
   `start_date` date NOT NULL,
-  `job_title` varchar(100) DEFAULT NULL,
+  `job_title_id` int DEFAULT NULL,
   `department_id` int DEFAULT NULL,
   `reports_to` int DEFAULT NULL,
   `base_salary` decimal(15,2) NOT NULL,
   `bank_account_number` varchar(50) DEFAULT NULL,
+  `bank_name` VARCHAR(100)  DEFAULT NULL,
   `tax_id` varchar(50) DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -53,7 +54,9 @@ CREATE TABLE IF NOT EXISTS `employees` (
   CONSTRAINT `employees_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `employees_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `employees_ibfk_3` FOREIGN KEY (`reports_to`) REFERENCES `employees` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `employees_ibfk_4` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE SET NULL
+  CONSTRAINT `employees_ibfk_4` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `employees_jt_fk`  FOREIGN KEY (`job_title_id`)    REFERENCES `job_titles`    (`id`) ON DELETE SET NULL\
+  
 ) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
@@ -149,6 +152,25 @@ CREATE TABLE IF NOT EXISTS `departments` (
     CONSTRAINT fk_dept_head FOREIGN KEY (`head_employee_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE IF NOT EXISTS `job_titles` (
+  `id`              INT           NOT NULL AUTO_INCREMENT,
+  `organization_id`      INT           NOT NULL,
+  `department_id`   INT           DEFAULT NULL,
+  `title`           VARCHAR(150)  NOT NULL,
+  `grade`           VARCHAR(50)   DEFAULT NULL,
+  `created_at`      TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_title_per_company` (`organization_id`, `title`),
+  KEY `idx_jt_company`     (`organization_id`),
+  KEY `idx_jt_department`  (`department_id`),
+
+  CONSTRAINT `jt_company_fk`
+    FOREIGN KEY (`organization_id`)    REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `jt_department_fk`
+    FOREIGN KEY (`department_id`) REFERENCES `departments`   (`id`) ON DELETE SET NULL
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping structure for table payhub.advances
 CREATE TABLE IF NOT EXISTS `advances` (
@@ -703,6 +725,32 @@ CREATE TABLE IF NOT EXISTS `users` (
   KEY `organization_id` (`organization_id`),
   CONSTRAINT `users_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS `user_sessions` (
+  `id`                     INT           NOT NULL AUTO_INCREMENT,
+  `user_id`                INT           NOT NULL  COMMENT 'FK to users(id)',
+  `employee_id`            INT           DEFAULT NULL COMMENT 'FK to employees(id); NULL for non-employee users',
+  `session_token`          VARCHAR(255)  DEFAULT NULL COMMENT 'Hashed session/JWT identifier for server-side invalidation',
+  `login_at`               TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `logout_at`              TIMESTAMP     NULL DEFAULT NULL,
+  `ip_address`             VARCHAR(45)   DEFAULT NULL COMMENT 'IPv4 or IPv6; VARCHAR(45) covers full IPv6',
+  `device_info`            VARCHAR(500)  DEFAULT NULL COMMENT 'User-agent string or parsed device summary',
+  `failed_login_attempts`  JSON          DEFAULT NULL COMMENT 'Array of failed attempt objects: [{attempted_at, email, ip_address, user_agent, reason}]',
+  `is_active`              TINYINT(1)    NOT NULL DEFAULT 1 COMMENT '0 = session forcefully invalidated or logged out',
+  `created_at`             TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  KEY `idx_us_user_id`     (`user_id`),
+  KEY `idx_us_employee_id` (`employee_id`),
+  KEY `idx_us_login_at`    (`login_at`),
+  KEY `idx_us_is_active`   (`is_active`),
+
+  CONSTRAINT `us_user_fk`
+    FOREIGN KEY (`user_id`)     REFERENCES `users`     (`id`) ON DELETE CASCADE,
+  CONSTRAINT `us_employee_fk`
+    FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE SET NULL
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
 
