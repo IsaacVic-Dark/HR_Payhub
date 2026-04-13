@@ -59,25 +59,27 @@ class PayrunDetailController
             $offset = ($page - 1) * $perPage;
 
             // Fetch payrun details with employee information
+            // NOTE: users table has no name fields — names live on employees (firstname, middlename, surname).
+            //       employees.job_title does not exist — job title is via job_title_id FK to job_titles.
             $query = "
                 SELECT 
                     payrun_details.*,
-                    employees.id as employee_db_id,
-                    employees.job_title,
+                    employees.id            as employee_db_id,
                     employees.employee_number,
                     employees.department_id,
-                    departments.name as department,
-                    users.first_name as employee_first_name,
-                    users.middle_name as employee_middle_name,
-                    users.surname as employee_surname,
-                    users.email as employee_email,
-                    CONCAT(users.first_name, ' ', COALESCE(users.middle_name, ''), ' ', users.surname) as employee_full_name
+                    employees.firstname     as employee_first_name,
+                    employees.middlename    as employee_middle_name,
+                    employees.surname       as employee_surname,
+                    employees.personalemail as employee_email,
+                    CONCAT(employees.firstname, ' ', COALESCE(employees.middlename, ''), ' ', employees.surname) as employee_full_name,
+                    departments.name        as department,
+                    job_titles.title        as job_title
                 FROM payrun_details
                 INNER JOIN employees ON payrun_details.employee_id = employees.id
-                INNER JOIN users ON employees.user_id = users.id
                 LEFT JOIN departments ON employees.department_id = departments.id
+                LEFT JOIN job_titles  ON employees.job_title_id  = job_titles.id
                 WHERE payrun_details.payrun_id = :payrun_id
-                ORDER BY users.surname, users.first_name
+                ORDER BY employees.surname, employees.firstname
                 LIMIT :pagination_limit OFFSET :pagination_offset
             ";
 
@@ -281,22 +283,24 @@ class PayrunDetailController
     public function show($org_id, $payrunId, $id)
     {
         try {
+            // NOTE: users table has no name fields — names live on employees (firstname, middlename, surname).
+            //       employees.job_title does not exist — job title is via job_title_id FK to job_titles.
             $detail = DB::raw(
                 "SELECT 
                     payrun_details.*,
                     employees.employee_number,
-                    employees.job_title,
                     employees.department_id,
-                    departments.name as department,
-                    users.first_name as employee_first_name,
-                    users.middle_name as employee_middle_name,
-                    users.surname as employee_surname,
-                    users.email as employee_email,
-                    CONCAT(users.first_name, ' ', COALESCE(users.middle_name, ''), ' ', users.surname) as employee_full_name
+                    employees.firstname     as employee_first_name,
+                    employees.middlename    as employee_middle_name,
+                    employees.surname       as employee_surname,
+                    employees.personalemail as employee_email,
+                    CONCAT(employees.firstname, ' ', COALESCE(employees.middlename, ''), ' ', employees.surname) as employee_full_name,
+                    departments.name        as department,
+                    job_titles.title        as job_title
                 FROM payrun_details
                 INNER JOIN employees ON payrun_details.employee_id = employees.id
-                INNER JOIN users ON employees.user_id = users.id
                 LEFT JOIN departments ON employees.department_id = departments.id
+                LEFT JOIN job_titles  ON employees.job_title_id  = job_titles.id
                 WHERE payrun_details.id = :id AND payrun_details.payrun_id = :payrun_id",
                 [':id' => $id, ':payrun_id' => $payrunId]
             );

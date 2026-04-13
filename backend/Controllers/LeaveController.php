@@ -41,25 +41,25 @@ class LeaveController
         -- Employee details (raw — will be nested by formatLeave())
         emp_users.email AS employee_email,
         CONCAT(
-            emp_users.first_name, ' ',
-            COALESCE(emp_users.middle_name, ''), ' ',
-            emp_users.surname
+            emp.firstname, ' ',
+            COALESCE(emp.middlename, ''), ' ',
+            emp.surname
         ) AS employee_full_name,
 
         -- Approver details (raw — will be nested by formatLeave())
         approver_users.email AS approver_email,
         CONCAT(
-            approver_users.first_name, ' ',
-            COALESCE(approver_users.middle_name, ''), ' ',
-            approver_users.surname
+            approver_emp.firstname, ' ',
+            COALESCE(approver_emp.middlename, ''), ' ',
+            approver_emp.surname
         ) AS approver_full_name,
 
         -- Reliever details (raw — will be nested by formatLeave())
         reliever_users.email AS reliever_email,
         CONCAT(
-            reliever_users.first_name, ' ',
-            COALESCE(reliever_users.middle_name, ''), ' ',
-            reliever_users.surname
+            reliever_emp.firstname, ' ',
+            COALESCE(reliever_emp.middlename, ''), ' ',
+            reliever_emp.surname
         ) AS reliever_full_name
     ";
     }
@@ -733,7 +733,7 @@ class LeaveController
                 $params[':f_year']     = (int) $year;
             }
             if ($name) {
-                $where[] = "CONCAT(emp_users.first_name,' ',COALESCE(emp_users.middle_name,''),' ',emp_users.surname) LIKE :f_name";
+                $where[] = "CONCAT(emp.firstname,' ',COALESCE(emp.middlename,''),' ',emp.surname) LIKE :f_name";
                 $params[':f_name'] = '%' . $name . '%';
             }
 
@@ -1232,14 +1232,23 @@ class LeaveController
 
             $orgCfg = $this->getLeaveOrgConfig($orgId);
             if ($orgCfg['notify_employee']) {
+                $approverEmp = DB::table('employees')->where(['id' => $currentEmployee['id']])->get();
+                $approverName = $approverEmp
+                    ? trim(($approverEmp[0]->firstname ?? '') . ' ' . ($approverEmp[0]->surname ?? ''))
+                    : '';
                 $this->createLeaveNotification(
                     (int) $leaveData->employee_id,
                     $orgId,
                     $leaveId,
                     'approved',
-                    $currentUser['first_name'] . ' ' . $currentUser['surname']
+                    $approverName
                 );
             }
+
+            $approverEmpRow = DB::table('employees')->where(['id' => $currentEmployee['id']])->get();
+            $approverFullName = $approverEmpRow
+                ? trim(($approverEmpRow[0]->firstname ?? '') . ' ' . ($approverEmpRow[0]->surname ?? ''))
+                : '';
 
             return responseJson(
                 success: true,
@@ -1247,7 +1256,7 @@ class LeaveController
                     'leave_id'      => $leaveId,
                     'status'        => 'approved',
                     'approver_id'   => $currentEmployee['id'],
-                    'approver_name' => $currentUser['first_name'] . ' ' . $currentUser['surname'],
+                    'approver_name' => $approverFullName,
                     'approved_at'   => date('Y-m-d H:i:s'),
                 ],
                 message: "Leave approved successfully"
@@ -1326,12 +1335,16 @@ class LeaveController
 
             $orgCfg = $this->getLeaveOrgConfig($orgId);
             if ($orgCfg['notify_employee']) {
+                $approverEmp = DB::table('employees')->where(['id' => $currentEmployee['id']])->get();
+                $approverName = $approverEmp
+                    ? trim(($approverEmp[0]->firstname ?? '') . ' ' . ($approverEmp[0]->surname ?? ''))
+                    : '';
                 $this->createLeaveNotification(
                     (int) $leaveData->employee_id,
                     $orgId,
                     $leaveId,
                     'rejected',
-                    $currentUser['first_name'] . ' ' . $currentUser['surname'],
+                    $approverName,
                     $rejectionReason
                 );
             }
@@ -1690,13 +1703,18 @@ class LeaveController
             }
 
             // Notify manager
-            if ($status === 'pending' && $approverId && $orgCfg['notify_manager'] && $user) {
+            if ($status === 'pending' && $approverId && $orgCfg['notify_manager']) {
+                $employeeName = trim(
+                    ($employee->firstname ?? '') . ' ' .
+                    ($employee->middlename ? $employee->middlename . ' ' : '') .
+                    ($employee->surname ?? '')
+                );
                 $this->createLeaveNotification(
                     $approverId,
                     $orgId,
                     $leaveId,
                     'pending',
-                    $user->first_name . ' ' . $user->surname
+                    $employeeName
                 );
             }
 
@@ -1712,7 +1730,11 @@ class LeaveController
                     ],
                     'employee'      => [                        // ← nested
                         'id'        => $empId,
-                        'full_name' => trim(($user->first_name ?? '') . ' ' . ($user->middle_name ? $user->middle_name . ' ' : '') . ($user->surname ?? '')),
+                        'full_name' => trim(
+                            ($employee->firstname ?? '') . ' ' .
+                            ($employee->middlename ? $employee->middlename . ' ' : '') .
+                            ($employee->surname ?? '')
+                        ),
                         'email'     => $user->email ?? null,
                     ],
                     'approver_id'   => $approverId,             // approver object not available here without extra query — keep as ID or fetch separately
@@ -1759,10 +1781,10 @@ class LeaveController
             }
 
             $employeeCheck = DB::raw(
-                "SELECT e.*, u.organization_id, u.first_name, u.middle_name, u.surname, u.email
+                "SELECT e.*, u.email
                  FROM employees e
                  INNER JOIN users u ON e.user_id = u.id
-                 WHERE e.id = :emp_id AND u.organization_id = :org_id",
+                 WHERE e.id = :emp_id AND e.organization_id = :org_id",
                 [':emp_id' => $empId, ':org_id' => $orgId]
             );
 
@@ -1880,7 +1902,7 @@ class LeaveController
                         'statistics'   => ['total_leaves' => 0, 'by_status' => [], 'by_type' => []],
                         'employee_info' => [
                             'employee_id'   => $empId,
-                            'employee_name' => ($employeeCheck[0]->first_name ?? '') . ' ' . ($employeeCheck[0]->surname ?? ''),
+                            'employee_name' => trim(($employeeCheck[0]->firstname ?? '') . ' ' . ($employeeCheck[0]->surname ?? '')),
                         ],
                     ]
                 );
@@ -1983,7 +2005,7 @@ class LeaveController
                     ],
                     'employee_info' => [
                         'employee_id'     => (int) $empId,
-                        'employee_name'   => ($employeeCheck[0]->first_name ?? '') . ' ' . ($employeeCheck[0]->surname ?? ''),
+                        'employee_name'   => trim(($employeeCheck[0]->firstname ?? '') . ' ' . ($employeeCheck[0]->surname ?? '')),
                         'employee_email'  => $employeeCheck[0]->email        ?? 'Not specified',
                         'job_title'       => $employeeCheck[0]->job_title    ?? 'Not specified',
                         'employment_type' => $employeeCheck[0]->employment_type ?? 'Not specified',

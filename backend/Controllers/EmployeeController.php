@@ -22,7 +22,7 @@ class EmployeeController
                 );
             }
 
-            // Minimal mode — returns only id, first_name, middle_name, surname, department_id
+            // Minimal mode — returns only id, firstname, middlename, surname, personalemail
             $withMinimal = isset($_GET['with_minimal']) && $_GET['with_minimal'] == '1';
 
             // Apply role-based filters FIRST
@@ -50,12 +50,10 @@ class EmployeeController
             });
 
             if ($withMinimal) {
-                // Lightweight query — skip role-based field logic entirely
-                $query = "SELECT e.id, u.first_name, u.middle_name, u.surname,
-                    e.department_id, d.name AS department_name
+                // Lightweight query — only id, firstname, middlename, surname, personalemail
+                $query = "SELECT e.id,
+                    e.firstname, e.middlename, e.surname, e.personalemail
                     FROM employees e
-                    LEFT JOIN users u ON e.user_id = u.id
-                    LEFT JOIN departments d ON e.department_id = d.id
                     WHERE e.organization_id = :org_id";
                 $params = [':org_id' => $orgId];
             } else {
@@ -84,15 +82,10 @@ class EmployeeController
             // Execute query
             $employees = empty($params) ? DB::raw($query) : DB::raw($query, $params);
 
-            // Map department_id + department_name into a department object
-            $employees = array_map(function ($employee) {
-                $employee->department = [
-                    'id'   => $employee->department_id,
-                    'name' => $employee->department_name ?? null,
-                ];
-                unset($employee->department_id, $employee->department_name);
-                return $employee;
-            }, $employees);
+            // Map raw JOIN columns into nested objects (full mode only)
+            if (!$withMinimal) {
+                $employees = $this->mapEmployeeRelations($employees);
+            }
 
             // If no employees found
             if (empty($employees)) {
@@ -503,11 +496,7 @@ foreach ($activeLeaveTypes as $leaveType) {
                 SELECT 
                     e.*, 
                     u.username, 
-                    u.email, 
-                    u.personal_email, 
-                    u.first_name, 
-                    u.middle_name, 
-                    u.surname 
+                    u.email,
                 FROM employees e 
                 LEFT JOIN users u ON e.user_id = u.id 
                 WHERE e.employee_number = :employee_number 
@@ -578,13 +567,26 @@ foreach ($activeLeaveTypes as $leaveType) {
                 );
             }
 
-            // NEW: Include employee_number in SELECT
-            $query = "SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
-                      FROM employees e 
-                      LEFT JOIN users u ON e.user_id = u.id 
-                      WHERE e.organization_id = {$orgId} AND e.id = {$id}";
+            $query = "SELECT e.*,
+                         jt.title  AS job_title_title,
+                         jt.grade  AS job_title_grade,
+                         u.username,
+                         u.email    AS user_email,
+                         u.user_type,
+                         mgr.firstname   AS manager_firstname,
+                         mgr.middlename  AS manager_middlename,
+                         mgr.surname     AS manager_surname,
+                         mu.email        AS manager_email,
+                         d.name          AS department_name
+                      FROM employees e
+                      LEFT JOIN users u         ON e.user_id       = u.id
+                      LEFT JOIN departments d   ON e.department_id = d.id
+                      LEFT JOIN job_titles jt   ON e.job_title_id  = jt.id
+                      LEFT JOIN employees mgr   ON e.reports_to    = mgr.id
+                      LEFT JOIN users mu        ON mgr.user_id     = mu.id
+                      WHERE e.organization_id = :org_id AND e.id = :id";
 
-            $employee = DB::raw($query);
+            $employee = DB::raw($query, [':org_id' => $orgId, ':id' => $id]);
 
             if (!$employee || empty($employee)) {
                 return responseJson(
@@ -596,6 +598,9 @@ foreach ($activeLeaveTypes as $leaveType) {
 
             // Apply field-level security
             $employee = $this->applyFieldLevelSecurity($employee, $roleFilters);
+
+            // Map raw columns into expanded objects
+            $employee = $this->mapEmployeeRelations($employee);
 
             return responseJson(
                 success: true,
@@ -665,23 +670,23 @@ foreach ($activeLeaveTypes as $leaveType) {
             }
 
             $data = validate([
-                'user_id' => 'numeric',
-                'employee_number' => 'string', // NEW: Allow updating employee number
-                'first_name' => 'string',
-                'middle_name' => 'string',
-                'surname' => 'string',
-                'email' => 'email',
-                'personal_email' => 'email',
-                'phone' => 'string',
-                'hire_date' => 'string',
-                'start_date' => 'string',
-                'role' => 'string',
-                'job_title' => 'string',
-                'department_id' => 'numeric',
-                'reports_to' => 'numeric',
-                'base_salary' => 'numeric',
-                'bank_account_number' => 'string',
-                'tax_id' => 'string'
+                'user_id'            => 'numeric',
+                'employee_number'    => 'string',
+                'firstname'          => 'string',
+                'middlename'         => 'string',
+                'surname'            => 'string',
+                'email'              => 'email',
+                'personalemail'      => 'email',
+                'phone'              => 'string',
+                'hire_date'          => 'string',
+                'start_date'         => 'string',
+                'role'               => 'string',
+                'job_title_id'       => 'numeric',
+                'department_id'      => 'numeric',
+                'reports_to'         => 'numeric',
+                'base_salary'        => 'numeric',
+                'bank_account_number'=> 'string',
+                'tax_id'             => 'string'
             ]);
 
             // Validate role if provided
@@ -726,25 +731,25 @@ foreach ($activeLeaveTypes as $leaveType) {
 
             // Separate employee data from user data
             $employeeData = array_filter([
-                'employee_number' => $data['employee_number'] ?? null, // NEW
-                'phone' => $data['phone'] ?? null,
-                'hire_date' => $data['hire_date'] ?? null,
-                'start_date' => $data['start_date'] ?? null,
-                'job_title' => $data['job_title'] ?? null,
-                'department_id' => $data['department_id'] ?? null,
-                'reports_to' => $data['reports_to'] ?? null,
-                'base_salary' => $data['base_salary'] ?? null,
+                'employee_number'     => $data['employee_number']     ?? null,
+                'phone'               => $data['phone']               ?? null,
+                'hire_date'           => $data['hire_date']           ?? null,
+                'start_date'          => $data['start_date']          ?? null,
+                'job_title_id'        => $data['job_title_id']        ?? null,
+                'department_id'       => $data['department_id']       ?? null,
+                'reports_to'          => $data['reports_to']          ?? null,
+                'base_salary'         => $data['base_salary']         ?? null,
                 'bank_account_number' => $data['bank_account_number'] ?? null,
-                'tax_id' => $data['tax_id'] ?? null
+                'tax_id'              => $data['tax_id']              ?? null,
             ], fn($v) => $v !== null);
 
             $userData = array_filter([
-                'first_name' => $data['first_name'] ?? null,
-                'middle_name' => $data['middle_name'] ?? null,
-                'surname' => $data['surname'] ?? null,
-                'email' => $data['email'] ?? null,
-                'personal_email' => $data['personal_email'] ?? null,
-                'user_type' => $data['role'] ?? null  // role maps to user_type on users table
+                'firstname'    => $data['firstname']    ?? null,
+                'middlename'   => $data['middlename']   ?? null,
+                'surname'      => $data['surname']      ?? null,
+                'email'        => $data['email']        ?? null,
+                'personalemail'=> $data['personalemail']?? null,
+                'user_type'    => $data['role']         ?? null,  // role maps to user_type on users table
             ], fn($v) => $v !== null);
 
             if (isset($userData['email'])) {
@@ -826,16 +831,33 @@ foreach ($activeLeaveTypes as $leaveType) {
                 DB::table('users')->update($userData, 'id', $employee->user_id);
             }
 
-            // Fetch updated employee with user details
-            $query = "SELECT e.*, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname 
-                      FROM employees e 
-                      LEFT JOIN users u ON e.user_id = u.id 
-                      WHERE e.organization_id = {$orgId} AND e.id = {$id}";
+            // Fetch updated employee with all expanded relations
+            $query = "SELECT e.*,
+                         jt.title  AS job_title_title,
+                         jt.grade  AS job_title_grade,
+                         u.username,
+                         u.email    AS user_email,
+                         u.user_type,
+                         mgr.firstname   AS manager_firstname,
+                         mgr.middlename  AS manager_middlename,
+                         mgr.surname     AS manager_surname,
+                         mu.email        AS manager_email,
+                         d.name          AS department_name
+                      FROM employees e
+                      LEFT JOIN users u         ON e.user_id       = u.id
+                      LEFT JOIN departments d   ON e.department_id = d.id
+                      LEFT JOIN job_titles jt   ON e.job_title_id  = jt.id
+                      LEFT JOIN employees mgr   ON e.reports_to    = mgr.id
+                      LEFT JOIN users mu        ON mgr.user_id     = mu.id
+                      WHERE e.organization_id = :org_id AND e.id = :id";
 
-            $updatedEmployee = DB::raw($query);
+            $updatedEmployee = DB::raw($query, [':org_id' => $orgId, ':id' => $id]);
 
             // Apply field-level security
             $updatedEmployee = $this->applyFieldLevelSecurity($updatedEmployee, $roleFilters);
+
+            // Map raw columns into expanded objects
+            $updatedEmployee = $this->mapEmployeeRelations($updatedEmployee);
 
             return responseJson(
                 success: true,
@@ -916,13 +938,14 @@ foreach ($activeLeaveTypes as $leaveType) {
             'status_summary' => [],
         ];
 
-        // Department statistics
-        $departments = array_column($employees, 'department_id');
+        // Department statistics (department is now an object)
+        $departments = array_map(fn($e) => $e->department['id'] ?? null, $employees);
         $stats['by_department'] = array_count_values(array_filter($departments));
         arsort($stats['by_department']);
 
-        // Job title statistics
-        $jobTitles = array_column($employees, 'job_title');
+        // Job title statistics (job_title is now an object)
+        $jobTitles = array_map(fn($e) => $e->job_title['title'] ?? null, $employees);
+        $jobTitles = array_filter($jobTitles);
         $stats['by_job_title'] = array_count_values($jobTitles);
         arsort($stats['by_job_title']);
 
@@ -971,9 +994,72 @@ foreach ($activeLeaveTypes as $leaveType) {
         return $stats;
     }
 
+    /**
+     * Maps raw aliased JOIN columns into nested objects for job_title, user, report_to, and department.
+     * Works on any array of employee stdClass objects that were fetched with the expanded SELECT.
+     */
+    private function mapEmployeeRelations(array $employees): array
+    {
+        return array_map(function ($employee) {
+            // department
+            $employee->department = [
+                'id'   => $employee->department_id   ?? null,
+                'name' => $employee->department_name ?? null,
+            ];
+            unset($employee->department_id, $employee->department_name);
+
+            // job_title
+            $employee->job_title = [
+                'id'    => $employee->job_title_id    ?? null,
+                'title' => $employee->job_title_title ?? null,
+                'grade' => $employee->job_title_grade ?? null,
+            ];
+            unset($employee->job_title_id, $employee->job_title_title, $employee->job_title_grade);
+
+            // user
+            $employee->user = [
+                'id'        => $employee->user_id    ?? null,
+                'username'  => $employee->username   ?? null,
+                'email'     => $employee->user_email ?? null,
+                'user_type' => $employee->user_type  ?? null,
+            ];
+            unset($employee->user_id, $employee->username, $employee->user_email, $employee->user_type);
+
+            // report_to
+            $employee->report_to = [
+                'id'         => $employee->reports_to         ?? null,
+                'firstname'  => $employee->manager_firstname  ?? null,
+                'middlename' => $employee->manager_middlename ?? null,
+                'surname'    => $employee->manager_surname    ?? null,
+                'email'      => $employee->manager_email      ?? null,
+            ];
+            unset(
+                $employee->reports_to,
+                $employee->manager_firstname,
+                $employee->manager_middlename,
+                $employee->manager_surname,
+                $employee->manager_email
+            );
+
+            return $employee;
+        }, $employees);
+    }
+
     private function buildRoleBasedQuery($orgId, $roleFilters)
     {
-        $baseFields = "e.id, e.organization_id, e.user_id, e.employee_number, e.phone, e.hire_date, e.start_date, e.job_title, e.department_id, e.reports_to, e.status, e.created_at"; // NEW: Added employee_number and start_date
+        $baseFields = "e.id, e.organization_id, e.employee_number, e.phone, e.hire_date, e.start_date, e.department_id, e.status, e.created_at,
+                 e.job_title_id,
+                 jt.title  AS job_title_title,
+                 jt.grade  AS job_title_grade,
+                 e.user_id,
+                 u.username,
+                 u.email    AS user_email,
+                 u.user_type,
+                 e.reports_to,
+                 mgr.firstname   AS manager_firstname,
+                 mgr.middlename  AS manager_middlename,
+                 mgr.surname     AS manager_surname,
+                 mu.email        AS manager_email";
 
         // Field-level security based on role
         if (isset($roleFilters['payroll_access']) || isset($roleFilters['financial_access'])) {
@@ -982,15 +1068,33 @@ foreach ($activeLeaveTypes as $leaveType) {
         }
 
         if (isset($roleFilters['full_access']) || in_array($roleFilters['user_type'] ?? '', ['admin', 'hr_manager'])) {
-            // Full access roles can see all fields
-            $baseFields = "e.*";
+            // Full access roles can see all employee scalar fields plus the expanded relations
+            $baseFields = "e.id, e.organization_id, e.employee_number, e.phone, e.hire_date, e.start_date,
+                 e.department_id, e.status, e.created_at, e.updated_at, e.employment_type, e.work_location,
+                 e.base_salary, e.bank_account_number, e.bank_name, e.tax_id, e.has_user,
+                 e.firstname, e.middlename, e.surname, e.personalemail,
+                 e.job_title_id,
+                 jt.title  AS job_title_title,
+                 jt.grade  AS job_title_grade,
+                 e.user_id,
+                 u.username,
+                 u.email    AS user_email,
+                 u.user_type,
+                 e.reports_to,
+                 mgr.firstname   AS manager_firstname,
+                 mgr.middlename  AS manager_middlename,
+                 mgr.surname     AS manager_surname,
+                 mu.email        AS manager_email";
         }
 
-        $query = "SELECT {$baseFields}, u.username, u.email, u.personal_email, u.first_name, u.middle_name, u.surname,
+        $query = "SELECT {$baseFields},
                  d.name AS department_name
-          FROM employees e 
-          LEFT JOIN users u ON e.user_id = u.id
-          LEFT JOIN departments d ON e.department_id = d.id
+          FROM employees e
+          LEFT JOIN users u              ON e.user_id        = u.id
+          LEFT JOIN departments d        ON e.department_id  = d.id
+          LEFT JOIN job_titles jt        ON e.job_title_id   = jt.id
+          LEFT JOIN employees mgr        ON e.reports_to     = mgr.id
+          LEFT JOIN users mu             ON mgr.user_id      = mu.id
           WHERE e.organization_id = :org_id";
         $params = [':org_id' => $orgId];
 

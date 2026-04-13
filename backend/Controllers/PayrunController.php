@@ -137,30 +137,42 @@ class PayrunController
 
             $queryWhere = "WHERE " . implode(" AND ", $queryConditions);
 
+            // users table has no name fields; resolve names via employees.user_id
             $query = "
                 SELECT 
                     payruns.*,
-                    creator.first_name as creator_first_name,
-                    creator.surname as creator_surname,
-                    creator.email as creator_email,
-                    reviewer.first_name as reviewer_first_name,
-                    reviewer.surname as reviewer_surname,
-                    reviewer.email as reviewer_email,
-                    finalizer.first_name as finalizer_first_name,
-                    finalizer.surname as finalizer_surname,
-                    finalizer.email as finalizer_email,
-                    deleter.first_name as deleter_first_name,
-                    deleter.surname as deleter_surname,
-                    deleter.email as deleter_email,
-                    CONCAT(creator.first_name, ' ', creator.surname) as creator_full_name,
-                    CONCAT(COALESCE(reviewer.first_name, ''), ' ', COALESCE(reviewer.surname, '')) as reviewer_full_name,
-                    CONCAT(COALESCE(finalizer.first_name, ''), ' ', COALESCE(finalizer.surname, '')) as finalizer_full_name,
-                    CONCAT(COALESCE(deleter.first_name, ''), ' ', COALESCE(deleter.surname, '')) as deleter_full_name
+                    creator_u.username as creator_username,
+                    creator_u.email    as creator_email,
+                    creator_e.firstname as creator_first_name,
+                    creator_e.surname   as creator_surname,
+                    COALESCE(CONCAT(creator_e.firstname, ' ', creator_e.surname), creator_u.username) as creator_full_name,
+
+                    reviewer_u.username  as reviewer_username,
+                    reviewer_u.email     as reviewer_email,
+                    reviewer_e.firstname as reviewer_first_name,
+                    reviewer_e.surname   as reviewer_surname,
+                    COALESCE(CONCAT(reviewer_e.firstname, ' ', reviewer_e.surname), reviewer_u.username, '') as reviewer_full_name,
+
+                    finalizer_u.username  as finalizer_username,
+                    finalizer_u.email     as finalizer_email,
+                    finalizer_e.firstname as finalizer_first_name,
+                    finalizer_e.surname   as finalizer_surname,
+                    COALESCE(CONCAT(finalizer_e.firstname, ' ', finalizer_e.surname), finalizer_u.username, '') as finalizer_full_name,
+
+                    deleter_u.username  as deleter_username,
+                    deleter_u.email     as deleter_email,
+                    deleter_e.firstname as deleter_first_name,
+                    deleter_e.surname   as deleter_surname,
+                    COALESCE(CONCAT(deleter_e.firstname, ' ', deleter_e.surname), deleter_u.username, '') as deleter_full_name
                 FROM payruns
-                LEFT JOIN users creator ON payruns.created_by = creator.id
-                LEFT JOIN users reviewer ON payruns.reviewed_by = reviewer.id
-                LEFT JOIN users finalizer ON payruns.finalized_by = finalizer.id
-                LEFT JOIN users deleter ON payruns.deleted_by = deleter.id
+                LEFT JOIN users creator_u   ON payruns.created_by  = creator_u.id
+                LEFT JOIN employees creator_e   ON creator_e.user_id   = creator_u.id
+                LEFT JOIN users reviewer_u  ON payruns.reviewed_by = reviewer_u.id
+                LEFT JOIN employees reviewer_e  ON reviewer_e.user_id  = reviewer_u.id
+                LEFT JOIN users finalizer_u ON payruns.finalized_by = finalizer_u.id
+                LEFT JOIN employees finalizer_e ON finalizer_e.user_id = finalizer_u.id
+                LEFT JOIN users deleter_u   ON payruns.deleted_by  = deleter_u.id
+                LEFT JOIN employees deleter_e   ON deleter_e.user_id   = deleter_u.id
                 $queryWhere
                 ORDER BY payruns.pay_period_end DESC, payruns.created_at DESC
                 LIMIT :pagination_limit OFFSET :pagination_offset
@@ -258,30 +270,42 @@ class PayrunController
                 );
             }
 
+            // users table has no name fields; resolve names via employees.user_id
             $query = "
                 SELECT 
                     payruns.*,
-                    creator.first_name as creator_first_name,
-                    creator.surname as creator_surname,
-                    creator.email as creator_email,
-                    reviewer.first_name as reviewer_first_name,
-                    reviewer.surname as reviewer_surname,
-                    reviewer.email as reviewer_email,
-                    finalizer.first_name as finalizer_first_name,
-                    finalizer.surname as finalizer_surname,
-                    finalizer.email as finalizer_email,
-                    deleter.first_name as deleter_first_name,
-                    deleter.surname as deleter_surname,
-                    deleter.email as deleter_email,
-                    CONCAT(creator.first_name, ' ', creator.surname) as creator_full_name,
-                    CONCAT(COALESCE(reviewer.first_name, ''), ' ', COALESCE(reviewer.surname, '')) as reviewer_full_name,
-                    CONCAT(COALESCE(finalizer.first_name, ''), ' ', COALESCE(finalizer.surname, '')) as finalizer_full_name,
-                    CONCAT(COALESCE(deleter.first_name, ''), ' ', COALESCE(deleter.surname, '')) as deleter_full_name
+                    creator_u.username  as creator_username,
+                    creator_u.email     as creator_email,
+                    creator_e.firstname as creator_first_name,
+                    creator_e.surname   as creator_surname,
+                    COALESCE(CONCAT(creator_e.firstname, ' ', creator_e.surname), creator_u.username) as creator_full_name,
+
+                    reviewer_u.username  as reviewer_username,
+                    reviewer_u.email     as reviewer_email,
+                    reviewer_e.firstname as reviewer_first_name,
+                    reviewer_e.surname   as reviewer_surname,
+                    COALESCE(CONCAT(reviewer_e.firstname, ' ', reviewer_e.surname), reviewer_u.username, '') as reviewer_full_name,
+
+                    finalizer_u.username  as finalizer_username,
+                    finalizer_u.email     as finalizer_email,
+                    finalizer_e.firstname as finalizer_first_name,
+                    finalizer_e.surname   as finalizer_surname,
+                    COALESCE(CONCAT(finalizer_e.firstname, ' ', finalizer_e.surname), finalizer_u.username, '') as finalizer_full_name,
+
+                    deleter_u.username  as deleter_username,
+                    deleter_u.email     as deleter_email,
+                    deleter_e.firstname as deleter_first_name,
+                    deleter_e.surname   as deleter_surname,
+                    COALESCE(CONCAT(deleter_e.firstname, ' ', deleter_e.surname), deleter_u.username, '') as deleter_full_name
                 FROM payruns
-                LEFT JOIN users creator ON payruns.created_by = creator.id
-                LEFT JOIN users reviewer ON payruns.reviewed_by = reviewer.id
-                LEFT JOIN users finalizer ON payruns.finalized_by = finalizer.id
-                LEFT JOIN users deleter ON payruns.deleted_by = deleter.id
+                LEFT JOIN users creator_u       ON payruns.created_by   = creator_u.id
+                LEFT JOIN employees creator_e   ON creator_e.user_id    = creator_u.id
+                LEFT JOIN users reviewer_u      ON payruns.reviewed_by  = reviewer_u.id
+                LEFT JOIN employees reviewer_e  ON reviewer_e.user_id   = reviewer_u.id
+                LEFT JOIN users finalizer_u     ON payruns.finalized_by = finalizer_u.id
+                LEFT JOIN employees finalizer_e ON finalizer_e.user_id  = finalizer_u.id
+                LEFT JOIN users deleter_u       ON payruns.deleted_by   = deleter_u.id
+                LEFT JOIN employees deleter_e   ON deleter_e.user_id    = deleter_u.id
                 WHERE payruns.id = :payrun_id AND payruns.organization_id = :org_id
             ";
 
