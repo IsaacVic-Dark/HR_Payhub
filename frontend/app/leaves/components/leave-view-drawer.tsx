@@ -73,7 +73,7 @@ export function LeaveViewDrawer({
                 Leave Request Details
               </DrawerTitle>
               <DrawerDescription>
-                {leave.employee_full_name}
+                {leave.employee.full_name}
               </DrawerDescription>
             </div>
           </div>
@@ -89,15 +89,15 @@ export function LeaveViewDrawer({
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-600">Full Name</span>
-<p className="font-medium">{leave.employee_full_name}</p>
+<p className="font-medium">{leave.employee.full_name}</p>
               </div>
               <div>
                 <span className="text-gray-600">Email</span>
-                <p className="font-medium">{leave.employee_email || "—"}</p>
+                <p className="font-medium">{leave.employee.email || "—"}</p>
               </div>
               <div>
                 <span className="text-gray-600">Employee ID</span>
-                <p className="font-medium">{leave.employee_id}</p>
+                <p className="font-medium">{leave.employee.id}</p>
               </div>
             </div>
           </div>
@@ -111,7 +111,7 @@ export function LeaveViewDrawer({
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-600">Leave Type</span>
-                <p className="font-medium">{leave.leave_type_name}</p>
+                <p className="font-medium">{leave.leave_type.name}</p>
               </div>
               <div>
                 <span className="text-gray-600">Status</span>
@@ -120,13 +120,13 @@ export function LeaveViewDrawer({
               <div>
                 <span className="text-gray-600">Approver</span>
                 <p className="font-medium">
-                  {leave.approver_full_name || "-"}
+                  {leave.approver?.full_name || "-"}
                 </p>
               </div>
               <div>
                 <span className="text-gray-600">Reliver</span>
                 <p className="font-medium">
-                  {leave.reliever_full_name || "-"}
+                  {leave.reliever?.full_name || "-"}
                 </p>
               </div>
               <div>

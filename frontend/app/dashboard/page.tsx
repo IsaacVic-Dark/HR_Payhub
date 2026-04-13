@@ -1,4 +1,3 @@
-// app/dashboard/page.tsx - Fixed version
 "use client";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
@@ -23,16 +22,16 @@ export default function Page() {
 
   const getUserName = () => {
     if (!user) return "";
-    if (user.first_name && user.surname) {
-      return `${user.first_name} ${user.surname}`;
+    if (user.employee.firstname && user.employee.surname) {
+      return `${user.employee.firstname} ${user.employee.surname}`;
     }
-    return user.email || "";
+    return user.username || "";
   };
 
   // const getUserInitials = () => {
   //   if (!user) return "U";
-  //   if (user.first_name && user.surname) {
-  //     return `${user.first_name[0]}${user.surname[0]}`.toUpperCase();
+  //   if (user.employee.firstname && user.employee.surname) {
+  //     return `${user.employee.firstname[0]}${user.employee.surname[0]}`.toUpperCase();
   //   }
   //   return user.email ? user.email[0].toUpperCase() : "U";
   // };

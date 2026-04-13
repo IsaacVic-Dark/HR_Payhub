@@ -114,7 +114,7 @@ const filters: {
         // Filter by search term if provided
         const filteredEmployees = searchTerm
           ? employeesData.filter((emp: EmployeeType) =>
-              `${emp.first_name} ${emp.surname}`
+              `${emp.firstname} ${emp.surname}`
                 .toLowerCase()
                 .includes(searchTerm.toLowerCase()),
             )
@@ -266,12 +266,12 @@ const filters: {
     searchTerm || selectedDepartment || selectedStatus || selectedJobTitle;
 
   // Get unique values for filter dropdowns
-  const departments = Array.from(
-    new Set(employees.map((emp) => emp.department)),
-  ).filter(Boolean);
-  const jobTitles = Array.from(
-    new Set(employees.map((emp) => emp.job_title)),
-  ).filter(Boolean);
+const departments = Array.from(
+  new Set(employees.map((emp) => emp.department?.name).filter(Boolean)),
+);
+const jobTitles = Array.from(
+  new Set(employees.map((emp) => emp.job_title?.title).filter(Boolean)),
+);
   const statuses = Array.from(
     new Set(employees.map((emp) => emp.status)),
   ).filter(Boolean);
@@ -296,15 +296,15 @@ const filters: {
         <div className="flex items-center space-x-3">
           <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
             <span className="font-medium text-gray-700">
-              {employee.first_name[0]}
+              {employee.firstname[0]}
               {employee.surname[0]}
             </span>
           </div>
           <div>
             <p className="font-medium text-gray-900">
-              {employee.first_name} {employee.surname}
+              {employee.firstname} {employee.surname}
             </p>
-            <p className="text-xs text-gray-500">{employee.email}</p>
+            <p className="text-xs text-gray-500">{employee.user?.email ?? employee.personalemail}</p>
           </div>
         </div>
       ),
@@ -313,14 +313,14 @@ const filters: {
       key: "job_title",
       header: "Position",
       cell: (employee) => (
-        <span className="text-sm text-gray-700">{employee.job_title}</span>
+        <span className="text-sm text-gray-700">{employee.job_title?.title ?? "—"}</span>
       ),
     },
     {
       key: "department",
       header: "Department",
       cell: (employee) => (
-        <span className="text-sm text-gray-700">{employee.department_id}</span>
+        <span className="text-sm text-gray-700">{employee.department?.name ?? "—"}</span>
       ),
     },
     {
@@ -345,13 +345,13 @@ const filters: {
           <EmployeeDrawer
             employee={{
               id: employee.id.toString(),
-              name: `${employee.first_name} ${employee.surname}`,
+              name: `${employee.firstname} ${employee.surname}`,
               email: employee.email,
               p_email: employee.personal_email || "",
               personal_email: employee.personal_email || "",
               phone: employee.phone || "",
-              position: employee.job_title,
-              department: employee.department,
+              position: employee.job_title?.title ?? "",
+              department: employee.department?.name ?? "",
               status: employee.status as unknown as DrawerEmployeeStatus,
               salary: parseFloat(employee.base_salary),
               hire_date: employee.hire_date,
@@ -363,7 +363,7 @@ const filters: {
               img: (
                 <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
                   <span className="font-medium text-gray-700">
-                    {employee.first_name[0]}
+                    {employee.firstname[0]}
                     {employee.surname[0]}
                   </span>
                 </div>
@@ -377,13 +377,13 @@ const filters: {
           <EmployeeDrawerEdit
             employee={{
               id: employee.id.toString(),
-              name: `${employee.first_name} ${employee.surname}`,
+              name: `${employee.firstname} ${employee.surname}`,
               email: employee.email,
               p_email: employee.personal_email || "",
               personal_email: employee.personal_email || "",
               phone: employee.phone || "",
-              position: employee.job_title,
-              department: employee.department,
+              position: employee.job_title?.title ?? "",
+              department: employee.department?.name ?? "",
               status: (employee.status as unknown) as DrawerEmployeeStatus,
               salary: parseFloat(employee.base_salary),
               hire_date: employee.hire_date,
@@ -395,7 +395,7 @@ const filters: {
               img: (
                 <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
                   <span className="font-medium text-gray-700">
-                    {employee.first_name[0]}
+                    {employee.firstname[0]}
                     {employee.surname[0]}
                   </span>
                 </div>
@@ -584,7 +584,7 @@ const filters: {
             <AlertDialogDescription>
               Are you sure you want to delete the employee{" "}
               <strong>
-                {employeeToDelete?.first_name} {employeeToDelete?.surname}
+                {employeeToDelete?.firstname} {employeeToDelete?.surname}
               </strong>
               ?
               <br />

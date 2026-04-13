@@ -29,6 +29,7 @@ import {
   EmployeeType as ApiEmployeeType,
 } from "@/services/api/employee";
 import { departmentAPI } from "@/services/api/department";
+import { formatCurrency } from "@/utils/currency";
 import { toast } from "sonner";
 
 type EmploymentType = "full_time" | "part_time" | "contract";
@@ -104,7 +105,7 @@ export function EmployeeDrawerAdd({
 
   const [formData, setFormData] = React.useState({
     employee_number: "",
-    first_name: "",
+    firstname: "",
     middle_name: "",
     surname: "",
     email: "",
@@ -138,8 +139,8 @@ export function EmployeeDrawerAdd({
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.first_name.trim()) {
-      newErrors.first_name = "First name is required";
+    if (!formData.firstname.trim()) {
+      newErrors.firstname = "First name is required";
     }
     if (!formData.surname.trim()) {
       newErrors.surname = "Surname is required";
@@ -189,7 +190,7 @@ export function EmployeeDrawerAdd({
     try {
       // Build payload with proper types - no null values
       const payload: {
-        first_name: string;
+        firstname: string;
         middle_name?: string;
         surname: string;
         email: string;
@@ -209,7 +210,7 @@ export function EmployeeDrawerAdd({
         username: string;
         user_id: number;
       } = {
-        first_name: formData.first_name,
+        firstname: formData.firstname,
         surname: formData.surname,
         email: formData.email,
         employee_number: formData.employee_number,
@@ -221,7 +222,7 @@ export function EmployeeDrawerAdd({
         status: formData.status as Employee["status"], // Cast to the correct type
         employment_type: formData.employment_type as EmploymentType,
         work_location: formData.work_location as WorkLocation,
-        username: `${formData.first_name.toLowerCase()}.${formData.surname.toLowerCase()}`,
+        username: `${formData.firstname.toLowerCase()}.${formData.surname.toLowerCase()}`,
         user_id: 0, // This should come from user creation
       };
 
@@ -272,7 +273,7 @@ export function EmployeeDrawerAdd({
   const resetForm = () => {
     setFormData({
       employee_number: "",
-      first_name: "",
+      firstname: "",
       middle_name: "",
       surname: "",
       email: "",
@@ -299,14 +300,13 @@ export function EmployeeDrawerAdd({
   };
 
   const initials =
-    `${formData.first_name[0] || ""}${formData.surname[0] || ""}`.toUpperCase();
+    `${formData.firstname[0] || ""}${formData.surname[0] || ""}`.toUpperCase();
 
   const operationsManagers =
     employees?.filter((emp) =>
-      emp.job_title?.toLowerCase().includes("manager"),
+      emp.job_title.title?.toLowerCase().includes("manager"),
     ) || [];
 
-  console.log("Departments loaded in EmployeeDrawerAdd:", departments);
   console.log("All employees for 'Reports To' dropdown:", employees);
   console.log(
     "Operations Managers for 'Reports To' dropdown:",
@@ -360,32 +360,38 @@ export function EmployeeDrawerAdd({
                     <div className="absolute -bottom-1 -right-1 h-6 w-6 bg-green-500 rounded-full border-2 border-white"></div>
                   </div>
                   <div className="flex-1">
-<div className="flex items-center space-x-2 mb-1">
-  <div className="flex-1">
-    <Input
-      placeholder="Employee Number (e.g. EMP001)"
-      value={formData.employee_number}
-      onChange={(e) => handleInputChange("employee_number", e.target.value)}
-      className={errors.employee_number ? "border-red-500" : ""}
-    />
-    {errors.employee_number && (
-      <p className="text-xs text-red-500 mt-1">{errors.employee_number}</p>
-    )}
-  </div>
-</div>
+                    <div className="flex items-center space-x-2 mb-1">
+                      <div className="flex-1">
+                        <Input
+                          placeholder="Employee Number (e.g. EMP001)"
+                          value={formData.employee_number}
+                          onChange={(e) =>
+                            handleInputChange("employee_number", e.target.value)
+                          }
+                          className={
+                            errors.employee_number ? "border-red-500" : ""
+                          }
+                        />
+                        {errors.employee_number && (
+                          <p className="text-xs text-red-500 mt-1">
+                            {errors.employee_number}
+                          </p>
+                        )}
+                      </div>
+                    </div>
                     <div className="grid grid-cols-3 gap-2">
                       <div>
                         <Input
                           placeholder="First Name"
-                          value={formData.first_name}
+                          value={formData.firstname}
                           onChange={(e) =>
-                            handleInputChange("first_name", e.target.value)
+                            handleInputChange("firstname", e.target.value)
                           }
-                          className={errors.first_name ? "border-red-500" : ""}
+                          className={errors.firstname ? "border-red-500" : ""}
                         />
-                        {errors.first_name && (
+                        {errors.firstname && (
                           <p className="text-xs text-red-500 mt-1">
-                            {errors.first_name}
+                            {errors.firstname}
                           </p>
                         )}
                       </div>
@@ -642,7 +648,7 @@ export function EmployeeDrawerAdd({
                               key={manager.id}
                               value={manager.id.toString()}
                             >
-                              {manager.first_name} {manager.surname} -{" "}
+                              {manager.firstname} {manager.surname} -{" "}
                               {manager.job_title}
                             </SelectItem>
                           ))
@@ -884,7 +890,7 @@ export function EmployeeDrawer({
                 <div>
                   <span className="text-gray-600">Personal Email</span>
                   <p className="font-medium">
-                    {employee.personal_email || "N/A"}
+                    {employee.personalemail || "N/A"}
                   </p>
                 </div>
                 <div>
@@ -899,7 +905,6 @@ export function EmployeeDrawer({
                 </div>
 
                 {/* TODO : Add start date input field and logic*/}
-
               </div>
             </div>
 
@@ -912,7 +917,7 @@ export function EmployeeDrawer({
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-gray-600">Department</span>
-                  <p className="font-medium">{employee.department}</p>
+                  <p className="font-medium">{employee.department.name}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Position</span>
@@ -932,7 +937,9 @@ export function EmployeeDrawer({
                 </div>
                 <div>
                   <span className="text-gray-600">Reports To</span>
-                  <p className="font-medium">{employee.reports_to || "N/A"}</p>
+                  <p className="font-medium">
+                    {employee.reports_to.firstname || "N/A"}
+                  </p>
                 </div>
               </div>
             </div>
@@ -947,10 +954,7 @@ export function EmployeeDrawer({
                 <div>
                   <span className="text-gray-600">Base Salary</span>
                   <p className="font-medium">
-                    {new Intl.NumberFormat("en-US", {
-                      style: "currency",
-                      currency: "USD",
-                    }).format(employee.salary)}
+                    {formatCurrency(employee.salary)}
                   </p>
                 </div>
                 <div>
@@ -994,7 +998,7 @@ export function EmployeeDrawerEdit({
   const { user } = useAuth();
 
   const [formData, setFormData] = React.useState({
-    first_name: employee.name.split(" ")[0] || "",
+    firstname: employee.name.split(" ")[0] || "",
     middle_name: "",
     surname: employee.name.split(" ").slice(1).join(" ") || "",
     email: employee.email || "",
@@ -1029,8 +1033,8 @@ export function EmployeeDrawerEdit({
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
-    if (!formData.first_name.trim()) {
-      newErrors.first_name = "First name is required";
+    if (!formData.firstname.trim()) {
+      newErrors.firstname = "First name is required";
     }
     if (!formData.surname.trim()) {
       newErrors.surname = "Surname is required";
@@ -1073,7 +1077,7 @@ export function EmployeeDrawerEdit({
     try {
       // Build payload with only changed fields
       const payload: {
-        first_name?: string;
+        firstname?: string;
         middle_name?: string;
         surname?: string;
         email?: string;
@@ -1095,8 +1099,8 @@ export function EmployeeDrawerEdit({
       const originalFirstName = employee.name.split(" ")[0] || "";
       const originalSurname = employee.name.split(" ").slice(1).join(" ") || "";
 
-      if (formData.first_name !== originalFirstName)
-        payload.first_name = formData.first_name;
+      if (formData.firstname !== originalFirstName)
+        payload.firstname = formData.firstname;
 
       // Handle middle_name - only include if it has a value, otherwise omit it
       if (formData.middle_name && formData.middle_name.trim()) {
@@ -1200,7 +1204,7 @@ export function EmployeeDrawerEdit({
   };
 
   const initials =
-    `${formData.first_name[0] || ""}${formData.surname[0] || ""}`.toUpperCase();
+    `${formData.firstname[0] || ""}${formData.surname[0] || ""}`.toUpperCase();
 
   return (
     <>
@@ -1256,15 +1260,15 @@ export function EmployeeDrawerEdit({
                       <div>
                         <Input
                           placeholder="First Name"
-                          value={formData.first_name}
+                          value={formData.firstname}
                           onChange={(e) =>
-                            handleInputChange("first_name", e.target.value)
+                            handleInputChange("firstname", e.target.value)
                           }
-                          className={errors.first_name ? "border-red-500" : ""}
+                          className={errors.firstname ? "border-red-500" : ""}
                         />
-                        {errors.first_name && (
+                        {errors.firstname && (
                           <p className="text-xs text-red-500 mt-1">
-                            {errors.first_name}
+                            {errors.firstname}
                           </p>
                         )}
                       </div>

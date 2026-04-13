@@ -23,10 +23,11 @@ type PayrunDetailType = {
   employee_number: string;
   job_title: string;
   department: string;
-  employee_first_name: string;
-  employee_middle_name: string | null;
+  employee_firstname: string; 
+  employee_middlename: string | null; 
   employee_surname: string;
-  employee_email: string;
+  employee_email: string; 
+  employee_personal_email: string; 
   employee_full_name: string;
 };
 
@@ -118,7 +119,7 @@ class PayrunDetailAPI {
   async getPayrunEmployees(
     organizationId: number,
     payrunId: number,
-    filters: PayrunDetailFilters = {}
+    filters: PayrunDetailFilters = {},
   ): Promise<ApiResponse<PayrunDetailType[]>> {
     try {
       const queryParams = this.buildQueryParams(filters);
@@ -149,7 +150,7 @@ class PayrunDetailAPI {
   async getPayrunDetailById(
     organizationId: number,
     payrunId: number,
-    detailId: number
+    detailId: number,
   ): Promise<ApiResponse<PayrunDetailType>> {
     try {
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/details/${detailId}`;
@@ -182,7 +183,7 @@ class PayrunDetailAPI {
       bonus_amount?: number;
       commission_amount?: number;
       extra_deductions?: number;
-    }
+    },
   ): Promise<ApiResponse> {
     try {
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/details`;
@@ -217,7 +218,7 @@ class PayrunDetailAPI {
       bonus_amount?: number;
       commission_amount?: number;
       extra_deductions?: number;
-    }
+    },
   ): Promise<ApiResponse> {
     try {
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/details/${detailId}`;
@@ -244,7 +245,7 @@ class PayrunDetailAPI {
   async deletePayrunDetail(
     organizationId: number,
     payrunId: number,
-    detailId: number
+    detailId: number,
   ): Promise<ApiResponse> {
     try {
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/details/${detailId}`;
