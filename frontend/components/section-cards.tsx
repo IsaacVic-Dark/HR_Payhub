@@ -23,8 +23,8 @@ interface CardDetail {
 // Define the props interface for the component
 interface SectionCardsProps {
   details: CardDetail[];
-  loading: boolean;
-  error: string | null;
+  loading?: boolean;
+  error?: string | null;
 }
 
 // In section-cards.tsx, change the main div class
