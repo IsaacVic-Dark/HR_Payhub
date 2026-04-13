@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { DataTable, ColumnDef } from "@/components/table";
 import { useAuth } from "@/lib/AuthContext";
 import { useRouter } from "next/navigation";
+import { formatCurrency } from "@/utils/currency";
 
 const PayrunTable: React.FC = () => {
   const { user } = useAuth();
@@ -262,10 +263,7 @@ const PayrunTable: React.FC = () => {
       key: "total_net_pay",
       header: "Total Net Pay",
       cell: (payrun) =>
-        `Kshs ${payrun.total_net_pay.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`,
+        `Kshs ${formatCurrency(payrun.total_net_pay)}`,
     },
     {
       key: "employee_count",

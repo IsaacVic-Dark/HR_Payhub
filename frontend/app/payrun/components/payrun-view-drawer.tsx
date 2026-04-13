@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { PayrunType } from "@/services/api/payrun";
 import { Calendar, User, DollarSign, Trash2 } from "lucide-react";
+import { formatCurrency } from "@/utils/currency";
 
 interface PayrunViewDrawerProps {
   open: boolean;
@@ -129,28 +130,19 @@ export function PayrunViewDrawer({
               <div>
                 <span className="text-gray-600">Total Gross Pay</span>
                 <p className="font-medium">
-                  Kshs {payrun.total_gross_pay.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  Kshs {formatCurrency(payrun.total_gross_pay)}
                 </p>
               </div>
               <div>
                 <span className="text-gray-600">Total Deductions</span>
                 <p className="font-medium">
-                  Kshs {payrun.total_deductions.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  Kshs {formatCurrency(payrun.total_deductions)}
                 </p>
               </div>
               <div>
                 <span className="text-gray-600">Total Net Pay</span>
                 <p className="font-medium text-green-600">
-                  Kshs {payrun.total_net_pay.toLocaleString("en-US", {
-                    minimumFractionDigits: 2,
-                    maximumFractionDigits: 2,
-                  })}
+                  Kshs {formatCurrency(payrun.total_net_pay)}
                 </p>
               </div>
             </div>
