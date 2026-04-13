@@ -4,13 +4,28 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { useRouter } from "next/navigation";
 import { authService } from '@/services/api/auth';
 
+interface JobTitle {
+  id: number;
+  title: string;
+}
+
+interface Employee {
+  id: number;
+  firstname: string;
+  middlename: string | null;
+  surname: string;
+  personalemail: string;
+  job_title: JobTitle;
+  status: "active" | "inactive";
+}
+
 interface User {
   id: number;
   email: string;
-  first_name: string;
-  surname: string;
+  username: string;
   user_type: string;
   organization_id: number;
+  employee: Employee;
 }
 
 interface AuthContextType {
