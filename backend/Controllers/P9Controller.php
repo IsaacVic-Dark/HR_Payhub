@@ -44,9 +44,9 @@ use App\Middleware\AuthMiddleware;
  *  }
  *
  * ── Supporting tables used ───────────────────────────────────────────────────
- *  employees          id, organization_id, user_id, employee_number,
- *                     department_id, reports_to, base_salary, status
- *  users              id, first_name, surname, user_type
+*  employees          id, organization_id, user_id, employee_number,
+*                     firstname, middlename, surname, ...
+*  users              id, user_type   (name fields moved to employees)
  *  employee_profiles  employee_id, kra_pin, nssf_number, shif_number,
  *                     paye_exemption_type, paye_exemption_amount
  *  organizations      id, name, kra_pin, nssf_number
@@ -225,14 +225,14 @@ class P9Controller
                     p9.pdfpath,
                     p9.generatedat,
                     emp.employee_number,
-                    CONCAT(u.first_name, ' ', u.surname) AS employee_name,
+                    CONCAT(emp.firstname, ' ', emp.surname) AS employee_name,
                     d.name                               AS department_name
                  FROM p9forms p9
                  INNER JOIN employees   emp ON emp.id = p9.employeeid
                  INNER JOIN users       u   ON u.id   = emp.user_id
                  LEFT  JOIN departments d   ON d.id   = emp.department_id
                  $where
-                 ORDER BY p9.year DESC, u.surname ASC
+                 ORDER BY p9.year DESC, emp.surname ASC
                  LIMIT :limit OFFSET :offset",
                 $params
             );
@@ -1179,13 +1179,12 @@ class P9Controller
                 p9.status,
                 p9.generatedat,
                 emp.employee_number,
-                CONCAT(u.first_name, ' ', u.surname) AS employee_name,
+                CONCAT(emp.firstname, ' ', emp.surname) AS employee_name,
                 d.name   AS department_name,
                 org.name AS organization_name,
                 org.kra_pin AS employer_pin
              FROM  p9forms p9
              INNER JOIN employees    emp ON emp.id  = p9.employeeid
-             INNER JOIN users        u   ON u.id    = emp.user_id
              INNER JOIN organizations org ON org.id = p9.organizationid
              LEFT  JOIN departments  d   ON d.id    = emp.department_id
              WHERE p9.id = :id AND p9.organizationid = :org
@@ -1240,9 +1239,8 @@ class P9Controller
                     e.department_id,
                     e.organization_id,
                     e.base_salary,
-                    CONCAT(u.first_name, ' ', u.surname) AS full_name
+                    CONCAT(e.firstname, ' ', e.surname) AS full_name
                 FROM employees e
-                INNER JOIN users u ON u.id = e.user_id
                 WHERE e.organization_id = :org
                   AND e.status = 'active'";
 

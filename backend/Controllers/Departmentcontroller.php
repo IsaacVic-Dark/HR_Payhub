@@ -74,9 +74,9 @@ class DepartmentController
             $query = "
                 SELECT
                     d.*,
-                    CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.surname, '')) AS head_full_name,
-                    u.first_name      AS head_first_name,
-                    u.surname         AS head_surname,
+                    CONCAT(COALESCE(e.firstname, ''), ' ', COALESCE(e.surname, '')) AS head_full_name,
+                    e.firstname       AS head_first_name,
+                    e.surname         AS head_surname,
                     u.email           AS head_email,
                     e.employee_number AS head_employee_number,
                     (
@@ -190,9 +190,9 @@ class DepartmentController
             $query = "
                 SELECT
                     d.*,
-                    CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.surname, '')) AS head_full_name,
-                    u.first_name      AS head_first_name,
-                    u.surname         AS head_surname,
+                    CONCAT(COALESCE(e.firstname, ''), ' ', COALESCE(e.surname, '')) AS head_full_name,
+                    e.firstname       AS head_first_name,
+                    e.surname         AS head_surname,
                     u.email           AS head_email,
                     e.employee_number AS head_employee_number,
                     (
@@ -542,7 +542,7 @@ class DepartmentController
             // Soft delete — set is_active = 0
             DB::table('departments')->update(['is_active' => 0], 'id', $id);
 
-            $this->createAuditLog($org_id, $currentUser['id'], 'departments', $id, 'deactivate', [
+            $this->createAuditLog($org_id, $currentUser['id'], 'departments', $id, 'delete', [
                 'previous_is_active' => 1,
                 'new_is_active' => 0,
             ]);
@@ -617,9 +617,8 @@ class DepartmentController
             }
 
             $empCheck = DB::raw(
-                "SELECT e.id, u.first_name, u.surname
+                "SELECT e.id, e.firstname, e.surname
      FROM employees e
-     LEFT JOIN users u ON e.user_id = u.id
      WHERE e.id = :id AND e.organization_id = :org_id LIMIT 1",
                 [':id' => $data['head_employee_id'], ':org_id' => $org_id]
             );
@@ -642,7 +641,7 @@ class DepartmentController
                 $id
             );
 
-            $this->createAuditLog($org_id, $currentUser['id'], 'departments', $id, 'assign_head', [
+            $this->createAuditLog($org_id, $currentUser['id'], 'departments', $id, 'update', [
                 'previous_head_employee_id' => $previousHeadId,
                 'new_head_employee_id' => (int) $data['head_employee_id'],
             ]);
@@ -652,7 +651,7 @@ class DepartmentController
                 data: [
                     'department_id' => (int) $id,
                     'head_employee_id' => (int) $data['head_employee_id'],
-                    'head_full_name' => $empCheck[0]->first_name . ' ' . $empCheck[0]->surname,
+                    'head_full_name' => $empCheck[0]->firstname . ' ' . $empCheck[0]->surname,
                 ],
                 message: "Department head assigned successfully"
             );
@@ -736,13 +735,13 @@ class DepartmentController
             $total = (int) ($countResult[0]->total ?? 0);
 
             $employees = DB::raw(
-            "SELECT e.id, u.first_name, u.surname, u.email, e.employee_number, e.job_title,
+            "SELECT e.id, e.firstname, e.surname, u.email, e.employee_number, e.job_title_id,
                     e.department_id, e.status, e.employment_type, e.created_at
             FROM employees e
             LEFT JOIN users u ON e.user_id = u.id
             WHERE e.department_id = :dept_id AND e.organization_id = :org_id
             AND e.status NOT IN ('resigned', 'terminated', 'retired', 'deceased')
-            ORDER BY u.first_name ASC, u.surname ASC
+            ORDER BY e.firstname ASC, e.surname ASC
             LIMIT :limit OFFSET :offset",
             [':dept_id' => $id, ':org_id' => $org_id, ':limit' => (int) $perPage, ':offset' => (int) $offset]
             );
