@@ -26,6 +26,7 @@ type EmployeeType = {
   first_name: string;
   middle_name: string | null;
   surname: string;
+  workemail: string | null;
 };
 
 interface ApiResponse<T = any> {
@@ -76,6 +77,7 @@ interface CreateEmployeeData {
   first_name: string;
   middle_name?: string;
   surname: string;
+  workemail?: string;
 }
 
 interface UpdateEmployeeData {
@@ -96,6 +98,7 @@ interface UpdateEmployeeData {
   first_name?: string;
   middle_name?: string;
   surname?: string;
+  workemail?: string;
 }
 
 class EmployeeAPI {

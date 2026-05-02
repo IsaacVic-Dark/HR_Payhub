@@ -54,7 +54,8 @@ export type Employee = {
   department_id?: number;
   p_email: string;
   email: string;
-  personal_email?: string;
+  personalemail?: string;
+  workemail?: string | null;
   phone?: string;
   hire_date?: string;
   bank_account_number?: string;
@@ -109,7 +110,8 @@ export function EmployeeDrawerAdd({
     middle_name: "",
     surname: "",
     email: "",
-    personal_email: "",
+    personalemail: "",
+    workemail: "",
     phone: "",
     hire_date: new Date().toISOString().split("T")[0],
     job_title: "",
@@ -149,6 +151,11 @@ export function EmployeeDrawerAdd({
       newErrors.email = "Email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = "Invalid email format";
+    }
+    if (!formData.workemail.trim()) {
+      newErrors.workemail = "Work email is required";
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.workemail)) {
+      newErrors.workemail = "Invalid email format";
     }
     if (!formData.phone.trim()) {
       newErrors.phone = "Phone number is required";
@@ -195,7 +202,7 @@ export function EmployeeDrawerAdd({
         surname: string;
         email: string;
         employee_number: string;
-        personal_email?: string;
+        personalemail?: string;
         phone: string;
         hire_date: string;
         job_title: string;
@@ -217,7 +224,7 @@ export function EmployeeDrawerAdd({
         phone: formData.phone,
         hire_date: formData.hire_date,
         job_title: formData.job_title,
-        department: parseInt(formData.department),
+        department_id: parseInt(formData.department),
         base_salary: formData.base_salary,
         status: formData.status as Employee["status"], // Cast to the correct type
         employment_type: formData.employment_type as EmploymentType,
@@ -231,8 +238,8 @@ export function EmployeeDrawerAdd({
         payload.middle_name = formData.middle_name;
       }
 
-      if (formData.personal_email && formData.personal_email.trim()) {
-        payload.personal_email = formData.personal_email;
+      if (formData.personalemail && formData.personalemail.trim()) {
+        payload.personalemail = formData.personalemail;
       }
 
       if (
@@ -277,7 +284,7 @@ export function EmployeeDrawerAdd({
       middle_name: "",
       surname: "",
       email: "",
-      personal_email: "",
+      personalemail: "",
       phone: "",
       hire_date: new Date().toISOString().split("T")[0],
       job_title: "",
@@ -307,11 +314,7 @@ export function EmployeeDrawerAdd({
       emp.job_title.title?.toLowerCase().includes("manager"),
     ) || [];
 
-  console.log("All employees for 'Reports To' dropdown:", employees);
-  console.log(
-    "Operations Managers for 'Reports To' dropdown:",
-    operationsManagers,
-  );
+    console.log("Operations Managers:", operationsManagers);
 
   return (
     <>
@@ -444,9 +447,9 @@ export function EmployeeDrawerAdd({
                     <Input
                       type="email"
                       placeholder="employee@company.com"
-                      value={formData.email}
+                      value={formData.workemail}
                       onChange={(e) =>
-                        handleInputChange("email", e.target.value)
+                        handleInputChange("workemail", e.target.value)
                       }
                       className={errors.email ? "border-red-500" : ""}
                     />
@@ -461,9 +464,9 @@ export function EmployeeDrawerAdd({
                     <Input
                       type="email"
                       placeholder="personal@email.com"
-                      value={formData.personal_email}
+                      value={formData.personalemail}
                       onChange={(e) =>
-                        handleInputChange("personal_email", e.target.value)
+                        handleInputChange("personalemail", e.target.value)
                       }
                     />
                   </div>
@@ -648,8 +651,9 @@ export function EmployeeDrawerAdd({
                               key={manager.id}
                               value={manager.id.toString()}
                             >
-                              {manager.firstname} {manager.surname} -{" "}
-                              {manager.job_title}
+                              {/* {manager.firstname}  */}
+                              {manager.surname} -{" "}
+                              {/* {manager.job_title} */}
                             </SelectItem>
                           ))
                         ) : (
@@ -885,7 +889,7 @@ export function EmployeeDrawer({
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-gray-600">Work Email</span>
-                  <p className="font-medium">{employee.email}</p>
+                  <p className="font-medium">{employee.workemail || "N/A"}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Personal Email</span>
@@ -917,7 +921,7 @@ export function EmployeeDrawer({
               <div className="grid grid-cols-2 gap-4 text-sm">
                 <div>
                   <span className="text-gray-600">Department</span>
-                  <p className="font-medium">{employee.department.name}</p>
+                  <p className="font-medium">{employee.department}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">Position</span>
@@ -938,7 +942,7 @@ export function EmployeeDrawer({
                 <div>
                   <span className="text-gray-600">Reports To</span>
                   <p className="font-medium">
-                    {employee.reports_to.firstname || "N/A"}
+                    {employee.report_to || "N/A"}
                   </p>
                 </div>
               </div>
@@ -1002,7 +1006,8 @@ export function EmployeeDrawerEdit({
     middle_name: "",
     surname: employee.name.split(" ").slice(1).join(" ") || "",
     email: employee.email || "",
-    personal_email: employee.personal_email || "",
+    personalemail: employee.personalemail || "",
+    workemail: employee.workemail || "",
     phone: employee.phone || "",
     hire_date: employee.hire_date || new Date().toISOString().split("T")[0],
     job_title: employee.position || "",
@@ -1029,6 +1034,18 @@ export function EmployeeDrawerEdit({
       }
     });
   }, [user?.organization_id]);
+
+  React.useEffect(() => {
+    if (departments.length > 0 && employee.department_id) {
+      const match = departments.find((d) => d.id === employee.department_id);
+      if (match) {
+        setFormData((prev) => ({
+          ...prev,
+          department: match.id.toString(),
+        }));
+      }
+    }
+  }, [departments, employee.department_id]);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -1082,7 +1099,8 @@ export function EmployeeDrawerEdit({
         surname?: string;
         email?: string;
         employee_number: string;
-        personal_email?: string;
+        personalemail?: string;
+        workemail?: string;
         phone?: string;
         hire_date?: string;
         job_title?: string;
@@ -1109,19 +1127,20 @@ export function EmployeeDrawerEdit({
 
       if (formData.surname !== originalSurname)
         payload.surname = formData.surname;
-      if (formData.email !== employee.email) payload.email = formData.email;
+      if (formData.workemail !== (employee.workemail || ""))
+        payload.workemail = formData.workemail;
 
-      // Fix for personal_email - use undefined instead of null
-      if (formData.personal_email !== (employee.personal_email || "")) {
+      // Fix for personalemail - use undefined instead of null
+      if (formData.personalemail !== (employee.personalemail || "")) {
         // Only include if it has a value, otherwise omit (undefined)
-        if (formData.personal_email && formData.personal_email.trim()) {
-          payload.personal_email = formData.personal_email;
+        if (formData.personalemail && formData.personalemail.trim()) {
+          payload.personalemail = formData.personalemail;
         }
         // If it's empty and the original had a value, we want to clear it
         // But since we can't send null, we need to check if the API accepts empty string
         // Option 1: Send empty string if the API accepts it
-        else if (employee.personal_email) {
-          payload.personal_email = ""; // or omit this line if you don't want to clear it
+        else if (employee.personalemail) {
+          payload.personalemail = ""; // or omit this line if you don't want to clear it
         }
       }
 
@@ -1322,14 +1341,14 @@ export function EmployeeDrawerEdit({
                     <Input
                       type="email"
                       placeholder="employee@company.com"
-                      value={formData.email}
+                      value={formData.workemail}
                       onChange={(e) =>
-                        handleInputChange("email", e.target.value)
+                        handleInputChange("workemail", e.target.value)
                       }
-                      className={errors.email ? "border-red-500" : ""}
+                      className={errors.workemail ? "border-red-500" : ""}
                     />
-                    {errors.email && (
-                      <p className="text-xs text-red-500">{errors.email}</p>
+                    {errors.workemail && (
+                      <p className="text-xs text-red-500">{errors.workemail}</p>
                     )}
                   </div>
                   <div className="space-y-2">
@@ -1339,9 +1358,9 @@ export function EmployeeDrawerEdit({
                     <Input
                       type="email"
                       placeholder="personal@email.com"
-                      value={formData.personal_email}
+                      value={formData.personalemail}
                       onChange={(e) =>
-                        handleInputChange("personal_email", e.target.value)
+                        handleInputChange("personalemail", e.target.value)
                       }
                     />
                   </div>

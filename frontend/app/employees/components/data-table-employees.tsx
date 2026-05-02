@@ -346,9 +346,9 @@ const jobTitles = Array.from(
             employee={{
               id: employee.id.toString(),
               name: `${employee.firstname} ${employee.surname}`,
-              email: employee.email,
-              p_email: employee.personal_email || "",
-              personal_email: employee.personal_email || "",
+              // email: employee.email,
+              workemail: employee.workemail || "",
+              personalemail: employee.personalemail || "",
               phone: employee.phone || "",
               position: employee.job_title?.title ?? "",
               department: employee.department?.name ?? "",
@@ -358,7 +358,15 @@ const jobTitles = Array.from(
               bank_account_number: employee.bank_account_number || "",
               work_location: employee.work_location,
               employment_type: employee.employment_type,
-              reports_to: employee.reports_to?.toString() || "",
+              report_to: employee.report_to
+                ? [
+                    employee.report_to.firstname,
+                    employee.report_to.middlename,
+                    employee.report_to.surname
+                  ]
+                    .filter(Boolean)
+                    .join(" ")
+                : "",
               location: employee.work_location,
               img: (
                 <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
@@ -390,7 +398,7 @@ const jobTitles = Array.from(
               bank_account_number: employee.bank_account_number || "",
               work_location: employee.work_location,
               employment_type: employee.employment_type,
-              reports_to: employee.reports_to?.toString() || "",
+              report_to: employee.report_to?.firstname || "",
               location: employee.work_location,
               img: (
                 <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">

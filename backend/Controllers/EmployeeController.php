@@ -161,6 +161,7 @@ class EmployeeController
                 'middle_name' => 'string',
                 'surname' => 'required,string',
                 'personal_email' => 'email',
+                'workemail' => 'email',
                 'phone' => 'string',
                 'hire_date' => 'required,string',
                 'start_date' => 'required,string',
@@ -311,15 +312,21 @@ class EmployeeController
                 }
 
                 // 6. Insert employee — user_id will be null if has_user is false
+                $workemail = $hasUser
+                    ? $email  // already generated in the has_user block above
+                    : (!empty($data['workemail'])
+                        ? $data['workemail']
+                        : null);  // will be set by migration for existing; new ones need it supplied or leave null
+
                 $insertEmployeeSQL = "INSERT INTO employees (
-                    organization_id, user_id, has_user, employee_number, phone,
-                    hire_date, start_date, job_title, department_id, reports_to,
-                    base_salary, bank_account_number, tax_id, created_at
-                ) VALUES (
-                    :org_id, :user_id, :has_user, :employee_number, :phone,
-                    :hire_date, :start_date, :job_title, :department_id, :reports_to,
-                    :base_salary, :bank_account_number, :tax_id, NOW()
-                )";
+    organization_id, user_id, has_user, employee_number, phone,
+    hire_date, start_date, job_title, department_id, reports_to,
+    base_salary, bank_account_number, tax_id, workemail, created_at
+) VALUES (
+    :org_id, :user_id, :has_user, :employee_number, :phone,
+    :hire_date, :start_date, :job_title, :department_id, :reports_to,
+    :base_salary, :bank_account_number, :tax_id, :workemail, NOW()
+)";
 
                 DB::raw($insertEmployeeSQL, [
                     ':org_id'              => $orgId,
@@ -334,7 +341,8 @@ class EmployeeController
                     ':reports_to'          => $data['reports_to'],
                     ':base_salary'         => $data['base_salary'],
                     ':bank_account_number' => $data['bank_account_number'],
-                    ':tax_id'              => $data['tax_id']
+                    ':tax_id'              => $data['tax_id'],
+                    ':workemail'           => $workemail,
                 ]);
 
 
@@ -440,16 +448,16 @@ class EmployeeController
                 }
 
                 // 13. Seed leave_balances for all active leave types in this org
-$activeLeaveTypes = DB::raw(
-    "SELECT id, days_per_year FROM leave_types
+                $activeLeaveTypes = DB::raw(
+                    "SELECT id, days_per_year FROM leave_types
      WHERE organization_id = :org_id AND is_active = 1",
-    [':org_id' => $orgId]
-);
+                    [':org_id' => $orgId]
+                );
 
-$currentYear = (int) date('Y');
-foreach ($activeLeaveTypes as $leaveType) {
-    DB::raw(
-        "INSERT IGNORE INTO leave_balances (
+                $currentYear = (int) date('Y');
+                foreach ($activeLeaveTypes as $leaveType) {
+                    DB::raw(
+                        "INSERT IGNORE INTO leave_balances (
             organization_id,
             employee_id,
             leave_type_id,
@@ -470,15 +478,15 @@ foreach ($activeLeaveTypes as $leaveType) {
             0, 0, 0, 0, 0,
             NOW()
         )",
-        [
-            ':org_id'        => $orgId,
-            ':employee_id'   => $employeeId,
-            ':leave_type_id' => $leaveType->id,
-            ':leave_year'    => $currentYear,
-            ':entitled_days' => $leaveType->days_per_year ?? 0,
-        ]
-    );
-}
+                        [
+                            ':org_id'        => $orgId,
+                            ':employee_id'   => $employeeId,
+                            ':leave_type_id' => $leaveType->id,
+                            ':leave_year'    => $currentYear,
+                            ':entitled_days' => $leaveType->days_per_year ?? 0,
+                        ]
+                    );
+                }
 
                 $inserted = true;
             });
@@ -496,7 +504,7 @@ foreach ($activeLeaveTypes as $leaveType) {
                 SELECT 
                     e.*, 
                     u.username, 
-                    u.email,
+                    u.email
                 FROM employees e 
                 LEFT JOIN users u ON e.user_id = u.id 
                 WHERE e.employee_number = :employee_number 
@@ -677,6 +685,7 @@ foreach ($activeLeaveTypes as $leaveType) {
                 'surname'            => 'string',
                 'email'              => 'email',
                 'personalemail'      => 'email',
+                'workemail'          => 'email',
                 'phone'              => 'string',
                 'hire_date'          => 'string',
                 'start_date'         => 'string',
@@ -685,7 +694,7 @@ foreach ($activeLeaveTypes as $leaveType) {
                 'department_id'      => 'numeric',
                 'reports_to'         => 'numeric',
                 'base_salary'        => 'numeric',
-                'bank_account_number'=> 'string',
+                'bank_account_number' => 'string',
                 'tax_id'             => 'string'
             ]);
 
@@ -740,6 +749,7 @@ foreach ($activeLeaveTypes as $leaveType) {
                 'reports_to'          => $data['reports_to']          ?? null,
                 'base_salary'         => $data['base_salary']         ?? null,
                 'bank_account_number' => $data['bank_account_number'] ?? null,
+                'workemail' => $data['workemail'] ?? null,
                 'tax_id'              => $data['tax_id']              ?? null,
             ], fn($v) => $v !== null);
 
@@ -748,7 +758,7 @@ foreach ($activeLeaveTypes as $leaveType) {
                 'middlename'   => $data['middlename']   ?? null,
                 'surname'      => $data['surname']      ?? null,
                 'email'        => $data['email']        ?? null,
-                'personalemail'=> $data['personalemail']?? null,
+                'personalemail' => $data['personalemail'] ?? null,
                 'user_type'    => $data['role']         ?? null,  // role maps to user_type on users table
             ], fn($v) => $v !== null);
 
@@ -824,6 +834,13 @@ foreach ($activeLeaveTypes as $leaveType) {
             // Update employee table
             if (!empty($employeeData)) {
                 DB::table('employees')->update($employeeData, 'id', $id);
+            }
+
+            if (isset($data['workemail']) && $employee->has_user && $employee->user_id) {
+                DB::raw(
+                    "UPDATE users SET email = :workemail WHERE id = :user_id",
+                    [':workemail' => $data['workemail'], ':user_id' => $employee->user_id]
+                );
             }
 
             // Update user table
@@ -1072,7 +1089,7 @@ foreach ($activeLeaveTypes as $leaveType) {
             $baseFields = "e.id, e.organization_id, e.employee_number, e.phone, e.hire_date, e.start_date,
                  e.department_id, e.status, e.created_at, e.updated_at, e.employment_type, e.work_location,
                  e.base_salary, e.bank_account_number, e.bank_name, e.tax_id, e.has_user,
-                 e.firstname, e.middlename, e.surname, e.personalemail,
+                 e.firstname, e.middlename, e.surname, e.personalemail, e.workemail,
                  e.job_title_id,
                  jt.title  AS job_title_title,
                  jt.grade  AS job_title_grade,
