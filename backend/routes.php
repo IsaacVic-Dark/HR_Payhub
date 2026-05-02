@@ -13,6 +13,7 @@ use App\Controllers\NotificationController;
 use App\Controllers\AuthController;
 use App\Controllers\PayrollController;
 use App\Controllers\DepartmentController;
+use App\Controllers\PayslipController;
 use App\Controllers\P9Controller;
 
 // Authentication routes - NO authentication required
@@ -519,6 +520,104 @@ Router::post('api/v1/organizations/{org_id}/payrolls/{id}/approve', PayrollContr
 Router::post('api/v1/organizations/{org_id}/payrolls/{id}/pay', PayrollController::class . '@pay', [
     ['AuthMiddleware', ['admin', 'finance_manager']],
     'PayrollAuthorizationMiddleware'
+]);
+
+
+ 
+// ---------------------------------------------------------------------------
+// Payslips
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/payslips/statistics
+// Roles: admin, payroll_manager, finance_manager, hr_manager, auditor
+Router::get('api/v1/organizations/{org_id}/payslips/statistics', PayslipController::class . '@statistics', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager', 'hr_manager', 'auditor']],
+    'PayslipAuthorizationMiddleware',
+]);
+ 
+// GET /api/v1/organizations/{org_id}/payslips
+// ?status=generated|sent|acknowledged &payrun_id= &employee_id= &month= &year= &page= &per_page=
+// Roles: all authenticated org members (employees see own only, enforced by middleware)
+Router::get('api/v1/organizations/{org_id}/payslips', PayslipController::class . '@index', [
+    'AuthMiddleware',
+    'PayslipAuthorizationMiddleware',
+]);
+ 
+// ---------------------------------------------------------------------------
+// Single payslip
+// ---------------------------------------------------------------------------
+ 
+// GET /api/v1/organizations/{org_id}/payslips/{id}
+// Roles: all authenticated (scoped by middleware per role)
+Router::get('api/v1/organizations/{org_id}/payslips/{id}', PayslipController::class . '@show', [
+    'AuthMiddleware',
+    'PayslipAuthorizationMiddleware',
+]);
+ 
+// POST /api/v1/organizations/{org_id}/payslips/{id}/acknowledge
+// Employee marks their own payslip as acknowledged (sent → acknowledged)
+// Roles: employee (own only), admin, payroll_manager
+Router::post('api/v1/organizations/{org_id}/payslips/{id}/acknowledge', PayslipController::class . '@acknowledge', [
+    'AuthMiddleware',
+    'PayslipAuthorizationMiddleware',
+]);
+ 
+// PATCH /api/v1/organizations/{org_id}/payslips/{id}/pdf-path
+// Store server PDF path after PDF generation
+// Body: { "pdf_path": "/storage/payslips/2024/04/PAYSLIP-2024-04-EMP133.pdf" }
+// Roles: admin, payroll_manager, payroll_officer
+Router::patch('api/v1/organizations/{org_id}/payslips/{id}/pdf-path', PayslipController::class . '@updatePdfPath', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'PayslipAuthorizationMiddleware',
+]);
+ 
+// ---------------------------------------------------------------------------
+// Employee-scoped
+// ---------------------------------------------------------------------------
+ 
+// GET /api/v1/organizations/{org_id}/employees/{id}/payslips
+// All payslips for one employee across all payruns
+// Roles: all authenticated (scoped by middleware per role)
+Router::get('api/v1/organizations/{org_id}/employees/{id}/payslips', PayslipController::class . '@employeePayslips', [
+    'AuthMiddleware',
+    'PayslipAuthorizationMiddleware',
+]);
+ 
+// ---------------------------------------------------------------------------
+// Payrun-scoped payslip routes
+// ---------------------------------------------------------------------------
+ 
+// GET /api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips
+// All payslips for a specific payrun (role-scoped)
+// Roles: all authenticated (scoped by middleware per role)
+Router::get('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips', PayslipController::class . '@payrunPayslips', [
+    'AuthMiddleware',
+    'PayslipAuthorizationMiddleware',
+]);
+ 
+// POST /api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/generate
+// Generate payslips from a finalized payrun.
+// Body (optional): { "employee_ids": [1, 2, 3], "regenerate": false }
+// Roles: admin, payroll_manager, payroll_officer
+Router::post('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/generate', PayslipController::class . '@generate', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'PayslipAuthorizationMiddleware',
+]);
+ 
+// POST /api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/bulk-send
+// Mark all generated payslips in a payrun as sent in one call.
+// Roles: admin, payroll_manager
+Router::post('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/bulk-send', PayslipController::class . '@bulkSend', [
+    ['AuthMiddleware', ['admin', 'payroll_manager']],
+    'PayslipAuthorizationMiddleware',
+]);
+ 
+// POST /api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/{id}/send
+// Send a single payslip to the employee (generated → sent).
+// Roles: admin, payroll_manager, payroll_officer, hr_officer
+Router::post('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/{id}/send', PayslipController::class . '@send', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer', 'hr_officer']],
+    'PayslipAuthorizationMiddleware',
 ]);
 
 // Test route
