@@ -13,6 +13,13 @@ import {
 } from "@/services/api/leave";
 import { useAuth } from "@/lib/AuthContext";
 import { IconCalendar, IconCheck, IconX, IconClock } from "@tabler/icons-react";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselPrevious,
+  CarouselNext,
+} from "@/components/ui/carousel";
 
 export default function MyLeavePage() {
   const pathname = usePathname();
@@ -33,7 +40,7 @@ export default function MyLeavePage() {
       try {
         const response = await leaveAPI.getEmployeeLeaves(
           user.organization_id,
-          user.employee.id
+          user.employee.id,
         );
 
         console.log("Employee Leaves statistics API Response:", response);
@@ -148,80 +155,98 @@ export default function MyLeavePage() {
             </div>
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
               {/* Leave Statistics */}
-              <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
+              {/* <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
                 <SectionCards details={cardDetails} loading={isLoading} error={null} />
-              </div>
+              </div> */}
 
               {/* Days Summary */}
               {daysCards.length > 0 && (
                 <div className="peer-data-[state=expanded]:xl:grid-cols-2 peer-data-[state=collapsed]:xl:grid-cols-3">
-                  <SectionCards details={daysCards} loading={isLoading} error={null} />
+                  <SectionCards
+                    details={daysCards}
+                    loading={isLoading}
+                    error={null}
+                  />
                 </div>
               )}
 
               {/* Leave Type Breakdown (if available) */}
               {statistics && (
-                <div className="mt-4">
-                  <h2 className="text-lg font-medium mb-4 mx-6">
-                    Leave Type Breakdown
-                  </h2>
-                  <div className="peer-data-[state=expanded]:xl:grid-cols-6 peer-data-[state=collapsed]:xl:grid-cols-6">
-                    <SectionCards
-                      details={[
+                <div className="mt-2">
+                  <div className="relative px-10">
+                  <Carousel
+                    opts={{ align: "start", dragFree: true }}
+                    className="w-full"
+                  >
+                    <CarouselContent className="">
+                      {[
                         {
                           title: "Sick",
-                          value: (statistics.by_type?.sick ?? 0).toString(),
-                          change: "",
-                          changeIcon: null,
-                          description: "Sick leaves taken",
-                          footerText: "Health related",
+                          value: statistics.by_type?.sick ?? 0,
+                          assigned: 2,
+                          taken: 0,
                         },
                         {
                           title: "Casual",
-                          value: (statistics.by_type?.casual ?? 0).toString(),
-                          change: "",
-                          changeIcon: null,
-                          description: "Casual leaves taken",
-                          footerText: "Personal time",
+                          value: statistics.by_type?.casual ?? 0,
+                          assigned: 2,
+                          taken: 0,
                         },
                         {
                           title: "Annual",
-                          value: (statistics.by_type?.annual ?? 0).toString(),
-                          change: "",
-                          changeIcon: null,
-                          description: "Annual leaves taken",
-                          footerText: "Vacation time",
+                          value: statistics.by_type?.annual ?? 0,
+                          assigned: 2,
+                          taken: 0,
                         },
                         {
                           title: "Maternity",
-                          value: (
-                            statistics.by_type?.maternity ?? 0
-                          ).toString(),
-                          change: "",
-                          changeIcon: null,
-                          description: "Maternity leaves taken",
-                          footerText: "Family planning",
+                          value: statistics.by_type?.maternity ?? 0,
+                          assigned: 2,
+                          taken: 0,
                         },
                         {
                           title: "Paternity",
-                          value: (
-                            statistics.by_type?.paternity ?? 0
-                          ).toString(),
-                          change: "",
-                          changeIcon: null,
-                          description: "Paternity leaves taken",
-                          footerText: "Family support",
+                          value: statistics.by_type?.paternity ?? 0,
+                          assigned: 2,
+                          taken: 0,
                         },
                         {
                           title: "Other",
-                          value: (statistics.by_type?.other ?? 0).toString(),
-                          change: "",
-                          changeIcon: null,
-                          description: "Other leaves taken",
-                          footerText: "Special cases",
+                          value: statistics.by_type?.other ?? 0,
+                          assigned: 2,
+                          taken: 0,
                         },
-                      ]}
-                    />
+                      ].map((leave) => (
+                        <CarouselItem
+                          key={leave.title}
+                          className="min-w-0 basis-1/2 sm:basis-1/3 lg:basis-1/3 xl:basis-1/4"
+                        >
+                          <SectionCards
+                            details={[
+                              {
+                                title: leave.title,
+                                value: leave.value.toString(),
+                                change: "",
+                                changeIcon: null,
+                                description: "Leave balance",
+                                footerText: (
+                                  <>
+                                    <b>{leave.assigned}</b> Leave days assigned{" "}
+                                    <b>{leave.taken}</b> days taken
+                                  </>
+                                ),
+                              },
+                            ]}
+                            loading={isLoading}
+                            error={null}
+                            single
+                          />
+                        </CarouselItem>
+                      ))}
+                    </CarouselContent>
+                      <CarouselPrevious className="left-0" />
+                      <CarouselNext className="right-0" />
+                  </Carousel>
                   </div>
                 </div>
               )}
