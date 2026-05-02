@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS `employees` (
   `middlename` varchar(255) DEFAULT NULL,
   `surname` varchar(255) NOT NULL,
   `personalemail` VARCHAR(255) NOT NULL UNIQUE,
+  `workemail` VARCHAR(255) DEFAULT NULL UNIQUE,
   `phone` varchar(20) DEFAULT NULL,
   `hire_date` date NOT NULL,
   `start_date` date NOT NULL,
