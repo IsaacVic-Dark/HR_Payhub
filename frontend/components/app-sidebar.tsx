@@ -147,19 +147,19 @@ const data = {
       url: "/payslips",
       icon: IconReceipt,
       roles: ["super_admin", "admin", "payroll_manager"],
-      hasDropdown: true,
-      items: [
-        {
-          title: "Generate Payslips",
-          url: "/payslips/generate",
-          roles: ["super_admin", "admin", "payroll_manager"],
-        },
-        {
-          title: "Distribute Payslips",
-          url: "/payslips/distribute",
-          roles: ["super_admin", "admin", "payroll_manager"],
-        },
-      ],
+      // hasDropdown: true,
+      // items: [
+      //   {
+      //     title: "Generate Payslips",
+      //     url: "/payslips/generate",
+      //     roles: ["super_admin", "admin", "payroll_manager"],
+      //   },
+      //   {
+      //     title: "Distribute Payslips",
+      //     url: "/payslips/distribute",
+      //     roles: ["super_admin", "admin", "payroll_manager"],
+      //   },
+      // ],
     },
     {
       title: "P9 Forms",
@@ -249,7 +249,13 @@ const data = {
   selfServiceSection: [
     {
       title: "My Payslips",
-      url: "/my-payslips",
+      url: "/mypayslips",
+      icon: IconReceipt,
+      roles: ["employee"],
+    },
+    {
+      title: "My P9Form",
+      url: "/myp9",
       icon: IconReceipt,
       roles: ["employee"],
     },
