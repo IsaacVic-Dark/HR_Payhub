@@ -370,21 +370,104 @@ CREATE TABLE IF NOT EXISTS `leave_balances` (
 
 -- Dumping structure for table payhub.loans
 CREATE TABLE IF NOT EXISTS `loans` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `employee_id` int NOT NULL,
-  `config_id` int NOT NULL,
-  `amount` decimal(15,2) NOT NULL,
-  `interest_rate` decimal(5,2) DEFAULT NULL,
-  `start_date` date NOT NULL,
-  `end_date` date DEFAULT NULL,
-  `status` enum('pending','approved','rejected','repaid') DEFAULT 'pending',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `id` INT NOT NULL AUTO_INCREMENT,
+
+  `organization_id` INT NOT NULL,
+  `employee_id` INT NOT NULL,
+  `config_id` INT NOT NULL,
+
+  `amount` DECIMAL(15,2) NOT NULL,
+  `interest_rate` DECIMAL(5,2) DEFAULT NULL,
+
+  `monthly_deduction` DECIMAL(15,2) DEFAULT NULL,
+  `balance_remaining` DECIMAL(15,2) DEFAULT NULL,
+  `total_repaid` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+
+  `purpose` TEXT DEFAULT NULL,
+  `rejection_reason` TEXT DEFAULT NULL,
+
+  `approved_by` INT DEFAULT NULL,
+  `rejected_by` INT DEFAULT NULL,
+
+  `approved_at` TIMESTAMP NULL DEFAULT NULL,
+  `rejected_at` TIMESTAMP NULL DEFAULT NULL,
+
+  `start_date` DATE NOT NULL,
+  `end_date` DATE DEFAULT NULL,
+
+  `status` ENUM('pending','approved','rejected','repaid') DEFAULT 'pending',
+
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
   PRIMARY KEY (`id`),
-  KEY `employee_id` (`employee_id`),
-  KEY `config_id` (`config_id`),
-  CONSTRAINT `loans_ibfk_1` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `loans_ibfk_2` FOREIGN KEY (`config_id`) REFERENCES `organization_configs` (`id`) ON DELETE CASCADE
+
+  -- Indexes
+  KEY `idx_loans_org` (`organization_id`),
+  KEY `idx_loans_employee` (`employee_id`),
+  KEY `idx_loans_config` (`config_id`),
+  KEY `idx_loans_status` (`status`),
+  KEY `idx_loans_approved_by` (`approved_by`),
+  KEY `idx_loans_rejected_by` (`rejected_by`),
+
+  -- Foreign Keys
+  CONSTRAINT `loans_org_fk`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`)
+    ON DELETE CASCADE,
+
+  CONSTRAINT `loans_employee_fk`
+    FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`)
+    ON DELETE CASCADE,
+
+  CONSTRAINT `loans_config_fk`
+    FOREIGN KEY (`config_id`) REFERENCES `organization_configs` (`id`)
+    ON DELETE CASCADE,
+
+  CONSTRAINT `loans_approved_by_fk`
+    FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`)
+    ON DELETE SET NULL,
+
+  CONSTRAINT `loans_rejected_by_fk`
+    FOREIGN KEY (`rejected_by`) REFERENCES `users` (`id`)
+    ON DELETE SET NULL
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- -----------------------------------------------------------------------------
+-- 2. loan_repayments  — track individual repayments / deductions
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS `loan_repayments` (
+    `id`              INT           NOT NULL AUTO_INCREMENT,
+    `loan_id`         INT           NOT NULL,
+    `organization_id` INT           NOT NULL,
+    `employee_id`     INT           NOT NULL,
+    `payrun_id`       INT           DEFAULT NULL  COMMENT 'Populated when deducted via payroll',
+    `amount`          DECIMAL(15,2) NOT NULL       COMMENT 'Amount paid in this instalment',
+    `balance_after`   DECIMAL(15,2) NOT NULL       COMMENT 'Remaining balance after this repayment',
+    `repayment_date`  DATE          NOT NULL,
+    `method`          ENUM('payroll_deduction', 'manual') NOT NULL DEFAULT 'payroll_deduction',
+    `notes`           TEXT          DEFAULT NULL,
+    `recorded_by`     INT           DEFAULT NULL   COMMENT 'User who recorded this repayment',
+    `created_at`      TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at`      TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ 
+    PRIMARY KEY (`id`),
+    KEY `idx_repayments_loan`   (`loan_id`),
+    KEY `idx_repayments_org`    (`organization_id`),
+    KEY `idx_repayments_emp`    (`employee_id`),
+    KEY `idx_repayments_payrun` (`payrun_id`),
+ 
+    CONSTRAINT `lr_loan_fk`
+        FOREIGN KEY (`loan_id`)         REFERENCES `loans`         (`id`) ON DELETE CASCADE,
+    CONSTRAINT `lr_org_fk`
+        FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+    CONSTRAINT `lr_emp_fk`
+        FOREIGN KEY (`employee_id`)     REFERENCES `employees`     (`id`) ON DELETE CASCADE,
+    CONSTRAINT `lr_payrun_fk`
+        FOREIGN KEY (`payrun_id`)       REFERENCES `payruns`       (`id`) ON DELETE SET NULL,
+    CONSTRAINT `lr_recorded_by_fk`
+        FOREIGN KEY (`recorded_by`)     REFERENCES `users`         (`id`) ON DELETE SET NULL
+ 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
