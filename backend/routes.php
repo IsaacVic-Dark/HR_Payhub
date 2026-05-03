@@ -14,6 +14,7 @@ use App\Controllers\AuthController;
 use App\Controllers\PayrollController;
 use App\Controllers\DepartmentController;
 use App\Controllers\PayslipController;
+use App\Controllers\LoanController;
 use App\Controllers\P9Controller;
 
 // Authentication routes - NO authentication required
@@ -618,6 +619,137 @@ Router::post('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/bulk-se
 Router::post('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/{id}/send', PayslipController::class . '@send', [
     ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer', 'hr_officer']],
     'PayslipAuthorizationMiddleware',
+]);
+
+
+// =============================================================================
+// LOAN ROUTES
+// Paste these into routes.php alongside the Leave routes block.
+// =============================================================================
+
+// GET /api/v1/organizations/{org_id}/loan-types
+// Lists all active, approved loan configs for an org.
+// Roles: all authenticated org members
+Router::get('api/v1/organizations/{org_id}/loan-types', LoanController::class . '@getLoanTypes', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Org-level loan collection
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/loans
+// ?status=pending|approved|rejected|repaid &config_id= &employee_id= &month= &year= &page= &per_page=
+// Visibility: admin/hr/finance/payroll → full org; dept_manager/hr_officer → team only; employee → own only
+Router::get('api/v1/organizations/{org_id}/loans', LoanController::class . '@index', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/loans
+// HR / Admin creates a loan on behalf of an employee.
+// Body: { "employee_id", "config_id", "amount", "start_date", "end_date"?,
+//         "interest_rate"?, "monthly_deduction"?, "purpose"? }
+// Roles: admin, hr_manager, payroll_manager
+Router::post('api/v1/organizations/{org_id}/loans', LoanController::class . '@store', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Single loan
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/loans/{loan_id}
+// Roles: all authenticated (scoped by middleware per role)
+Router::get('api/v1/organizations/{org_id}/loans/{loan_id}', LoanController::class . '@show', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// PUT /api/v1/organizations/{org_id}/loans/{loan_id}
+// Update a pending loan (amount, dates, purpose, monthly_deduction).
+// Roles: admin, hr_manager, payroll_manager
+Router::put('api/v1/organizations/{org_id}/loans/{loan_id}', LoanController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+Router::patch('api/v1/organizations/{org_id}/loans/{loan_id}', LoanController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// DELETE /api/v1/organizations/{org_id}/loans/{loan_id}
+// Hard-delete; only pending loans.
+// Roles: admin, hr_manager
+Router::delete('api/v1/organizations/{org_id}/loans/{loan_id}', LoanController::class . '@destroy', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Loan lifecycle actions
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/approve
+// Advance status: pending → approved.
+// Roles: admin, hr_manager, finance_manager, payroll_manager
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/approve', LoanController::class . '@approve', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'finance_manager', 'payroll_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/reject
+// Advance status: pending → rejected.
+// Body (optional): { "rejection_reason": "..." }
+// Roles: admin, hr_manager, finance_manager, payroll_manager
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/reject', LoanController::class . '@reject', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'finance_manager', 'payroll_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Repayments
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/repayments
+// Record a repayment instalment (manual or payroll deduction).
+// Body: { "amount", "repayment_date", "method"?, "notes"?, "payrun_id"? }
+// Roles: admin, payroll_manager, payroll_officer, finance_manager
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/repayments', LoanController::class . '@recordRepayment', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer', 'finance_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// GET /api/v1/organizations/{org_id}/loans/{loan_id}/repayments
+// Full repayment history for one loan.
+// Roles: admin, hr_manager, finance_manager, payroll_manager, payroll_officer, auditor
+//        + the employee who owns the loan (enforced in controller)
+Router::get('api/v1/organizations/{org_id}/loans/{loan_id}/repayments', LoanController::class . '@repaymentHistory', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Employee self-service
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/employees/{emp_id}/loans
+// Employee submits their own loan application.
+// Roles: all authenticated (controller enforces self-only for 'employee' role)
+Router::post('api/v1/organizations/{org_id}/employees/{emp_id}/loans', LoanController::class . '@applyLoan', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// GET /api/v1/organizations/{org_id}/employees/{emp_id}/loans
+// All loans for one employee across all time.
+// Roles: all authenticated (scoped per role in controller)
+Router::get('api/v1/organizations/{org_id}/employees/{emp_id}/loans', LoanController::class . '@employeeLoans', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
 ]);
 
 // Test route
