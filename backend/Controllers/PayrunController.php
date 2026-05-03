@@ -1135,6 +1135,65 @@ class PayrunController
             $nextPayrunId = $transactionResult['next_payrun_id'];
             $skippedEmployees = $transactionResult['skipped'] ?? [];
 
+            // ---- Auto-generate payslips for the finalized payrun ----
+            $payslipsGenerated = 0;
+            $payslipSkipped    = 0;
+            $payslipErrors     = [];
+
+            try {
+                $details = DB::raw(
+                    "SELECT id, employee_id FROM payrun_details
+         WHERE payrun_id = :payrun_id AND organization_id = :org_id",
+                    [':payrun_id' => $payrun_id, ':org_id' => $org_id]
+                );
+
+                if (!empty($details)) {
+                    $period = new \DateTime($payrun->pay_period_start);
+
+                    foreach ($details as $detail) {
+                        try {
+                            // Skip if a payslip already exists for this employee+payrun
+                            $existing = DB::raw(
+                                "SELECT id FROM payslips
+                     WHERE payrun_id = :run AND employee_id = :emp LIMIT 1",
+                                [':run' => $payrun_id, ':emp' => $detail->employee_id]
+                            );
+
+                            if (!empty($existing)) {
+                                $payslipSkipped++;
+                                continue;
+                            }
+
+                            $payslipNumber = sprintf(
+                                'PAYSLIP-%s-%s-EMP%d',
+                                $period->format('Y'),
+                                $period->format('m'),
+                                $detail->employee_id
+                            );
+
+                            DB::table('payslips')->insert([
+                                'organization_id'  => $org_id,
+                                'payrun_id'        => $payrun_id,
+                                'payrun_detail_id' => $detail->id,
+                                'employee_id'      => $detail->employee_id,
+                                'payslip_number'   => $payslipNumber,
+                                'status'           => 'generated',
+                                'generated_at'     => $now,
+                            ]);
+
+                            $payslipsGenerated++;
+                        } catch (\Exception $e) {
+                            error_log("Auto-generate payslip failed for employee {$detail->employee_id} on payrun {$payrun_id}: " . $e->getMessage());
+                            $payslipErrors[] = "Employee ID {$detail->employee_id}: " . $e->getMessage();
+                        }
+                    }
+                }
+            } catch (\Exception $e) {
+                // Non-fatal: payrun is already finalized, just log
+                error_log("Auto-generate payslips block failed for payrun {$payrun_id}: " . $e->getMessage());
+                $payslipErrors[] = $e->getMessage();
+            }
+
             // ---- Audit: finalize ----
             $this->createAuditLog($org_id, $currentUser['id'], 'payruns', $payrun_id, 'finalize', [
                 'previous_status'  => 'reviewed',
@@ -1158,10 +1217,15 @@ class PayrunController
                     'finalized_by' => $currentUser['id'],
                     'finalized_at' => $now,
                     'next_payrun'  => [
-                        'id'              => $nextPayrunId,
-                        'status'          => 'draft',
-                        'message'         => 'Next payrun has been automatically created as a draft with tax pre-calculated',
+                        'id'                => $nextPayrunId,
+                        'status'            => 'draft',
+                        'message'           => 'Next payrun has been automatically created as a draft with tax pre-calculated',
                         'skipped_employees' => $skippedEmployees,
+                    ],
+                    'payslips' => [
+                        'generated' => $payslipsGenerated,
+                        'skipped'   => $payslipSkipped,   // already existed
+                        'errors'    => $payslipErrors,
                     ],
                 ],
                 message: !empty($skippedEmployees)
