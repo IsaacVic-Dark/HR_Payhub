@@ -20,7 +20,7 @@ import {
   Organization,
   OrganizationFilters,
 } from "@/api/organization";
-import OrganizationDrawer from "@/app/organization/drawer";
+import OrganizationDrawer from "@/app/(dashboard)/organization/drawer";
 import { Input } from "@/components/ui/input";
 import {
   AlertDialog,

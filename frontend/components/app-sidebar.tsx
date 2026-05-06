@@ -438,7 +438,21 @@ const data = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
   const { canAccessPage, userRole, currentUser } = usePermissions();
-  const [openDropdowns, setOpenDropdowns] = React.useState<string[]>([]);
+  const [openDropdowns, setOpenDropdowns] = React.useState<string[]>(() => {
+    const allSections = [
+      ...data.payrollSection,
+      ...data.employeeSection,
+      ...data.configSection,
+      ...data.systemSection,
+    ];
+    return allSections
+      .filter(
+        (item) =>
+          item.hasDropdown &&
+          item.items?.some((sub: any) => pathname.startsWith(sub.url))
+      )
+      .map((item) => item.title);
+  });
   const { isLoading } = useAuth(); // Add this
 
   // Show minimal sidebar while loading
@@ -485,13 +499,6 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   // Filter function to check if user has access based on roles OR page path
   const hasAccess = (item: any) => {
     if (!userRole) return false;
-
-    // console.log("Checking access for:", item.title, {
-    //   userRole,
-    //   itemRoles: item.roles,
-    //   roleMatch: item.roles && item.roles.includes(userRole),
-    //   pageAccess: canAccessPage(item.url),
-    // });
 
     // Check if user role is in the allowed roles list
     if (item.roles && item.roles.includes(userRole)) {
