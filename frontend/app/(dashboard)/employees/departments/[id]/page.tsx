@@ -184,138 +184,134 @@ export default function DepartmentDetailPage() {
   }
 
   return (
-    <SidebarProvider style={sidebarStyle}>
-      <AppSidebar variant="inset" />
-      <SidebarInset>
-        <SiteHeader />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
+    <>
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col gap-2">
 
-            {/* Page header */}
-            <div className="mt-4 mx-6 space-y-2">
-              <button
-                onClick={() => router.back()}
-                className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-2"
-              >
-                <ArrowLeft className="h-4 w-4" />
-                Back to Departments
-              </button>
-              <div className="flex items-start justify-between">
-                <div>
-                  <h1 className="text-2xl font-medium">{department.name}</h1>
-                  <p className="text-base text-muted-foreground">
-                    {department.description || "Department details and employee roster"}
-                  </p>
+          {/* Page header */}
+          <div className="mt-4 mx-6 space-y-2">
+            <button
+              onClick={() => router.back()}
+              className="flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Departments
+            </button>
+            <div className="flex items-start justify-between">
+              <div>
+                <h1 className="text-2xl font-medium">{department.name}</h1>
+                <p className="text-base text-muted-foreground">
+                  {department.description || "Department details and employee roster"}
+                </p>
+              </div>
+              {canWrite && (
+                <div className="flex gap-2 mt-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAssignHeadOpen(true)}
+                    className="flex items-center gap-2 text-xs"
+                  >
+                    <UserCog className="h-4 w-4" />
+                    {department.head_employee_id ? "Change Head" : "Assign Head"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => setFormOpen(true)}
+                    className="flex items-center gap-2 text-xs"
+                  >
+                    <Pencil className="h-4 w-4" />
+                    Edit Department
+                  </Button>
                 </div>
-                {canWrite && (
-                  <div className="flex gap-2 mt-1">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setAssignHeadOpen(true)}
-                      className="flex items-center gap-2 text-xs"
-                    >
-                      <UserCog className="h-4 w-4" />
-                      {department.head_employee_id ? "Change Head" : "Assign Head"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      onClick={() => setFormOpen(true)}
-                      className="flex items-center gap-2 text-xs"
-                    >
-                      <Pencil className="h-4 w-4" />
-                      Edit Department
-                    </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 mx-6">
+            {/* Info cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* Department info */}
+              <div className="bg-white border rounded-lg p-5 space-y-3">
+                <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm">
+                  <Building2 className="h-4 w-4" />
+                  Department Info
+                </div>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Code</span>
+                    <span className="font-medium">{department.code || "—"}</span>
                   </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-500">Status</span>
+                    {getStatusBadge(department.is_active)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Head card */}
+              <div className="bg-white border rounded-lg p-5 space-y-3">
+                <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm">
+                  <User className="h-4 w-4" />
+                  Department Head
+                </div>
+                {department.head_employee_id ? (
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-semibold text-sm shrink-0">
+                      {department.head_first_name?.[0] ?? ""}
+                      {department.head_surname?.[0] ?? ""}
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium">{department.head_full_name}</p>
+                      <p className="text-xs text-gray-500">{department.head_employee_number}</p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-400 italic">No head assigned</p>
                 )}
+              </div>
+
+              {/* Employee count */}
+              <div className="bg-white border rounded-lg p-5 space-y-3">
+                <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm">
+                  <Users className="h-4 w-4" />
+                  Workforce
+                </div>
+                <div className="text-3xl font-bold text-blue-600">
+                  {department.employee_count}
+                </div>
+                <p className="text-xs text-gray-500">Active employees</p>
               </div>
             </div>
 
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 mx-6">
-              {/* Info cards */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                {/* Department info */}
-                <div className="bg-white border rounded-lg p-5 space-y-3">
-                  <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm">
-                    <Building2 className="h-4 w-4" />
-                    Department Info
-                  </div>
-                  <div className="space-y-2 text-sm">
-                    <div className="flex justify-between">
-                      <span className="text-gray-500">Code</span>
-                      <span className="font-medium">{department.code || "—"}</span>
-                    </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-gray-500">Status</span>
-                      {getStatusBadge(department.is_active)}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Head card */}
-                <div className="bg-white border rounded-lg p-5 space-y-3">
-                  <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm">
-                    <User className="h-4 w-4" />
-                    Department Head
-                  </div>
-                  {department.head_employee_id ? (
-                    <div className="flex items-center gap-3">
-                      <div className="h-9 w-9 bg-blue-100 rounded-full flex items-center justify-center text-blue-700 font-semibold text-sm shrink-0">
-                        {department.head_first_name?.[0] ?? ""}
-                        {department.head_surname?.[0] ?? ""}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium">{department.head_full_name}</p>
-                        <p className="text-xs text-gray-500">{department.head_employee_number}</p>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-sm text-gray-400 italic">No head assigned</p>
-                  )}
-                </div>
-
-                {/* Employee count */}
-                <div className="bg-white border rounded-lg p-5 space-y-3">
-                  <div className="flex items-center gap-2 text-gray-700 font-semibold text-sm">
-                    <Users className="h-4 w-4" />
-                    Workforce
-                  </div>
-                  <div className="text-3xl font-bold text-blue-600">
-                    {department.employee_count}
-                  </div>
-                  <p className="text-xs text-gray-500">Active employees</p>
-                </div>
-              </div>
-
-              {/* Employees table */}
-              <div className="bg-white border rounded-lg p-4">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                  Employees in {department.name}
-                </h2>
-                <DataTable
-                  data={employees}
-                  columns={employeeColumns}
-                  pagination={{
-                    page: empFilters.page || 1,
-                    limit: empFilters.per_page || 10,
-                    totalItems,
-                    totalPages,
-                  }}
-                  onPageChange={(page) =>
-                    setEmpFilters((prev) => ({ ...prev, page }))
-                  }
-                  onLimitChange={(per_page) =>
-                    setEmpFilters((prev) => ({ ...prev, per_page, page: 1 }))
-                  }
-                  loading={empLoading}
-                  error={empError}
-                  emptyMessage="No active employees in this department"
-                />
-              </div>
+            {/* Employees table */}
+            <div className="bg-white border rounded-lg p-4">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                Employees in {department.name}
+              </h2>
+              <DataTable
+                data={employees}
+                columns={employeeColumns}
+                pagination={{
+                  page: empFilters.page || 1,
+                  limit: empFilters.per_page || 10,
+                  totalItems,
+                  totalPages,
+                }}
+                onPageChange={(page) =>
+                  setEmpFilters((prev) => ({ ...prev, page }))
+                }
+                onLimitChange={(per_page) =>
+                  setEmpFilters((prev) => ({ ...prev, per_page, page: 1 }))
+                }
+                loading={empLoading}
+                error={empError}
+                emptyMessage="No active employees in this department"
+              />
             </div>
           </div>
         </div>
-      </SidebarInset>
+      </div>
 
       {/* Edit dialog */}
       {user?.organization_id && (
@@ -343,6 +339,6 @@ export default function DepartmentDetailPage() {
           }}
         />
       )}
-    </SidebarProvider>
+    </>
   );
 }

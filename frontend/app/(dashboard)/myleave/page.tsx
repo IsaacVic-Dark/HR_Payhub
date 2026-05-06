@@ -1,11 +1,8 @@
 "use client";
 
-import { AppSidebar } from "@/components/app-sidebar";
-import { SiteHeader } from "@/components/site-header";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import EmployeeLeaveTable from "@/app/(dashboard)/myleave/components/employee-leave-table";
 import {
   leaveAPI,
@@ -64,116 +61,106 @@ export default function MyLeavePage() {
   // Statistics cards for employee
   const cardDetails: CardDetail[] = statistics
     ? [
-        {
-          title: "Total Leaves",
-          value: statistics.total_leaves.toString(),
-          change: "",
-          changeIcon: null,
-          description: "Total number of leaves you've taken",
-          footerText: "All time record",
-          icon: IconCalendar,
-        },
-        {
-          title: "Approved",
-          value:
-            statistics.approved !== undefined
-              ? statistics.approved.toString()
-              : "0",
+      {
+        title: "Total Leaves",
+        value: statistics.total_leaves.toString(),
+        change: "",
+        changeIcon: null,
+        description: "Total number of leaves you've taken",
+        footerText: "All time record",
+        icon: IconCalendar,
+      },
+      {
+        title: "Approved",
+        value:
+          statistics.approved !== undefined
+            ? statistics.approved.toString()
+            : "0",
 
-          change: "",
-          changeIcon: null,
-          description: "Leaves that have been approved",
-          footerText: "Ready for use",
-          icon: IconCheck,
-        },
-        {
-          title: "Pending",
-          value: (statistics.pending ?? 0).toString(),
-          change: "",
-          changeIcon: null,
-          description: "Leaves awaiting approval",
-          footerText: "Under review",
-          icon: IconClock,
-        },
-        {
-          title: "Rejected",
-          value: (statistics.rejected ?? 0).toString(),
-          change: "",
-          changeIcon: null,
-          description: "Leaves that were not approved",
-          footerText: "Review reasons",
-          icon: IconX,
-        },
-      ]
+        change: "",
+        changeIcon: null,
+        description: "Leaves that have been approved",
+        footerText: "Ready for use",
+        icon: IconCheck,
+      },
+      {
+        title: "Pending",
+        value: (statistics.pending ?? 0).toString(),
+        change: "",
+        changeIcon: null,
+        description: "Leaves awaiting approval",
+        footerText: "Under review",
+        icon: IconClock,
+      },
+      {
+        title: "Rejected",
+        value: (statistics.rejected ?? 0).toString(),
+        change: "",
+        changeIcon: null,
+        description: "Leaves that were not approved",
+        footerText: "Review reasons",
+        icon: IconX,
+      },
+    ]
     : [];
 
   // Days summary cards
   const daysCards: CardDetail[] = daysSummary
     ? [
-        {
-          title: "Total Days Taken",
-          value: daysSummary.total_days_taken.toString(),
-          change: "",
-          changeIcon: null,
-          description: "All days taken throughout your employment",
-          footerText: "Cumulative total",
-          icon: IconCalendar,
-        },
-        {
-          title: "This Year",
-          value: daysSummary.days_taken_current_year.toString(),
-          change: "",
-          changeIcon: null,
-          description: "Days taken in the current year",
-          footerText: "Year-to-date",
-          icon: IconCalendar,
-        },
-      ]
+      {
+        title: "Total Days Taken",
+        value: daysSummary.total_days_taken.toString(),
+        change: "",
+        changeIcon: null,
+        description: "All days taken throughout your employment",
+        footerText: "Cumulative total",
+        icon: IconCalendar,
+      },
+      {
+        title: "This Year",
+        value: daysSummary.days_taken_current_year.toString(),
+        change: "",
+        changeIcon: null,
+        description: "Days taken in the current year",
+        footerText: "Year-to-date",
+        icon: IconCalendar,
+      },
+    ]
     : [];
 
   const path = pathname.split("/").filter(Boolean).pop() || "My Leaves";
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
-      }
-    >
-      <AppSidebar variant="inset" />
-      <SidebarInset>
-        <SiteHeader />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="mt-4 mx-6 space-y-2">
-              <h1 className="text-2xl font-medium">My Leaves</h1>
-              <p className="text-base text-muted-foreground">
-                View your leave history and apply for new leaves
-              </p>
-            </div>
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-              {/* Leave Statistics */}
-              {/* <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
+    <>
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col gap-2">
+          <div className="mt-4 mx-6 space-y-2">
+            <h1 className="text-2xl font-medium">My Leaves</h1>
+            <p className="text-base text-muted-foreground">
+              View your leave history and apply for new leaves
+            </p>
+          </div>
+          <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+            {/* Leave Statistics */}
+            {/* <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
                 <SectionCards details={cardDetails} loading={isLoading} error={null} />
               </div> */}
 
-              {/* Days Summary */}
-              {daysCards.length > 0 && (
-                <div className="peer-data-[state=expanded]:xl:grid-cols-2 peer-data-[state=collapsed]:xl:grid-cols-3">
-                  <SectionCards
-                    details={daysCards}
-                    loading={isLoading}
-                    error={null}
-                  />
-                </div>
-              )}
+            {/* Days Summary */}
+            {daysCards.length > 0 && (
+              <div className="peer-data-[state=expanded]:xl:grid-cols-2 peer-data-[state=collapsed]:xl:grid-cols-3">
+                <SectionCards
+                  details={daysCards}
+                  loading={isLoading}
+                  error={null}
+                />
+              </div>
+            )}
 
-              {/* Leave Type Breakdown (if available) */}
-              {statistics && (
-                <div className="mt-2">
-                  <div className="relative px-10">
+            {/* Leave Type Breakdown (if available) */}
+            {statistics && (
+              <div className="mt-2">
+                <div className="relative px-10">
                   <Carousel
                     opts={{ align: "start", dragFree: true }}
                     className="w-full"
@@ -244,19 +231,18 @@ export default function MyLeavePage() {
                         </CarouselItem>
                       ))}
                     </CarouselContent>
-                      <CarouselPrevious className="left-0" />
-                      <CarouselNext className="right-0" />
+                    <CarouselPrevious className="left-0" />
+                    <CarouselNext className="right-0" />
                   </Carousel>
-                  </div>
                 </div>
-              )}
+              </div>
+            )}
 
-              {/* Leave Table */}
-              <EmployeeLeaveTable />
-            </div>
+            {/* Leave Table */}
+            <EmployeeLeaveTable />
           </div>
         </div>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </>
   );
 }

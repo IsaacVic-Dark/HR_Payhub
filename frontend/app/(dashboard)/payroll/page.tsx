@@ -1,11 +1,8 @@
 "use client";
 
-import { AppSidebar } from "@/components/app-sidebar";
-import { SiteHeader } from "@/components/site-header";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import PayrollTable from "@/app/(dashboard)/payroll/components/data-table-payroll";
 import { payrollAPI } from "@/services/api/payroll";
 import { useAuth } from "@/lib/AuthContext";
@@ -91,17 +88,7 @@ export default function Page() {
   const path = pathname.split("/").filter(Boolean).pop() || "Dashboard";
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
-      }
-    >
-      <AppSidebar variant="inset" />
-      <SidebarInset>
-        <SiteHeader />
+    <>
         <div className="flex flex-1 flex-col">
           <div className="@container/main flex flex-1 flex-col gap-2">
             <div className="mt-4 mx-6 space-y-2">
@@ -118,8 +105,7 @@ export default function Page() {
             </div>
           </div>
         </div>
-      </SidebarInset>
-    </SidebarProvider>
+      </>
   );
 }
 

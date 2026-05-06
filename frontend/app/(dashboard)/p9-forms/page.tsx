@@ -108,84 +108,87 @@ export default function P9FormsPage() {
   }, [user?.organization_id, filters.page, filters.per_page, selectedYear, selectedStatus, selectedDepartment]);
 
   // Generate card details from statistics
-  const cardDetails: CardDetail[] = (() => {
-    if (!statistics.length) return [];
+  // const cardDetails: CardDetail[] = (() => {
+  //   if (!statistics.length) return [];
 
-    const yearStats = statistics.reduce((acc, stat) => {
-      if (!acc[stat.status]) {
-        acc[stat.status] = {
-          count: 0,
-          sum_paye: 0,
-          sum_gross_pay: 0,
-        };
-      }
-      acc[stat.status].count += stat.form_count;
-      acc[stat.status].sum_paye += stat.sum_paye;
-      acc[stat.status].sum_gross_pay += stat.sum_gross_pay;
-      return acc;
-    }, {} as Record<string, { count: number; sum_paye: number; sum_gross_pay: number }>);
+  //   const yearStats = statistics.reduce((acc, stat) => {
+  //     if (!acc[stat.status]) {
+  //       acc[stat.status] = {
+  //         count: 0,
+  //         sum_paye: 0,
+  //         sum_gross_pay: 0,
+  //       };
+  //     }
+  //     acc[stat.status].count += stat.form_count;
+  //     acc[stat.status].sum_paye += stat.sum_paye;
+  //     acc[stat.status].sum_gross_pay += stat.sum_gross_pay;
+  //     return acc;
+  //   }, {} as Record<string, { count: number; sum_paye: number; sum_gross_pay: number }>);
 
-    return [
-      {
-        title: "Total P9 Forms",
-        value: statistics.reduce((sum, stat) => sum + stat.form_count, 0).toString(),
-        change: "",
-        changeIcon: null,
-        description: `For year ${selectedYear}`,
-        footerText: "All statuses combined",
-      },
-      {
-        title: "Generated",
-        value: (yearStats.generated?.count || 0).toString(),
-        change: "",
-        changeIcon: null,
-        description: "Ready to send",
-        footerText: `PAYE: Kshs ${(yearStats.generated?.sum_paye || 0).toLocaleString()}`,
-      },
-      {
-        title: "Sent",
-        value: (yearStats.sent?.count || 0).toString(),
-        change: "",
-        changeIcon: null,
-        description: "Sent to employees",
-        footerText: `PAYE: Kshs ${(yearStats.sent?.sum_paye || 0).toLocaleString()}`,
-      },
-      {
-        title: "Filed",
-        value: (yearStats.filed?.count || 0).toString(),
-        change: "",
-        changeIcon: null,
-        description: "Filed with KRA",
-        footerText: `PAYE: Kshs ${(yearStats.filed?.sum_paye || 0).toLocaleString()}`,
-      },
-      {
-        title: "Total PAYE",
-        value: `Kshs ${statistics
-          .reduce((sum, stat) => sum + stat.sum_paye, 0)
-          .toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`,
-        change: "",
-        changeIcon: null,
-        description: "Total PAYE deducted",
-        footerText: `For ${selectedYear}`,
-      },
-      {
-        title: "Total Gross Pay",
-        value: `Kshs ${statistics
-          .reduce((sum, stat) => sum + stat.sum_gross_pay, 0)
-          .toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}`,
-        change: "",
-        changeIcon: null,
-        description: "Total gross pay",
-        footerText: `For ${selectedYear}`,
-      },
-    ];
-  })();
+  //   console.log("Yearly statistics breakdown:", yearStats);
+
+  //   return [
+  //     {
+  //       title: "Total P9 Forms",
+  //       value: statistics.reduce((sum, stat) => sum + stat.form_count, 0).toString(),
+  //       change: "",
+  //       changeIcon: null,
+  //       description: `For year ${selectedYear}`,
+  //       footerText: "All statuses combined",
+  //     },
+  //     {
+  //       title: "Generated",
+  //       value: (yearStats.generated?.count || 0).toString(),
+  //       change: "",
+  //       changeIcon: null,
+  //       description: "Ready to send",
+  //       footerText: `PAYE: Kshs ${(yearStats.generated?.sum_paye || 0).toLocaleString()}`,
+  //     },
+  //     {
+  //       title: "Sent",
+  //       value: (yearStats.sent?.count || 0).toString(),
+  //       change: "",
+  //       changeIcon: null,
+  //       description: "Sent to employees",
+  //       footerText: `PAYE: Kshs ${(yearStats.sent?.sum_paye || 0).toLocaleString()}`,
+  //     },
+  //     {
+  //       title: "Filed",
+  //       value: (yearStats.filed?.count || 0).toString(),
+  //       change: "",
+  //       changeIcon: null,
+  //       description: "Filed with KRA",
+  //       footerText: `PAYE: Kshs ${(yearStats.filed?.sum_paye || 0).toLocaleString()}`,
+  //     },
+  //     {
+  //       title: "Total PAYE",
+  //       // value: `Kshs ${stat.sum_paye}`,
+  //       value: `Kshs ${statistics
+  //         .reduce((sum, stat) => sum + stat.sum_paye, 0)
+  //         .toLocaleString("en-US", {
+  //           minimumFractionDigits: 2,
+  //           maximumFractionDigits: 2,
+  //         })}`,
+  //       change: "",
+  //       changeIcon: null,
+  //       description: "Total PAYE deducted",
+  //       footerText: `For ${selectedYear}`,
+  //     },
+  //     {
+  //       title: "Total Gross Pay",
+  //       value: `Kshs ${statistics
+  //         .reduce((sum, stat) => sum + stat.sum_gross_pay, 0)
+  //         .toLocaleString("en-US", {
+  //           minimumFractionDigits: 2,
+  //           maximumFractionDigits: 2,
+  //         })}`,
+  //       change: "",
+  //       changeIcon: null,
+  //       description: "Total gross pay",
+  //       footerText: `For ${selectedYear}`,
+  //     },
+  //   ];
+  // })();
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { color: string; label: string; icon: any }> = {
@@ -448,9 +451,9 @@ export default function P9FormsPage() {
             </p>
           </div>
           <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-            <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
+            {/* <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
               <SectionCards details={cardDetails} />
-            </div>
+            </div> */}
 
             <div className="w-full mx-auto p-4 bg-white">
               <div className="rounded-lg shadow-sm border p-4">

@@ -1,10 +1,7 @@
 "use client";
 
-import { AppSidebar } from "@/components/app-sidebar";
-import { SiteHeader } from "@/components/site-header";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
 import { usePathname } from "next/navigation";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import OrganizationTable from "@/components/data-table-organizations";
 
 export default function Page() {
@@ -46,34 +43,23 @@ export default function Page() {
   ];
 
   return (
-    <SidebarProvider
-      style={
-        {
-          "--sidebar-width": "calc(var(--spacing) * 72)",
-          "--header-height": "calc(var(--spacing) * 12)",
-        } as React.CSSProperties
-      }
-    >
-      <AppSidebar variant="inset" />
-      <SidebarInset>
-        <SiteHeader />
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-              <div className="mx-6">
-                <h1 className="text-xl font-semibold text-gray-900">
-                  Organizations
-                </h1>
-                <p className="text-sm text-gray-500">
-                  Manage and monitor all organizations
-                </p>
-              </div>
-              <SectionCards details={cardDetails} />
-              <OrganizationTable />
+    <>
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col gap-2">
+          <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+            <div className="mx-6">
+              <h1 className="text-xl font-semibold text-gray-900">
+                Organizations
+              </h1>
+              <p className="text-sm text-gray-500">
+                Manage and monitor all organizations
+              </p>
             </div>
+            <SectionCards details={cardDetails} />
+            <OrganizationTable />
           </div>
         </div>
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+    </>
   );
 }
