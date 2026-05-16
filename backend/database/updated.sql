@@ -836,6 +836,44 @@ CREATE TABLE IF NOT EXISTS `user_sessions` (
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+CREATE TABLE subscription_plans (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  code VARCHAR(50) NOT NULL UNIQUE, -- starter, professional, enterprise
+  name VARCHAR(100) NOT NULL,
+  billing_cycle ENUM('monthly','annual') DEFAULT 'monthly',
+  base_price DECIMAL(15,2) NOT NULL DEFAULT 0,
+  price_per_employee DECIMAL(15,2) DEFAULT NULL,
+  trial_days INT DEFAULT 0,
+  requires_card TINYINT(1) DEFAULT 0,
+  max_employees INT DEFAULT NULL,
+  features JSON DEFAULT NULL,
+  is_active TINYINT(1) DEFAULT 1,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+);
+
+CREATE TABLE organization_subscriptions (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  organization_id INT NOT NULL,
+  plan_id INT NOT NULL,
+  status ENUM('trialing','active','past_due','suspended','cancelled','expired') DEFAULT 'trialing',
+  starts_at TIMESTAMP NULL,
+  trial_ends_at TIMESTAMP NULL,
+  current_period_starts_at TIMESTAMP NULL,
+  current_period_ends_at TIMESTAMP NULL,
+  cancelled_at TIMESTAMP NULL,
+  payment_method_token VARCHAR(255) DEFAULT NULL,
+  card_brand VARCHAR(30) DEFAULT NULL,
+  card_last4 VARCHAR(4) DEFAULT NULL,
+  card_exp_month VARCHAR(2) DEFAULT NULL,
+  card_exp_year VARCHAR(4) DEFAULT NULL,
+  employee_limit INT DEFAULT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_org_sub_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+  CONSTRAINT fk_org_sub_plan FOREIGN KEY (plan_id) REFERENCES subscription_plans(id) ON DELETE RESTRICT
+);
+
 -- Data exporting was unselected.
 
 /*!40103 SET TIME_ZONE=IFNULL(@OLD_TIME_ZONE, 'system') */;
