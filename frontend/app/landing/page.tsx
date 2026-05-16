@@ -2,9 +2,6 @@
 import React, { useState } from "react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 
-// Git version info — preserved
-// BUILD: v1.4.2 | COMMIT: a3f9c1d | BRANCH: main | DATE: 2025-01-15
-
 const PURPLE = "#895bf5";
 const PURPLE_DARK = "#7c4ee0";
 
@@ -26,6 +23,7 @@ const PayrollLanding = () => {
   });
   const [submitted, setSubmitted] = useState(false);
   const [testimonialIdx, setTestimonialIdx] = useState(1);
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "annual">("monthly");
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -1272,6 +1270,273 @@ const PayrollLanding = () => {
               </div>
             ))}
           </div>
+        </div>
+      </section>
+
+      {/* ─── PRICING ─── */}
+      <section id="pricing" className="bg-white py-20">
+        <div className="max-w-6xl mx-auto px-6">
+          {/* Header */}
+          <div className="text-center mb-10">
+            <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-3">
+              Simple, Transparent Pricing
+            </h2>
+            <p className="text-gray-500 text-sm max-w-xl mx-auto leading-relaxed">
+              Start free, scale as you grow. No hidden fees. Cancel any time.
+            </p>
+
+            {/* Billing toggle */}
+            <div className="inline-flex items-center mt-6 bg-gray-100 rounded-full p-1 gap-1">
+              <button
+                onClick={() => setBillingCycle("monthly")}
+                className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-all ${billingCycle === "monthly"
+                    ? "bg-white text-gray-900 shadow"
+                    : "text-gray-500 hover:text-gray-700"
+                  }`}
+              >
+                Monthly
+              </button>
+              <button
+                onClick={() => setBillingCycle("annual")}
+                className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${billingCycle === "annual"
+                    ? "bg-white text-gray-900 shadow"
+                    : "text-gray-500 hover:text-gray-700"
+                  }`}
+              >
+                Annual
+                <span
+                  className="text-xs font-bold px-1.5 py-0.5 rounded-full text-white"
+                  style={{ backgroundColor: PURPLE }}
+                >
+                  15% off
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Cards */}
+          <div className="grid md:grid-cols-3 gap-6 items-stretch">
+            {(
+              [
+                {
+                  name: "Starter",
+                  code: billingCycle === "monthly" ? "starter_monthly" : "starter_annual",
+                  base_price: 0,
+                  price_per_employee: null,
+                  max_employees: 30,
+                  trial_days: 20,
+                  features: [
+                    "Core payroll runs",
+                    "Payslip generation",
+                    "Single pay schedule",
+                    "Basic statutory calculations (PAYE/NSSF/NHIF or local equivalents)",
+                    "CSV employee import",
+                    "Email support",
+                  ],
+                  highlight: false,
+                  cta: "Start Free Trial",
+                },
+                {
+                  name: "Professional",
+                  code: billingCycle === "monthly" ? "professional_monthly" : "professional_annual",
+                  base_price: billingCycle === "monthly" ? 30 : 306,
+                  price_per_employee: billingCycle === "monthly" ? 3 : 30.6,
+                  max_employees: 250,
+                  trial_days: null,
+                  features: [
+                    "Everything in Starter",
+                    "Multi-schedule payrolls",
+                    "Automated tax filings/remittances",
+                    "Direct deposit or payrun funding",
+                    "Time and leave integration",
+                    "Reporting and analytics",
+                    "API access",
+                    "Priority support",
+                  ],
+                  highlight: true,
+                  cta: "Get Started",
+                },
+                {
+                  name: "Enterprise",
+                  code: billingCycle === "monthly" ? "enterprise_monthly" : "enterprise_annual",
+                  base_price: billingCycle === "monthly" ? 150 : 1530,
+                  price_per_employee: billingCycle === "monthly" ? 6 : 61.2,
+                  max_employees: null,
+                  trial_days: null,
+                  features: [
+                    "Everything in Professional",
+                    "SSO/SCIM",
+                    "Role-based access and audit logs",
+                    "Custom integrations and onboarding",
+                    "Higher uptime and SLAs",
+                    "Dedicated account manager",
+                    "Custom pricing",
+                    "Advanced compliance for multi-country payrolls",
+                  ],
+                  highlight: false,
+                  cta: "Contact Sales",
+                },
+              ] as const
+            ).map((plan) => (
+              <div
+                key={plan.code}
+                className={`relative rounded-2xl border flex flex-col ${plan.highlight
+                    ? "border-transparent shadow-2xl scale-[1.02]"
+                    : "border-gray-200 shadow-sm"
+                  }`}
+                style={
+                  plan.highlight
+                    ? { background: "#1a1a2e", color: "white" }
+                    : { background: "white" }
+                }
+              >
+                {plan.highlight && (
+                  <div
+                    className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold text-white px-3 py-1 rounded-full shadow"
+                    style={{ backgroundColor: PURPLE }}
+                  >
+                    Most Popular
+                  </div>
+                )}
+
+                <div className="p-7 flex flex-col flex-1">
+                  {/* Plan name */}
+                  <div className="mb-4">
+                    <span
+                      className="text-xs font-semibold uppercase tracking-widest"
+                      style={{ color: plan.highlight ? "#a78bfa" : PURPLE }}
+                    >
+                      {plan.name}
+                    </span>
+                  </div>
+
+                  {/* Price */}
+                  <div className="mb-1">
+                    {plan.base_price === 0 ? (
+                      <div className="flex items-end gap-1">
+                        <span
+                          className={`text-4xl font-extrabold ${plan.highlight ? "text-white" : "text-gray-900"}`}
+                        >
+                          Free
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="flex items-end gap-1">
+                        <span
+                          className={`text-4xl font-extrabold ${plan.highlight ? "text-white" : "text-gray-900"}`}
+                        >
+                          ${plan.base_price.toLocaleString()}
+                        </span>
+                        <span
+                          className={`text-sm mb-1.5 ${plan.highlight ? "text-gray-400" : "text-gray-500"}`}
+                        >
+                          /{billingCycle === "monthly" ? "mo" : "yr"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Per-employee */}
+                  {plan.price_per_employee !== null ? (
+                    <p
+                      className={`text-xs mb-1 ${plan.highlight ? "text-gray-400" : "text-gray-500"}`}
+                    >
+                      + ${plan.price_per_employee}/employee/
+                      {billingCycle === "monthly" ? "mo" : "yr"}
+                    </p>
+                  ) : (
+                    <p className="text-xs mb-1 invisible">placeholder</p>
+                  )}
+
+                  {/* Employee cap */}
+                  <p
+                    className={`text-xs mb-5 ${plan.highlight ? "text-gray-400" : "text-gray-400"}`}
+                  >
+                    {plan.max_employees
+                      ? `Up to ${plan.max_employees} employees`
+                      : "Unlimited employees"}
+                  </p>
+
+                  {/* Trial badge */}
+                  {plan.trial_days && (
+                    <div className="mb-4">
+                      <span
+                        className="text-xs font-semibold px-2.5 py-1 rounded-full"
+                        style={{
+                          backgroundColor: `${PURPLE}20`,
+                          color: plan.highlight ? "#c4b5fd" : PURPLE,
+                        }}
+                      >
+                        {plan.trial_days}-day free trial
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Divider */}
+                  <div
+                    className={`border-t mb-5 ${plan.highlight ? "border-white/10" : "border-gray-100"}`}
+                  />
+
+                  {/* Features */}
+                  <ul className="space-y-2.5 flex-1 mb-7">
+                    {plan.features.map((feat) => (
+                      <li key={feat} className="flex items-start gap-2">
+                        <svg
+                          className="w-4 h-4 mt-0.5 shrink-0"
+                          viewBox="0 0 20 20"
+                          fill="none"
+                        >
+                          <circle
+                            cx="10"
+                            cy="10"
+                            r="10"
+                            fill={plan.highlight ? "#895bf520" : `${PURPLE}18`}
+                          />
+                          <path
+                            d="M6 10l3 3 5-5"
+                            stroke={plan.highlight ? "#a78bfa" : PURPLE}
+                            strokeWidth="1.8"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        <span
+                          className={`text-xs leading-snug ${plan.highlight ? "text-gray-300" : "text-gray-600"}`}
+                        >
+                          {feat}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* CTA */}
+                  <button
+                    onClick={navigateToPortal}
+                    className="w-full py-2.5 rounded-lg text-sm font-semibold transition-all hover:opacity-90"
+                    style={
+                      plan.highlight
+                        ? { backgroundColor: PURPLE, color: "white" }
+                        : {
+                          backgroundColor: "transparent",
+                          color: PURPLE,
+                          border: `1.5px solid ${PURPLE}`,
+                        }
+                    }
+                  >
+                    {plan.cta}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Footer note */}
+          <p className="text-center text-xs text-gray-400 mt-8">
+            All plans require a card on file. Cancel or upgrade any time.{" "}
+            <a href="#" className="underline hover:text-gray-600" style={{ color: PURPLE }}>
+              Compare all features →
+            </a>
+          </p>
         </div>
       </section>
 
