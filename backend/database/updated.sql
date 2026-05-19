@@ -497,7 +497,6 @@ CREATE TABLE IF NOT EXISTS `notifications` (
 -- Dumping structure for table payhub.organizations
 CREATE TABLE IF NOT EXISTS `organizations` (
   `id` int NOT NULL AUTO_INCREMENT,
-  `tenant_id` int DEFAULT NULL, -- Link to main tenants table
   `name` varchar(100) NOT NULL, -- Consider increasing length to 255
   `payroll_number_prefix` varchar(10) DEFAULT 'EMP',
   `kra_pin` varchar(11) DEFAULT NULL,
@@ -527,18 +526,18 @@ CREATE TABLE IF NOT EXISTS `organizations` (
   `nhif_branch_code` varchar(50) DEFAULT NULL,
   `primary_administrator_id` int DEFAULT NULL, -- Link to users table
   `is_active` tinyint(1) DEFAULT '1',
+  `setup_completed`    tinyint(1) DEFAULT '0',
+`setup_completed_at` timestamp  NULL DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   `domain` varchar(100) DEFAULT NULL,
   PRIMARY KEY (`id`),
-  KEY `idx_org_tenant_id` (`tenant_id`),
   KEY `idx_org_kra_pin` (`kra_pin`),
   KEY `idx_org_county_id` (`county_id`)
   -- Foreign keys to be added after referenced tables are confirmed to exist
-  -- FOREIGN KEY (`tenant_id`) REFERENCES `tenants` (`id`) ON DELETE CASCADE,
   -- FOREIGN KEY (`county_id`) REFERENCES `counties` (`id`),
   -- FOREIGN KEY (`bank_id`) REFERENCES `banks` (`id`),
-  -- FOREIGN KEY (`primary_administrator_id`) REFERENCES `users` (`id`)
+  FOREIGN KEY (`primary_administrator_id`) REFERENCES `users` (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
@@ -799,16 +798,30 @@ CREATE TABLE IF NOT EXISTS `users` (
   `organization_id` int NOT NULL,
   `username` varchar(50) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
-  `email` varchar(100) NOT NULL,
-  `user_type` enum('super_admin','admin','hr_manager','hr_officer','payroll_manager','payroll_officer','finance_manager','auditor','department_manager','employee') DEFAULT 'employee',
+  `email` varchar(255) NOT NULL,
+  `user_type` enum(
+    'super_admin',
+    'admin',
+    'hr_manager',
+    'hr_officer',
+    'payroll_manager',
+    'payroll_officer',
+    'finance_manager',
+    'auditor',
+    'department_manager',
+    'employee'
+  ) DEFAULT 'employee',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `username` (`username`),
+  UNIQUE KEY `unique_org_username` (`organization_id`, `username`),
   UNIQUE KEY `email` (`email`),
   KEY `organization_id` (`organization_id`),
-  CONSTRAINT `users_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB AUTO_INCREMENT=41 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+  CONSTRAINT `users_ibfk_1`
+    FOREIGN KEY (`organization_id`)
+    REFERENCES `organizations` (`id`)
+    ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS `user_sessions` (
   `id`                     INT           NOT NULL AUTO_INCREMENT,
@@ -856,23 +869,120 @@ CREATE TABLE organization_subscriptions (
   id INT AUTO_INCREMENT PRIMARY KEY,
   organization_id INT NOT NULL,
   plan_id INT NOT NULL,
-  status ENUM('trialing','active','past_due','suspended','cancelled','expired') DEFAULT 'trialing',
-  starts_at TIMESTAMP NULL,
+  status ENUM('trialing','pending_payment','active','past_due','suspended','cancelled','expired') DEFAULT 'trialing',
+  starts_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
   trial_ends_at TIMESTAMP NULL,
   current_period_starts_at TIMESTAMP NULL,
   current_period_ends_at TIMESTAMP NULL,
   cancelled_at TIMESTAMP NULL,
+  -- Card payment fields
   payment_method_token VARCHAR(255) DEFAULT NULL,
   card_brand VARCHAR(30) DEFAULT NULL,
   card_last4 VARCHAR(4) DEFAULT NULL,
   card_exp_month VARCHAR(2) DEFAULT NULL,
   card_exp_year VARCHAR(4) DEFAULT NULL,
+  -- M-Pesa payment fields
+  checkout_request_id VARCHAR(100) DEFAULT NULL,
+  mpesa_phone VARCHAR(20) DEFAULT NULL,
+  mpesa_receipt_number VARCHAR(50) DEFAULT NULL,
   employee_limit INT DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  CONSTRAINT fk_org_sub_org FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
-  CONSTRAINT fk_org_sub_plan FOREIGN KEY (plan_id) REFERENCES subscription_plans(id) ON DELETE RESTRICT
+  CONSTRAINT fk_org_sub_org
+    FOREIGN KEY (organization_id)
+    REFERENCES organizations(id)
+    ON DELETE CASCADE,
+
+  CONSTRAINT fk_org_sub_plan
+    FOREIGN KEY (plan_id)
+    REFERENCES subscription_plans(id)
+    ON DELETE RESTRICT
 );
+
+CREATE TABLE payment_transactions (
+  id                   INT           NOT NULL AUTO_INCREMENT,
+  organization_id      INT           NOT NULL,
+  subscription_id      INT           DEFAULT NULL,  -- NULL if not yet linked (pre-activation)
+
+  -- Provider identification
+  provider             ENUM('mpesa','stripe','paypal','bank_transfer','manual') NOT NULL,
+  transaction_type     ENUM('subscription','upgrade','downgrade','renewal','refund','manual_adjustment') NOT NULL DEFAULT 'subscription',
+
+  -- Provider-side references (generic naming, filled per provider)
+  provider_reference   VARCHAR(100)  DEFAULT NULL  COMMENT 'mpesa_receipt_number, stripe charge_id, etc.',
+  provider_request_id  VARCHAR(100)  DEFAULT NULL  COMMENT 'checkout_request_id, stripe payment_intent_id, etc.',
+
+  -- Amount
+  amount               DECIMAL(15,2) NOT NULL,
+  currency             VARCHAR(10)   NOT NULL DEFAULT 'KES',
+
+  -- Status lifecycle
+  status               ENUM('initiated','pending','completed','failed','refunded','disputed') NOT NULL DEFAULT 'initiated',
+  failure_reason       VARCHAR(255)  DEFAULT NULL,
+
+  -- M-Pesa specific (nullable, only filled for mpesa)
+  mpesa_phone          VARCHAR(20)   DEFAULT NULL,
+  mpesa_result_code    VARCHAR(10)   DEFAULT NULL,
+  mpesa_result_desc    VARCHAR(255)  DEFAULT NULL,
+
+  -- Raw payload for audit/debugging
+  raw_request          JSON          DEFAULT NULL  COMMENT 'Outgoing request payload (STK push body, etc.)',
+  raw_callback         JSON          DEFAULT NULL  COMMENT 'Raw provider callback/webhook payload',
+
+  -- Who triggered it
+  initiated_by_user_id INT           DEFAULT NULL,
+
+  -- Timestamps
+  initiated_at         TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at         TIMESTAMP     NULL DEFAULT NULL,
+  created_at           TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at           TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  KEY `idx_pt_org`         (`organization_id`),
+  KEY `idx_pt_sub`         (`subscription_id`),
+  KEY `idx_pt_provider_ref`(`provider_reference`),
+  KEY `idx_pt_request_id`  (`provider_request_id`),
+  KEY `idx_pt_status`      (`status`),
+
+  CONSTRAINT `fk_pt_org`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_pt_sub`
+    FOREIGN KEY (`subscription_id`) REFERENCES `organization_subscriptions` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_pt_user`
+    FOREIGN KEY (`initiated_by_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Migration: create pending_tokens table
+--
+-- Used by SubscriptionController::mpesaCallback() to store the JWT that was
+-- issued after a successful M-Pesa payment, so the polling endpoint
+-- (paymentStatus) can hand it to the frontend.
+--
+-- Each row is a one-time-use token keyed by checkout_request_id.
+-- Rows expire after 10 minutes; a background job or MySQL event can trim them,
+-- but the application also deletes each row immediately after reading it.
+-- ─────────────────────────────────────────────────────────────────────────────
+ 
+CREATE TABLE IF NOT EXISTS `pending_tokens` (
+  `checkout_request_id` VARCHAR(100)  NOT NULL,
+  `token`               TEXT          NOT NULL  COMMENT 'JWT access_token',
+  `expires_at`          DATETIME      NOT NULL,
+  `created_at`          TIMESTAMP     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ 
+  PRIMARY KEY (`checkout_request_id`),
+  KEY `idx_pt_expires` (`expires_at`)
+ 
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+  COMMENT='Short-lived one-time JWT tokens bridging mpesaCallback → paymentStatus polling.';
+ 
+-- Optional: auto-purge expired rows every hour (requires MySQL Event Scheduler)
+-- SET GLOBAL event_scheduler = ON;
+-- CREATE EVENT IF NOT EXISTS purge_expired_pending_tokens
+--   ON SCHEDULE EVERY 1 HOUR
+--   DO DELETE FROM pending_tokens WHERE expires_at < NOW();
+
 
 -- Data exporting was unselected.
 
