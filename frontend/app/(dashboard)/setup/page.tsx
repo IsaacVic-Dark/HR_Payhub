@@ -1,0 +1,435 @@
+'use client';
+
+import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { toast } from 'sonner';
+import { CheckCircle2, ChevronRight, ChevronLeft, Loader2, Building2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { useAuth } from '@/lib/AuthContext';
+
+// ─── Step definitions ─────────────────────────────────────────────────────────
+
+const STEPS = [
+    'Company Details',
+    'Location',
+    'Payroll Settings',
+    'Banking',
+    'Review & Submit',
+] as const;
+
+type StepIndex = 0 | 1 | 2 | 3 | 4;
+
+// ─── Form shape ───────────────────────────────────────────────────────────────
+
+interface WizardData {
+    // Step 1
+    kra_pin: string;
+    legal_type: string;
+    registration_number: string;
+    // Step 2
+    physical_address: string;
+    postal_address: string;
+    county_id: string;
+    location: string;
+    // Step 3
+    payroll_schedule: string;
+    default_payday: string;
+    currency: string;
+    // Step 4
+    bank_account_name: string;
+    bank_account_number: string;
+    bank_branch: string;
+    swift_code: string;
+}
+
+const EMPTY: WizardData = {
+    kra_pin: '', legal_type: '', registration_number: '',
+    physical_address: '', postal_address: '', county_id: '', location: '',
+    payroll_schedule: '', default_payday: '', currency: 'KES',
+    bank_account_name: '', bank_account_number: '', bank_branch: '', swift_code: '',
+};
+
+// ─── Validation per step ──────────────────────────────────────────────────────
+
+type FieldErrors = Partial<Record<keyof WizardData, string>>;
+
+function validateStep(step: StepIndex, data: WizardData): FieldErrors {
+    const e: FieldErrors = {};
+    if (step === 0) {
+        if (!data.kra_pin.trim()) e.kra_pin = 'KRA PIN is required.';
+        if (!data.legal_type) e.legal_type = 'Legal type is required.';
+    }
+    if (step === 1) {
+        if (!data.physical_address.trim()) e.physical_address = 'Physical address is required.';
+        if (!data.location.trim()) e.location = 'Location is required.';
+        if (!data.county_id) e.county_id = 'County is required.';
+    }
+    if (step === 2) {
+        if (!data.payroll_schedule) e.payroll_schedule = 'Payroll schedule is required.';
+        const day = parseInt(data.default_payday, 10);
+        if (!data.default_payday || isNaN(day) || day < 1 || day > 31) {
+            e.default_payday = 'Payday must be between 1 and 31.';
+        }
+        if (!data.currency.trim()) e.currency = 'Currency is required.';
+    }
+    if (step === 3) {
+        if (!data.bank_account_name.trim()) e.bank_account_name = 'Account name is required.';
+        if (!data.bank_account_number.trim()) e.bank_account_number = 'Account number is required.';
+    }
+    return e;
+}
+
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const LEGAL_TYPES = ['LTD', 'PLC', 'Sole_Proprietor', 'Partnership', 'NGO', 'Government', 'School', 'Other'];
+const SCHEDULES = ['Monthly', 'Bi-Monthly', 'Weekly'];
+const CURRENCIES = ['KES', 'USD', 'EUR', 'GBP', 'UGX', 'TZS', 'RWF'];
+
+const COUNTIES = [
+    { id: 1, name: 'Mombasa' }, { id: 2, name: 'Kwale' }, { id: 3, name: 'Kilifi' },
+    { id: 4, name: 'Tana River' }, { id: 5, name: 'Lamu' }, { id: 6, name: 'Taita Taveta' },
+    { id: 7, name: 'Garissa' }, { id: 8, name: 'Wajir' }, { id: 9, name: 'Mandera' },
+    { id: 10, name: 'Marsabit' }, { id: 11, name: 'Isiolo' }, { id: 12, name: 'Meru' },
+    { id: 13, name: 'Tharaka-Nithi' }, { id: 14, name: 'Embu' }, { id: 15, name: 'Kitui' },
+    { id: 16, name: 'Machakos' }, { id: 17, name: 'Makueni' }, { id: 18, name: 'Nyandarua' },
+    { id: 19, name: 'Nyeri' }, { id: 20, name: 'Kirinyaga' }, { id: 21, name: "Murang'a" },
+    { id: 22, name: 'Kiambu' }, { id: 23, name: 'Turkana' }, { id: 24, name: 'West Pokot' },
+    { id: 25, name: 'Samburu' }, { id: 26, name: 'Trans Nzoia' }, { id: 27, name: 'Uasin Gishu' },
+    { id: 28, name: 'Elgeyo-Marakwet' }, { id: 29, name: 'Nandi' }, { id: 30, name: 'Baringo' },
+    { id: 31, name: 'Laikipia' }, { id: 32, name: 'Nakuru' }, { id: 33, name: 'Narok' },
+    { id: 34, name: 'Kajiado' }, { id: 35, name: 'Kericho' }, { id: 36, name: 'Bomet' },
+    { id: 37, name: 'Kakamega' }, { id: 38, name: 'Vihiga' }, { id: 39, name: 'Bungoma' },
+    { id: 40, name: 'Busia' }, { id: 41, name: 'Siaya' }, { id: 42, name: 'Kisumu' },
+    { id: 43, name: 'Homa Bay' }, { id: 44, name: 'Migori' }, { id: 45, name: 'Kisii' },
+    { id: 46, name: 'Nyamira' }, { id: 47, name: 'Nairobi' },
+];
+
+// ─── Component ────────────────────────────────────────────────────────────────
+
+export default function SetupPage() {
+    const router = useRouter();
+    const { markSetupComplete, checkAuthStatus } = useAuth();
+
+    const [currentStep, setCurrentStep] = useState<StepIndex>(0);
+    const [data, setData] = useState<WizardData>(EMPTY);
+    const [errors, setErrors] = useState<FieldErrors>({});
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    // ── Field helpers ───────────────────────────────────────────────────────────
+    const field = (key: keyof WizardData) => ({
+        value: data[key],
+        onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+            setData(d => ({ ...d, [key]: e.target.value })),
+        'aria-invalid': !!errors[key],
+    });
+
+    const set = (key: keyof WizardData, value: string) =>
+        setData(d => ({ ...d, [key]: value }));
+
+    // ── Navigation ──────────────────────────────────────────────────────────────
+    const goNext = () => {
+        const stepErrors = validateStep(currentStep, data);
+        if (Object.keys(stepErrors).length) {
+            setErrors(stepErrors);
+            return;
+        }
+        setErrors({});
+        setCurrentStep(s => Math.min(s + 1, 4) as StepIndex);
+    };
+
+    const goBack = () => {
+        setErrors({});
+        setCurrentStep(s => Math.max(s - 1, 0) as StepIndex);
+    };
+
+    // ── Final submit ────────────────────────────────────────────────────────────
+    const handleSubmit = async () => {
+        setIsSubmitting(true);
+        try {
+            const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organization/complete-setup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({
+                    ...data,
+                    county_id: parseInt(data.county_id, 10),
+                    default_payday: parseInt(data.default_payday, 10),
+                }),
+            });
+
+            const json = await res.json();
+
+            if (!res.ok) {
+                if (json.errors) setErrors(json.errors);
+                toast.error(json.message ?? 'Setup failed. Please try again.');
+                return;
+            }
+
+            markSetupComplete();
+            await checkAuthStatus();   // hydrates AuthContext from the cookie before navigating
+            toast.success('Setup complete! Welcome to PayHub.');
+            router.push('/dashboard');
+        } catch {
+            toast.error('Network error. Please check your connection.');
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
+    // ── Step indicator ──────────────────────────────────────────────────────────
+    const StepIndicator = () => (
+        <div className="flex items-center gap-1 mb-6">
+            {STEPS.map((label, i) => {
+                const done = i < currentStep;
+                const active = i === currentStep;
+                return (
+                    <div key={label} className="flex items-center gap-1 flex-1 min-w-0">
+                        <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
+                            <div
+                                className={[
+                                    'flex items-center justify-center rounded-full text-xs font-semibold transition-colors',
+                                    'h-7 w-7 shrink-0',
+                                    done ? 'bg-[#be2ed6] text-white' : '',
+                                    active ? 'border-2 border-[#be2ed6] text-[#be2ed6]' : '',
+                                    !done && !active ? 'border-2 border-muted-foreground/30 text-muted-foreground/50' : '',
+                                ].join(' ')}
+                            >
+                                {done ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
+                            </div>
+                            <span
+                                className={[
+                                    'text-[10px] text-center leading-tight truncate w-full text-center hidden sm:block',
+                                    active ? 'text-[#be2ed6] font-medium' : 'text-muted-foreground',
+                                ].join(' ')}
+                            >
+                                {label}
+                            </span>
+                        </div>
+                        {i < STEPS.length - 1 && (
+                            <div
+                                className={[
+                                    'h-[2px] flex-1 rounded transition-colors mb-4',
+                                    done ? 'bg-[#be2ed6]' : 'bg-muted-foreground/20',
+                                ].join(' ')}
+                            />
+                        )}
+                    </div>
+                );
+            })}
+        </div>
+    );
+
+    // ── Render steps ────────────────────────────────────────────────────────────
+    const renderStep = () => {
+        if (currentStep === 0) return (
+            <div className="space-y-4">
+                <div className="space-y-1">
+                    <Label>KRA PIN *</Label>
+                    <Input {...field('kra_pin')} placeholder="A000000000A" />
+                    {errors.kra_pin && <p className="text-xs text-destructive">{errors.kra_pin}</p>}
+                </div>
+                <div className="space-y-1">
+                    <Label>Legal Type *</Label>
+                    <Select value={data.legal_type} onValueChange={v => set('legal_type', v)}>
+                        <SelectTrigger aria-invalid={!!errors.legal_type}><SelectValue placeholder="Select…" /></SelectTrigger>
+                        <SelectContent>{LEGAL_TYPES.map(t => <SelectItem key={t} value={t}>{t.replace('_', ' ')}</SelectItem>)}</SelectContent>
+                    </Select>
+                    {errors.legal_type && <p className="text-xs text-destructive">{errors.legal_type}</p>}
+                </div>
+                <div className="space-y-1">
+                    <Label>Registration Number</Label>
+                    <Input {...field('registration_number')} placeholder="CPR/2024/XXXXX (optional)" />
+                </div>
+            </div>
+        );
+
+        if (currentStep === 1) return (
+            <div className="space-y-4">
+                <div className="space-y-1">
+                    <Label>Physical Address *</Label>
+                    <Input {...field('physical_address')} placeholder="123 Moi Avenue, Nairobi" />
+                    {errors.physical_address && <p className="text-xs text-destructive">{errors.physical_address}</p>}
+                </div>
+                <div className="space-y-1">
+                    <Label>Location / City *</Label>
+                    <Input {...field('location')} placeholder="Nairobi" />
+                    {errors.location && <p className="text-xs text-destructive">{errors.location}</p>}
+                </div>
+                <div className="space-y-1">
+                    <Label>Postal Address</Label>
+                    <Input {...field('postal_address')} placeholder="P.O. Box 1234-00100 Nairobi (optional)" />
+                </div>
+                <div className="space-y-1">
+                    <Label>County *</Label>
+                    <Select value={data.county_id} onValueChange={v => set('county_id', v)}>
+                        <SelectTrigger aria-invalid={!!errors.county_id}><SelectValue placeholder="Select county…" /></SelectTrigger>
+                        <SelectContent>
+                            {COUNTIES.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    {errors.county_id && <p className="text-xs text-destructive">{errors.county_id}</p>}
+                </div>
+            </div>
+        );
+
+        if (currentStep === 2) return (
+            <div className="space-y-4">
+                <div className="space-y-1">
+                    <Label>Payroll Schedule *</Label>
+                    <Select value={data.payroll_schedule} onValueChange={v => set('payroll_schedule', v)}>
+                        <SelectTrigger aria-invalid={!!errors.payroll_schedule}><SelectValue placeholder="Select…" /></SelectTrigger>
+                        <SelectContent>{SCHEDULES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
+                    </Select>
+                    {errors.payroll_schedule && <p className="text-xs text-destructive">{errors.payroll_schedule}</p>}
+                </div>
+                <div className="space-y-1">
+                    <Label>Default Payday (1–31) *</Label>
+                    <Input {...field('default_payday')} type="number" min={1} max={31} placeholder="28" />
+                    {errors.default_payday && <p className="text-xs text-destructive">{errors.default_payday}</p>}
+                </div>
+                <div className="space-y-1">
+                    <Label>Currency *</Label>
+                    <Select value={data.currency} onValueChange={v => set('currency', v)}>
+                        <SelectTrigger aria-invalid={!!errors.currency}><SelectValue /></SelectTrigger>
+                        <SelectContent>{CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                    </Select>
+                    {errors.currency && <p className="text-xs text-destructive">{errors.currency}</p>}
+                </div>
+            </div>
+        );
+
+        if (currentStep === 3) return (
+            <div className="space-y-4">
+                <div className="space-y-1">
+                    <Label>Account Name *</Label>
+                    <Input {...field('bank_account_name')} placeholder="Acme Ltd" />
+                    {errors.bank_account_name && <p className="text-xs text-destructive">{errors.bank_account_name}</p>}
+                </div>
+                <div className="space-y-1">
+                    <Label>Account Number *</Label>
+                    <Input {...field('bank_account_number')} placeholder="1234567890" />
+                    {errors.bank_account_number && <p className="text-xs text-destructive">{errors.bank_account_number}</p>}
+                </div>
+                <div className="space-y-1">
+                    <Label>Branch</Label>
+                    <Input {...field('bank_branch')} placeholder="Nairobi (optional)" />
+                </div>
+                <div className="space-y-1">
+                    <Label>SWIFT / BIC Code</Label>
+                    <Input {...field('swift_code')} placeholder="KCBLKENX (optional)" />
+                </div>
+            </div>
+        );
+
+        // Step 4 — Review
+        const reviewRows: { label: string; value: string }[] = [
+            { label: 'KRA PIN', value: data.kra_pin },
+            { label: 'Legal Type', value: data.legal_type.replace('_', ' ') },
+            { label: 'Reg. Number', value: data.registration_number || '—' },
+            { label: 'Physical Address', value: data.physical_address },
+            { label: 'Location', value: data.location },
+            { label: 'Postal Address', value: data.postal_address || '—' },
+            { label: 'County', value: COUNTIES.find(c => String(c.id) === data.county_id)?.name ?? data.county_id },
+            { label: 'Payroll Schedule', value: data.payroll_schedule },
+            { label: 'Default Payday', value: data.default_payday },
+            { label: 'Currency', value: data.currency },
+            { label: 'Account Name', value: data.bank_account_name },
+            { label: 'Account Number', value: data.bank_account_number },
+            { label: 'Bank Branch', value: data.bank_branch || '—' },
+            { label: 'SWIFT Code', value: data.swift_code || '—' },
+        ];
+
+        return (
+            <div className="space-y-3">
+                <p className="text-sm text-muted-foreground mb-2">
+                    Please review your details before submitting. Click <strong>Back</strong> to make changes.
+                </p>
+                <div className="rounded-lg border divide-y text-sm">
+                    {reviewRows.map(r => (
+                        <div key={r.label} className="flex justify-between px-4 py-2">
+                            <span className="text-muted-foreground">{r.label}</span>
+                            <span className="font-medium text-right max-w-[55%]">{r.value}</span>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        );
+    };
+
+    // ── Full render ─────────────────────────────────────────────────────────────
+    return (
+        <>
+            <div className="flex flex-1 flex-col">
+                <div className="@container/main flex flex-1 flex-col gap-2">
+                    <div className="mt-4 mx-6 space-y-2">
+                        <h1 className="text-2xl font-medium">Organisation Setup</h1>
+                        <p className="text-base text-muted-foreground">
+                            Complete your organisation profile to get started.
+                        </p>
+                    </div>
+                    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 mx-6">
+                        <div className="w-full max-w-xl">
+
+                            {/* Wizard card — constrained width, left-aligned like other detail pages */}
+                            <div className="max-w-2xl w-full">
+                                <Card className="shadow-sm">
+                                    <CardHeader className="pb-2">
+                                        <CardTitle className="text-base">
+                                            Step {currentStep + 1} of {STEPS.length} — {STEPS[currentStep]}
+                                        </CardTitle>
+                                        <CardDescription className="text-xs">
+                                            {currentStep < 4
+                                                ? 'Fill in the required fields, then click Next.'
+                                                : 'Review everything before submitting.'}
+                                        </CardDescription>
+                                    </CardHeader>
+
+                                    <CardContent>
+                                        <StepIndicator />
+
+                                        <div className="min-h-[280px]">
+                                            {renderStep()}
+                                        </div>
+
+                                        <div className="mt-8 flex justify-between gap-3">
+                                            {currentStep > 0 && (
+                                                <Button variant="outline" onClick={goBack} disabled={isSubmitting}>
+                                                    <ChevronLeft className="mr-1 h-4 w-4" /> Back
+                                                </Button>
+                                            )}
+                                            <div className="ml-auto">
+                                                {currentStep < 4 && (
+                                                    <Button
+                                                        onClick={goNext}
+                                                        className="bg-[#be2ed6] hover:bg-[#a526bc] text-white"
+                                                    >
+                                                        Next <ChevronRight className="ml-1 h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                                {currentStep === 4 && (
+                                                    <Button
+                                                        onClick={handleSubmit}
+                                                        disabled={isSubmitting}
+                                                        className="bg-[#be2ed6] hover:bg-[#a526bc] text-white"
+                                                    >
+                                                        {isSubmitting
+                                                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</>
+                                                            : 'Confirm & Finish Setup'}
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </>
+    );
+}

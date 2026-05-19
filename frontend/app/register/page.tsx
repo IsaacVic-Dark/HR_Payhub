@@ -1,505 +1,304 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { authService } from '@/services/api/auth';
+import { useState, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { toast } from 'sonner';
+import { Eye, EyeOff, Building2, Sparkles } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
-import { 
-  Select, 
-  SelectContent, 
-  SelectItem, 
-  SelectTrigger, 
-  SelectValue 
-} from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/lib/AuthContext';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-// Define form data interface
-interface FormData {
-  // Personal Information
-  first_name: string;
-  middle_name: string;
-  surname: string;
-  email: string;
-  phone: string;
-  password: string;
-  confirmPassword: string;
-  
-  // Organization Information
-  organization_name: string;
-  legal_type: string;
-  currency: string;
-  payroll_schedule: string;
-  
-  // Employment Information
-  job_title: string;
-  department: string;
-  base_salary: string;
-  employment_type: string;
-  work_location: string;
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type Plan = 'starter' | 'professional' | 'enterprise';
+
+interface FieldErrors {
+  email?: string;
+  username?: string;
+  password?: string;
+  phone?: string;
+  country?: string;
+  company_name?: string;
 }
 
-// Define errors interface
-interface FormErrors {
-  [key: string]: string;
-}
+// ─── Plan badge config ────────────────────────────────────────────────────────
+
+const PLAN_META: Record<Plan, { label: string; variant: 'default' | 'secondary' | 'outline'; color: string }> = {
+  starter: { label: 'Starter — Free Trial', variant: 'secondary', color: 'bg-emerald-100 text-emerald-800' },
+  professional: { label: 'Professional Plan', variant: 'default', color: 'bg-blue-100 text-blue-800' },
+  enterprise: { label: 'Enterprise Plan', variant: 'default', color: 'bg-violet-100 text-violet-800' },
+};
+
+const COUNTRIES = [
+  'Kenya', 'Uganda', 'Tanzania', 'Rwanda', 'Ethiopia',
+  'Nigeria', 'South Africa', 'Ghana', 'Egypt', 'Morocco',
+  'United States', 'United Kingdom', 'Other',
+];
+
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function RegisterPage() {
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [formData, setFormData] = useState<FormData>({
-    // Personal Information
-    first_name: '',
-    middle_name: '',
-    surname: '',
-    email: '',
-    phone: '',
-    password: '',
-    confirmPassword: '',
-    
-    // Organization Information
-    organization_name: '',
-    legal_type: 'LTD',
-    currency: 'KES',
-    payroll_schedule: 'Monthly',
-    
-    // Employment Information
-    job_title: 'Administrator',
-    department: 'Management',
-    base_salary: '',
-    employment_type: 'full_time',
-    work_location: 'on-site'
-  });
-
-  const [errors, setErrors] = useState<FormErrors>({});
-  const [isLoading, setIsLoading] = useState(false);
-  const { checkAuthStatus } = useAuth();
   const router = useRouter();
+  const { user, checkAuthStatus } = useAuth();
+  const searchParams = useSearchParams();
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-    
-    // Clear error when user starts typing
-    if (errors[name]) {
-      setErrors(prev => ({
-        ...prev,
-        [name]: ''
-      }));
-    }
+  // Resolve plan from URL query string, default to starter
+  const rawPlan = (searchParams.get('plan') ?? 'starter').toLowerCase() as Plan;
+  const plan: Plan = ['starter', 'professional', 'enterprise'].includes(rawPlan)
+    ? rawPlan
+    : 'starter';
+
+  // Form state
+  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [country, setCountry] = useState('');
+  const [companyName, setCompanyName] = useState('');
+  const [errors, setErrors] = useState<FieldErrors>({});
+  const [isLoading, setIsLoading] = useState(false);
+
+  const fillDummy = () => {
+    const n = Math.floor(Math.random() * 90) + 1; // 1–90
+    setCompanyName(`Airproof Test ${String(n).padStart(2, '0')}`);
+    setEmail(`isaac@airprooftest${String(n).padStart(2, '0')}.com`);
+    setUsername('isaac');
+    setPassword('Password123');
+    setPhone('+25471234567');
+    setCountry('Kenya');
   };
 
-  const handleSelectChange = (name: keyof FormData, value: string) => {
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
-  };
-
-  const validateForm = (): boolean => {
-    const newErrors: FormErrors = {};
-
-    // Personal info validation
-    if (!formData.first_name.trim()) {
-      newErrors.first_name = 'First name is required';
-    }
-
-    if (!formData.surname.trim()) {
-      newErrors.surname = 'Surname is required';
-    }
-
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
-    }
-
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 8) {
-      newErrors.password = 'Password must be at least 8 characters';
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = 'Passwords do not match';
-    }
-
-    // Organization validation
-    if (!formData.organization_name.trim()) {
-      newErrors.organization_name = 'Organization name is required';
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
+  // ── Submit ──────────────────────────────────────────────────────────────────
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!validateForm()) {
-      return;
-    }
-
+    setErrors({});
     setIsLoading(true);
 
-    // Prepare data for API
-    const registrationData = {
-      first_name: formData.first_name,
-      middle_name: formData.middle_name,
-      surname: formData.surname,
-      email: formData.email,
-      phone: formData.phone,
-      password: formData.password,
-      organization_name: formData.organization_name,
-      legal_type: formData.legal_type,
-      currency: formData.currency,
-      payroll_schedule: formData.payroll_schedule,
-      job_title: formData.job_title,
-      department: formData.department,
-      base_salary: parseFloat(formData.base_salary) || 0,
-      employment_type: formData.employment_type,
-      work_location: formData.work_location
-    };
-
     try {
-      // Call authService directly since AuthContext doesn't have register
-      const result = await authService.register(registrationData);
-      
-      if (result.success) {
-        // Refresh auth state after successful registration
-        await checkAuthStatus();
-        router.push('/dashboard');
-      } else {
-        setErrors({ submit: result.error || 'Registration failed' });
-      }
-    } catch (error: any) {
-      console.error('Registration error:', error);
-      setErrors({ 
-        submit: error.response?.data?.error || 'Registration failed. Please try again.' 
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',          // send / receive httpOnly cookies
+        body: JSON.stringify({
+          email,
+          username,
+          password,
+          phone,
+          country,
+          company_name: companyName,
+          plan,                           // included in POST body, not query string
+        }),
       });
+
+      const data = await res.json();
+
+      // ── Field-level validation errors (422) ─────────────────────────────────
+      if (!res.ok && data.errors) {
+        setErrors(data.errors);
+        toast.error('Please fix the errors below.');
+        return;
+      }
+
+      if (!res.ok) {
+        toast.error(data.message ?? 'Registration failed. Please try again.');
+        return;
+      }
+
+      // ── Paid plan — redirect to payment waiting screen ───────────────────────
+      if (data.requires_payment) {
+        const params = new URLSearchParams({
+          checkout_request_id: '',            // not known yet — will be set after initiate-payment
+          organization_id: String(data.organization_id),
+          subscription_id: String(data.subscription_id),
+          phone: data.phone,
+          amount: String(data.amount),
+          plan_name: data.plan_name ?? plan,
+        });
+
+        // Kick off the STK push immediately then redirect
+        try {
+          const payRes = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/subscription/initiate-payment`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              organization_id: data.organization_id,
+              subscription_id: data.subscription_id,
+              phone: data.phone,
+              amount: data.amount,
+            }),
+          });
+          const payData = await payRes.json();
+
+          if (!payRes.ok || !payData.checkout_request_id) {
+            toast.error(payData.message ?? 'Failed to send payment prompt. Please try again.');
+            return;
+          }
+
+          params.set('checkout_request_id', payData.checkout_request_id);
+          router.push(`/register/payment?${params.toString()}`);
+        } catch {
+          toast.error('Failed to initiate payment. Please try again.');
+        }
+        return;
+      }
+
+      // ── Starter plan — JWT already set in cookie; redirect to dashboard ──────
+if (data.token) {
+  toast.success('Account created! Redirecting…');
+  await checkAuthStatus();   // hydrates AuthContext from the cookie before navigating
+  router.push('/setup');
+}
+    } catch {
+      toast.error('Network error. Please check your connection and try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  // ── Render ──────────────────────────────────────────────────────────────────
+  const planMeta = PLAN_META[plan];
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <Card className="w-full max-w-2xl">
-        <CardHeader className="space-y-1"> 
-          <CardTitle className="text-2xl font-bold text-center">Create Account</CardTitle>
-          <CardDescription className="text-center">
-            Register your organization and create an admin account
-          </CardDescription>
+    <div className="min-h-screen flex items-center justify-center bg-muted/40 p-4">
+      <Card className="w-full max-w-md shadow-lg">
+        <CardHeader className="space-y-2">
+          <div className="flex items-center gap-2">
+            <Building2 className="h-6 w-6 text-primary" />
+            <CardTitle className="text-2xl">Create your PayHub account</CardTitle>
+          </div>
+          <CardDescription>Get your payroll running in minutes.</CardDescription>
+
+          {/* Plan badge */}
+          <div className="pt-1">
+            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${planMeta.color}`}>
+              <Sparkles className="h-3 w-3" />
+              {planMeta.label}
+            </span>
+          </div>
         </CardHeader>
+
         <CardContent>
-          {errors.submit && (
-            <Alert variant="destructive" className="mb-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{errors.submit}</AlertDescription>
-            </Alert>
-          )}
+          <form onSubmit={handleSubmit} noValidate className="space-y-4">
 
-          <form onSubmit={handleSubmit} className="space-y-6">
-            {/* Personal Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Personal Information</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="first_name">First Name *</Label>
-                  <Input
-                    id="first_name"
-                    name="first_name"
-                    value={formData.first_name}
-                    onChange={handleChange}
-                    required
-                    error={errors.first_name}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="surname">Surname *</Label>
-                  <Input
-                    id="surname"
-                    name="surname"
-                    value={formData.surname}
-                    onChange={handleChange}
-                    required
-                    error={errors.surname}
-                  />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="middle_name">Middle Name</Label>
-                <Input
-                  id="middle_name"
-                  name="middle_name"
-                  value={formData.middle_name}
-                  onChange={handleChange}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="email">Email *</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
-                  error={errors.email}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  type="tel"
-                  value={formData.phone}
-                  onChange={handleChange}
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="relative space-y-2">
-                  <Label htmlFor="password">Password *</Label>
-                  <div className="relative">
-                    <Input
-                      id="password"
-                      name="password"
-                      type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
-                      value={formData.password}
-                      onChange={handleChange}
-                      required
-                      disabled={isLoading}
-                      error={errors.password}
-                      className="pr-10"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                      onClick={() => setShowPassword(!showPassword)}
-                    >
-                      {showPassword ? (
-                        <EyeOff className="h-4 w-4 text-gray-500" />
-                      ) : (
-                        <Eye className="h-4 w-4 text-gray-500" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-
-                <div className="relative space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password *</Label>
-                  <div className="relative">
-                    <Input
-                      id="confirmPassword"
-                      name="confirmPassword"
-                      type={showConfirmPassword ? "text" : "password"}
-                      placeholder="Confirm your password"
-                      value={formData.confirmPassword}
-                      onChange={handleChange}
-                      required
-                      disabled={isLoading}
-                      error={errors.confirmPassword}
-                      className="pr-10"
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
-                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    >
-                      {showConfirmPassword ? (
-                        <EyeOff className="h-4 w-4 text-gray-500" />
-                      ) : (
-                        <Eye className="h-4 w-4 text-gray-500" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              </div>
+            {/* Company Name */}
+            <div className="space-y-1">
+              <Label htmlFor="company_name">Company Name</Label>
+              <Input
+                id="company_name"
+                placeholder="Acme Ltd"
+                value={companyName}
+                onChange={e => setCompanyName(e.target.value)}
+                aria-invalid={!!errors.company_name}
+              />
+              {errors.company_name && <p className="text-xs text-destructive">{errors.company_name}</p>}
             </div>
 
-            {/* Organization Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Organization Information</h3>
-              
-              <div className="space-y-2">
-                <Label htmlFor="organization_name">Organization Name *</Label>
+            {/* Email */}
+            <div className="space-y-1">
+              <Label htmlFor="email">Work Email</Label>
+              <Input
+                id="email"
+                type="email"
+                placeholder="you@company.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                aria-invalid={!!errors.email}
+              />
+              {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+            </div>
+
+            {/* Username */}
+            <div className="space-y-1">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                placeholder="johndoe"
+                value={username}
+                onChange={e => setUsername(e.target.value)}
+                aria-invalid={!!errors.username}
+              />
+              {errors.username && <p className="text-xs text-destructive">{errors.username}</p>}
+            </div>
+
+            {/* Password */}
+            <div className="space-y-1">
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
                 <Input
-                  id="organization_name"
-                  name="organization_name"
-                  value={formData.organization_name}
-                  onChange={handleChange}
-                  required
-                  error={errors.organization_name}
+                  id="password"
+                  type={showPw ? 'text' : 'password'}
+                  placeholder="Min. 8 chars, uppercase, number"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  aria-invalid={!!errors.password}
+                  className="pr-10"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(v => !v)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  aria-label={showPw ? 'Hide password' : 'Show password'}
+                >
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="legal_type">Legal Type</Label>
-                  <Select 
-                    value={formData.legal_type} 
-                    onValueChange={(value) => handleSelectChange('legal_type', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="LTD">Limited Company</SelectItem>
-                      <SelectItem value="PLC">Public Limited</SelectItem>
-                      <SelectItem value="Sole_Proprietor">Sole Proprietor</SelectItem>
-                      <SelectItem value="Partnership">Partnership</SelectItem>
-                      <SelectItem value="NGO">NGO</SelectItem>
-                      <SelectItem value="Government">Government</SelectItem>
-                      <SelectItem value="School">School</SelectItem>
-                      <SelectItem value="Other">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="currency">Currency</Label>
-                  <Select 
-                    value={formData.currency} 
-                    onValueChange={(value) => handleSelectChange('currency', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="KES">KES - Kenyan Shilling</SelectItem>
-                      <SelectItem value="USD">USD - US Dollar</SelectItem>
-                      <SelectItem value="EUR">EUR - Euro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="payroll_schedule">Payroll Schedule</Label>
-                  <Select 
-                    value={formData.payroll_schedule} 
-                    onValueChange={(value) => handleSelectChange('payroll_schedule', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Monthly">Monthly</SelectItem>
-                      <SelectItem value="Bi-Monthly">Bi-Monthly</SelectItem>
-                      <SelectItem value="Weekly">Weekly</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+              {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
             </div>
 
-            {/* Employment Information */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-medium">Employment Information</h3>
-              
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="job_title">Job Title</Label>
-                  <Input
-                    id="job_title"
-                    name="job_title"
-                    value={formData.job_title}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="department">Department</Label>
-                  <Input
-                    id="department"
-                    name="department"
-                    value={formData.department}
-                    onChange={handleChange}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="base_salary">Base Salary</Label>
-                  <Input
-                    id="base_salary"
-                    name="base_salary"
-                    type="number"
-                    step="0.01"
-                    value={formData.base_salary}
-                    onChange={handleChange}
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="employment_type">Employment Type</Label>
-                  <Select 
-                    value={formData.employment_type} 
-                    onValueChange={(value) => handleSelectChange('employment_type', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="full_time">Full Time</SelectItem>
-                      <SelectItem value="part_time">Part Time</SelectItem>
-                      <SelectItem value="contract">Contract</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="work_location">Work Location</Label>
-                  <Select 
-                    value={formData.work_location} 
-                    onValueChange={(value) => handleSelectChange('work_location', value)}
-                  >
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="on-site">On-site</SelectItem>
-                      <SelectItem value="hybrid">Hybrid</SelectItem>
-                      <SelectItem value="remote">Remote</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+            {/* Phone */}
+            <div className="space-y-1">
+              <Label htmlFor="phone">Phone Number</Label>
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="+254 7XX XXX XXX"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                aria-invalid={!!errors.phone}
+              />
+              {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
             </div>
+
+            {/* Country */}
+            <div className="space-y-1">
+              <Label htmlFor="country">Country</Label>
+              <Select value={country} onValueChange={setCountry}>
+                <SelectTrigger id="country" aria-invalid={!!errors.country}>
+                  <SelectValue placeholder="Select your country" />
+                </SelectTrigger>
+                <SelectContent>
+                  {COUNTRIES.map(c => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {errors.country && <p className="text-xs text-destructive">{errors.country}</p>}
+            </div>
+
+            {process.env.NODE_ENV === 'development' && (
+              <Button type="button" variant="outline" className="w-full text-muted-foreground" onClick={fillDummy}>
+                Fill dummy data
+              </Button>
+            )}
 
             <Button type="submit" className="w-full" disabled={isLoading}>
-              {isLoading ? 'Creating Account...' : 'Create Account'}
+              {isLoading
+                ? 'Creating account…'
+                : plan === 'starter'
+                  ? 'Start Free Trial'
+                  : `Continue to Payment`}
             </Button>
-
-            <div className="text-center">
-              <p className="text-sm text-gray-600">
-                Already have an account?{' '}
-                <Link href="/login" className="text-blue-600 hover:underline font-medium">
-                  Sign in
-                </Link>
-              </p>
-            </div>
           </form>
+
+          <p className="mt-4 text-center text-sm text-muted-foreground">
+            Already have an account?{' '}
+            <a href="/login" className="text-primary underline underline-offset-2">Sign in</a>
+          </p>
         </CardContent>
       </Card>
     </div>
