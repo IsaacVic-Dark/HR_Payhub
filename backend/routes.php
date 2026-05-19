@@ -16,6 +16,8 @@ use App\Controllers\DepartmentController;
 use App\Controllers\PayslipController;
 use App\Controllers\LoanController;
 use App\Controllers\P9Controller;
+use App\Controllers\SubscriptionController;
+use App\Controllers\RegistrationController;
 
 // Authentication routes - NO authentication required
 Router::post('/api/v1/auth/login', [AuthController::getInstance(), 'login']);
@@ -750,6 +752,36 @@ Router::post('api/v1/organizations/{org_id}/employees/{emp_id}/loans', LoanContr
 Router::get('api/v1/organizations/{org_id}/employees/{emp_id}/loans', LoanController::class . '@employeeLoans', [
     'AuthMiddleware',
     'LoanAuthorizationMiddleware',
+]);
+
+Router::post('/api/v1/register', RegistrationController::class . '@register');
+ 
+// =============================================================================
+// SUBSCRIPTION / PAYMENT
+// =============================================================================
+ 
+// POST /api/v1/subscription/initiate-payment
+// No auth middleware — guarded internally by requiring org + subscription IDs.
+// Sends M-Pesa STK push and records payment_transactions row.
+Router::post('/api/v1/subscription/initiate-payment', SubscriptionController::class . '@initiatePayment');
+ 
+// POST /api/v1/subscription/mpesa-callback
+// Public — called by Safaricom Daraja servers after the customer pays.
+// MUST always return HTTP 200 { ResultCode: 0 } or Daraja will retry.
+Router::post('/api/v1/subscription/mpesa-callback', SubscriptionController::class . '@mpesaCallback');
+ 
+// GET /api/v1/subscription/payment-status?checkout_request_id=xxx
+// Polling endpoint — frontend calls every 3 s while waiting for M-Pesa confirmation.
+// Returns { success, status } and, once completed, { token } for the frontend to store.
+Router::get('/api/v1/subscription/payment-status', SubscriptionController::class . '@paymentStatus');
+ 
+// =============================================================================
+// ORGANIZATION SETUP WIZARD
+// POST /api/v1/organization/complete-setup
+// Auth-guarded (admin only). Accepts all wizard fields and marks setup_completed = 1.
+// =============================================================================
+Router::post('/api/v1/organization/complete-setup', OrganizationController::class . '@completeSetup', [
+    ['AuthMiddleware', ['admin']],
 ]);
 
 // Test route
