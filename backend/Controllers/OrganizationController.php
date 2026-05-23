@@ -3,6 +3,7 @@
 namespace App\Controllers;
 
 use App\Services\DB;
+use App\Services\JWTService;
 use App\Middleware\AuthMiddleware;
 
 class OrganizationController
@@ -27,7 +28,7 @@ class OrganizationController
 
             // Get authenticated user
             $user = AuthMiddleware::getCurrentUser();
-            
+
             if (!$user) {
                 return responseJson(
                     success: false,
@@ -80,7 +81,6 @@ class OrganizationController
                     'can_edit' => in_array($user['user_type'], ['admin', 'hr_manager', 'finance_manager'])
                 ]
             );
-
         } catch (\Exception $e) {
             error_log("Organization details error: " . $e->getMessage());
             error_log("Stack trace: " . $e->getTraceAsString());
@@ -121,7 +121,7 @@ class OrganizationController
             // Get payrolls count (this month)
             $currentMonth = date('n');
             $currentYear = date('Y');
-            
+
             $payrollQuery = "SELECT COUNT(*) as current_month_payrolls FROM payrolls 
                             WHERE organization_id = :org_id 
                             AND pay_period_month = :month 
@@ -138,7 +138,6 @@ class OrganizationController
                 'pending_leaves' => (int)$pendingLeaves,
                 'current_month_payrolls' => (int)$currentMonthPayrolls
             ];
-
         } catch (\Exception $e) {
             error_log("Organization statistics error: " . $e->getMessage());
             return [];
@@ -161,7 +160,7 @@ class OrganizationController
             // Build WHERE clause and bindings
             $whereClauses = [];
             $bindings = [];
-            
+
             if ($name) {
                 $whereClauses[] = "`name` LIKE :name";
                 $bindings[':name'] = "%{$name}%";
@@ -192,7 +191,7 @@ class OrganizationController
 
             // Build main query
             $sql = "SELECT * FROM organizations {$whereClause} ORDER BY `created_at` DESC LIMIT {$limit} OFFSET {$offset}";
-            
+
             // Fetch paginated data
             $organizations = DB::raw($sql, $bindings);
 
@@ -220,10 +219,9 @@ class OrganizationController
                     ]
                 ]
             );
-
         } catch (\Exception $e) {
             error_log("Organization index error: " . $e->getMessage());
-            
+
             return responseJson(
                 success: false,
                 data: null,
@@ -262,10 +260,9 @@ class OrganizationController
                 message: "Organization fetched successfully",
                 code: 200
             );
-
         } catch (\Exception $e) {
             error_log("Organization show error: " . $e->getMessage());
-            
+
             return responseJson(
                 success: false,
                 data: null,
@@ -287,7 +284,7 @@ class OrganizationController
             // Validate required fields
             $required = ['name', 'location'];
             $validationErrors = [];
-            
+
             foreach ($required as $field) {
                 if (empty($data[$field])) {
                     $validationErrors[$field] = "Field '$field' is required";
@@ -349,10 +346,9 @@ class OrganizationController
                 message: "Organization created successfully",
                 code: 201
             );
-
         } catch (\Exception $e) {
             error_log("Organization store error: " . $e->getMessage());
-            
+
             return responseJson(
                 success: false,
                 data: null,
@@ -393,15 +389,33 @@ class OrganizationController
 
             // Prepare update data
             $updateData = [];
-            
+
             // List of allowed fields to update
             $allowedFields = [
-                'name', 'payroll_number_prefix', 'kra_pin', 'nssf_number', 'nhif_number',
-                'legal_type', 'registration_number', 'physical_address', 'location',
-                'postal_address', 'primary_phone', 'secondary_phone', 'official_email',
-                'logo_url', 'currency', 'payroll_schedule', 'payroll_lock_date',
-                'default_payday', 'bank_account_name', 'bank_account_number',
-                'bank_branch', 'swift_code', 'is_active', 'domain'
+                'name',
+                'payroll_number_prefix',
+                'kra_pin',
+                'nssf_number',
+                'nhif_number',
+                'legal_type',
+                'registration_number',
+                'physical_address',
+                'location',
+                'postal_address',
+                'primary_phone',
+                'secondary_phone',
+                'official_email',
+                'logo_url',
+                'currency',
+                'payroll_schedule',
+                'payroll_lock_date',
+                'default_payday',
+                'bank_account_name',
+                'bank_account_number',
+                'bank_branch',
+                'swift_code',
+                'is_active',
+                'domain'
             ];
 
             foreach ($allowedFields as $field) {
@@ -445,10 +459,9 @@ class OrganizationController
                 message: "Organization updated successfully",
                 code: 200
             );
-
         } catch (\Exception $e) {
             error_log("Organization update error: " . $e->getMessage());
-            
+
             return responseJson(
                 success: false,
                 data: null,
@@ -508,10 +521,9 @@ class OrganizationController
                 message: "Organization deleted successfully",
                 code: 200
             );
-
         } catch (\Exception $e) {
             error_log("Organization delete error: " . $e->getMessage());
-            
+
             return responseJson(
                 success: false,
                 data: null,
@@ -522,6 +534,217 @@ class OrganizationController
                     'type' => get_class($e)
                 ]
             );
+        }
+    }
+
+    // =========================================================================
+    // POST /api/v1/organization/complete-setup
+    // Auth: admin only (enforced by AuthMiddleware in routes.php)
+    // =========================================================================
+    public function completeSetup(): void
+    {
+        // Use AuthMiddleware::getCurrentUser() — populated by middleware::handle()
+        // Fall back to $GLOBALS['auth_user'] for safety after adding it to middleware
+        $authUser = AuthMiddleware::getCurrentUser() ?? ($GLOBALS['auth_user'] ?? null);
+
+        if (!$authUser) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Unauthorized.']);
+            return;
+        }
+
+        $orgId  = (int) ($authUser['organization_id'] ?? 0);
+        $userId = (int) ($authUser['id'] ?? 0);
+
+        if (!$orgId || !$userId) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Unauthorized.']);
+            return;
+        }
+
+        // ── Idempotency guard ─────────────────────────────────────────────────
+        $results = DB::raw(
+            'SELECT setup_completed FROM organizations WHERE id = :id AND primary_administrator_id = :uid',
+            ['id' => $orgId, 'uid' => $userId]
+        );
+        $org = !empty($results) ? (array) $results[0] : null;
+
+        if (!$org) {
+            http_response_code(403);
+            echo json_encode(['success' => false, 'message' => 'Organization not found or access denied.']);
+            return;
+        }
+
+        if ((int) $org['setup_completed'] === 1) {
+            http_response_code(409);
+            echo json_encode(['success' => false, 'message' => 'Setup has already been completed.']);
+            return;
+        }
+
+        // ── Parse + validate body ─────────────────────────────────────────────
+        $body = json_decode(file_get_contents('php://input'), true) ?? [];
+
+        $errors = [];
+
+        // Required fields
+        $requiredFields = [
+            'kra_pin'            => 'KRA PIN',
+            'legal_type'         => 'Legal type',
+            'physical_address'   => 'Physical address',
+            'location'           => 'Location',
+            'county_id'          => 'County',
+            'payroll_schedule'   => 'Payroll schedule',
+            'default_payday'     => 'Default payday',
+            'bank_account_name'  => 'Bank account name',
+            'bank_account_number' => 'Bank account number',
+        ];
+
+        foreach ($requiredFields as $field => $label) {
+            if (empty($body[$field]) && $body[$field] !== 0) {
+                $errors[$field] = $label . ' is required.';
+            }
+        }
+
+        $allowedLegalTypes = ['LTD', 'PLC', 'Sole_Proprietor', 'Partnership', 'NGO', 'Government', 'School', 'Other'];
+        if (!empty($body['legal_type']) && !in_array($body['legal_type'], $allowedLegalTypes, true)) {
+            $errors['legal_type'] = 'Invalid legal type.';
+        }
+
+        $allowedSchedules = ['Monthly', 'Bi-Monthly', 'Weekly'];
+        if (!empty($body['payroll_schedule']) && !in_array($body['payroll_schedule'], $allowedSchedules, true)) {
+            $errors['payroll_schedule'] = 'Payroll schedule must be Monthly, Bi-Monthly, or Weekly.';
+        }
+
+        $defaultPayday = (int) ($body['default_payday'] ?? 0);
+        if ($defaultPayday < 1 || $defaultPayday > 31) {
+            $errors['default_payday'] = 'Default payday must be between 1 and 31.';
+        }
+
+        if (!empty($errors)) {
+            http_response_code(422);
+            echo json_encode(['success' => false, 'errors' => $errors]);
+            return;
+        }
+
+        // ── Map body to clean values ──────────────────────────────────────────
+        $kraPin             = trim($body['kra_pin']);
+        $legalType          = $body['legal_type'];
+        $registrationNumber = trim($body['registration_number'] ?? '');
+        $physicalAddress    = trim($body['physical_address']);
+        $location           = trim($body['location']);
+        $postalAddress      = trim($body['postal_address']      ?? '');
+        $countyId           = (int) $body['county_id'];
+        $payrollSchedule    = $body['payroll_schedule'];
+        $currency           = trim($body['currency']            ?? 'KES');
+        $bankId             = !empty($body['bank_id']) ? (int) $body['bank_id'] : null;
+        $bankAccountName    = trim($body['bank_account_name']);
+        $bankAccountNumber  = trim($body['bank_account_number']);
+        $bankBranch         = trim($body['bank_branch']         ?? '');
+        $swiftCode          = trim($body['swift_code']          ?? '');
+        // Admin employee fields
+        $adminFirstname   = trim($body['admin_firstname']   ?? '');
+        $adminSurname     = trim($body['admin_surname']     ?? '');
+        $adminEmail       = trim($body['admin_email']       ?? '');
+        $adminHireDate    = trim($body['admin_hire_date']   ?? '');
+        $adminStartDate   = trim($body['admin_start_date']  ?? '');
+        $adminBaseSalary  = (float) ($body['admin_base_salary'] ?? 0);
+
+        if (empty($adminFirstname))  $errors['admin_firstname']  = 'First name is required.';
+        if (empty($adminSurname))    $errors['admin_surname']    = 'Surname is required.';
+        if (empty($adminEmail))      $errors['admin_email']      = 'Personal email is required.';
+        if (empty($adminHireDate))   $errors['admin_hire_date']  = 'Hire date is required.';
+        if (empty($adminStartDate))  $errors['admin_start_date'] = 'Start date is required.';
+        if ($adminBaseSalary < 0)    $errors['admin_base_salary'] = 'Base salary must be 0 or more.';
+
+        // ── Persist ───────────────────────────────────────────────────────────
+        try {
+            DB::raw(
+                'UPDATE organizations
+                    SET
+                        kra_pin              = :kra_pin,
+                        legal_type           = :legal_type,
+                        registration_number  = :registration_number,
+                        physical_address     = :physical_address,
+                        location             = :location,
+                        postal_address       = :postal_address,
+                        county_id            = :county_id,
+                        payroll_schedule     = :payroll_schedule,
+                        default_payday       = :default_payday,
+                        currency             = :currency,
+                        bank_id              = :bank_id,
+                        bank_account_name    = :bank_account_name,
+                        bank_account_number  = :bank_account_number,
+                        bank_branch          = :bank_branch,
+                        swift_code           = :swift_code,
+                        setup_completed      = 1,
+                        setup_completed_at   = NOW()
+                    WHERE id = :org_id AND primary_administrator_id = :user_id',
+                [
+                    'kra_pin'             => $kraPin,
+                    'legal_type'          => $legalType,
+                    'registration_number' => $registrationNumber ?: null,
+                    'physical_address'    => $physicalAddress,
+                    'location'            => $location,
+                    'postal_address'      => $postalAddress      ?: null,
+                    'county_id'           => $countyId,
+                    'payroll_schedule'    => $payrollSchedule,
+                    'default_payday'      => $defaultPayday,
+                    'currency'            => $currency           ?: 'KES',
+                    'bank_id'             => $bankId,
+                    'bank_account_name'   => $bankAccountName,
+                    'bank_account_number' => $bankAccountNumber,
+                    'bank_branch'         => $bankBranch         ?: null,
+                    'swift_code'          => $swiftCode          ?: null,
+                    'org_id'              => $orgId,
+                    'user_id'             => $userId,
+                ]
+            );
+
+            // ── Insert admin employee record ──────────────────────────────────────────
+            $employeeNumber = 'EMP-' . str_pad($userId, 4, '0', STR_PAD_LEFT);
+
+            DB::table('employees')->insert([
+                'organization_id' => $orgId,
+                'user_id'         => $userId,
+                'has_user'        => 1,
+                'employee_number' => $employeeNumber,
+                'firstname'       => $adminFirstname,
+                'surname'         => $adminSurname,
+                'personalemail'   => $adminEmail,
+                'hire_date'       => $adminHireDate,
+                'start_date'      => $adminStartDate,
+                'base_salary'     => $adminBaseSalary,
+                'status'          => 'active',
+            ]);
+
+            $newPayload = [
+                'user_id'             => $userId,
+                'email'               => $authUser['email'],
+                'user_type'           => $authUser['user_type'],
+                'organization_id'     => $orgId,
+                'setup_completed'     => 1,
+                'subscription_status' => $authUser['subscription_status'] ?? 'trialing',
+            ];
+
+            $tokens      = JWTService::generateToken($newPayload);   // returns array
+            $isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
+
+            setcookie('access_token', $tokens['access_token'], [
+                'expires'  => time() + 3600,
+                'path'     => '/',
+                'domain'   => '',
+                'secure'   => $isProduction,
+                'httponly' => false,
+                'samesite' => 'Lax',
+            ]);
+
+            http_response_code(200);
+            echo json_encode(['success' => true, 'setup_completed' => 1]);
+        } catch (\Throwable $e) {
+            error_log('OrganizationController::completeSetup error: ' . $e->getMessage());
+            echo json_encode(['success' => false, 'message' => 'OrganizationController::completeSetup error: ' . $e->getMessage()]);
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Failed to complete setup. Please try again.']);
         }
     }
 }
