@@ -175,7 +175,7 @@ export interface BulkSendResponse {
 //   2. Falls back to localStorage `token` → works for admin SPA sessions
 //
 // Base URL (employee file pattern, extended for admin):
-//   NEXT_PUBLIC_BACKEND_API_URL → NEXT_PUBLIC_API_URL → localhost fallback
+//   NEXT_PUBLIC_BACKEND_API_URL → NEXT_PUBLIC_BACKEND_API_URL → localhost fallback
 //
 // HTTP handling:
 //   Centralised handleResponse() checks response.ok, extracts errors — keeps
