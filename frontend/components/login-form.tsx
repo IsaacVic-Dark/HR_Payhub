@@ -37,13 +37,13 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      const success = await login(email, password);
+      const loggedInUser = await login(email, password);
 
-      if (success) {
-        console.log("Login successful, redirecting to dashboard");
-        router.push("/dashboard");
+      if (loggedInUser) {
+        const destination = loggedInUser.setup_completed === 1 ? '/dashboard' : '/setup';
+        router.push(destination);
       } else {
-        setError("Login failed. Please check your credentials.");
+        setError('Login failed. Please check your credentials.');
       }
     } catch (error) {
       console.error("Login exception:", error);
@@ -61,11 +61,11 @@ export function LoginForm() {
     setIsLoading(true);
 
     try {
-      const success = await login(testUser.email, testUser.password);
+      const loggedInUser = await login(testUser.email, testUser.password);
 
-      if (success) {
-        console.log(`Test login as ${role} successful, redirecting to dashboard`);
-        router.push("/dashboard");
+      if (loggedInUser) {
+        const destination = loggedInUser.setup_completed === 1 ? '/dashboard' : '/setup';
+        router.push(destination);
       } else {
         setError(`Login as ${role} failed. Please try again.`);
       }
@@ -252,7 +252,7 @@ export function LoginForm() {
                 <div className="text-center text-sm text-slate-500">
                   Don't have an account?{" "}
                   <a
-                    href="#"
+                    href="/register"
                     className="underline underline-offset-4 hover:text-slate-900"
                   >
                     Create account
