@@ -69,12 +69,16 @@ class AuthController
             //     return;
             // }
 
+            $org = $this->getOrganizationById($user['organization_id']);
+
             $payload = [
                 'user_id' => $user['id'],
                 'email' => $user['email'],
                 'user_type' => $user['user_type'],
                 'organization_id' => $user['organization_id'],
-                'employee_id' => $employee['id'] ?? null
+                'employee_id' => $employee['id'] ?? null,
+                'setup_completed'  => (int) ($org['setup_completed'] ?? 0),
+
             ];
 
             $tokens = JWTService::generateToken($payload);
@@ -231,7 +235,7 @@ class AuthController
                 // Create employee record for the admin
                 // Generate unique employee number
                 $employeeNumber = $this->generateEmployeeNumber($organizationId);
-                
+
                 // Resolve job_title_id: look up or insert 'Administrator' for this org
                 $existingJt = DB::table('job_titles')
                     ->where(['organization_id' => $organizationId, 'title' => 'Administrator'])
@@ -286,7 +290,8 @@ class AuthController
                 'email' => $data['email'],
                 'user_type' => $result['userType'],
                 'organization_id' => $result['organizationId'],
-                'employee_id' => $result['employeeId']
+                'employee_id' => $result['employeeId'],
+                'setup_completed' => 0,
             ];
 
             $tokens = JWTService::generateToken($payload);
@@ -532,13 +537,13 @@ class AuthController
     private function generateEmployeeNumber($organizationId)
     {
         $db = DB::getInstance();
-        
+
         // Get organization prefix
         $stmt = $db->prepare("SELECT payroll_number_prefix FROM organizations WHERE id = :org_id");
         $stmt->execute([':org_id' => $organizationId]);
         $org = $stmt->fetch(\PDO::FETCH_ASSOC);
         $prefix = $org['payroll_number_prefix'] ?? 'EMP';
-        
+
         // Get the highest employee number for this organization
         $stmt = $db->prepare("
             SELECT employee_number FROM employees 
@@ -547,13 +552,13 @@ class AuthController
         ");
         $stmt->execute([':org_id' => $organizationId]);
         $last = $stmt->fetch(\PDO::FETCH_ASSOC);
-        
+
         if ($last && preg_match('/(\d+)$/', $last['employee_number'], $matches)) {
             $nextNumber = intval($matches[1]) + 1;
         } else {
             $nextNumber = 1;
         }
-        
+
         return $prefix . str_pad($nextNumber, 5, '0', STR_PAD_LEFT);
     }
 
@@ -562,18 +567,15 @@ class AuthController
         header('Content-Type: application/json');
 
         try {
-            $data = json_decode(file_get_contents('php://input'), true);
+            $refreshToken = $_COOKIE['refresh_token']
+                ?? (json_decode(file_get_contents('php://input'), true)['refresh_token'] ?? null);
 
-            if (!isset($data['refresh_token'])) {
+            if (!$refreshToken) {
                 http_response_code(400);
-                echo json_encode([
-                    'success' => false,
-                    'error' => 'Refresh token is required'
-                ]);
+                echo json_encode(['success' => false, 'error' => 'Refresh token is required']);
                 return;
             }
-
-            $refreshData = JWTService::validateRefreshToken($data['refresh_token']);
+            $refreshData = JWTService::validateRefreshToken($refreshToken);
 
             if (!$refreshData) {
                 http_response_code(401);
@@ -606,6 +608,16 @@ class AuthController
 
             $tokens = JWTService::generateToken($payload);
 
+            $isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
+            setcookie('access_token', $tokens['access_token'], [
+                'expires'  => time() + 3600,
+                'path'     => '/',
+                'domain'   => '',
+                'secure'   => $isProduction,
+                'httponly' => false,
+                'samesite' => 'Lax',
+            ]);
+
             http_response_code(200);
             echo json_encode([
                 'success' => true,
@@ -630,7 +642,7 @@ class AuthController
             // Clear cookies
             $isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
             $secure = $isProduction;
-            
+
             setcookie('access_token', '', [
                 'expires' => time() - 3600,
                 'path' => '/',
@@ -639,7 +651,7 @@ class AuthController
                 'httponly' => false,
                 'samesite' => 'Lax'
             ]);
-            
+
             setcookie('refresh_token', '', [
                 'expires' => time() - 3600,
                 'path' => '/',
@@ -701,6 +713,11 @@ class AuthController
 
             $employee = $this->getEmployeeByUserId($user['id']);
 
+            $org = DB::table('organizations')
+                ->where(['id' => $user['organization_id']])
+                ->get(['setup_completed']);
+            $setupCompleted = !empty($org) ? (int)((array)$org[0])['setup_completed'] : 0;
+
             http_response_code(200);
             echo json_encode([
                 'success' => true,
@@ -710,6 +727,8 @@ class AuthController
                     'username' => $user['username'],
                     'user_type' => $user['user_type'],
                     'organization_id' => $user['organization_id'],
+                    'setup_completed'     => $setupCompleted,
+                    'subscription_status' => 'trialing',
                     'employee' => $employee ? [
                         'id' => $employee['id'],
                         'employee_number' => $employee['employee_number'],
@@ -743,12 +762,12 @@ class AuthController
                 return $matches[1];
             }
         }
-        
+
         // Also check cookies as fallback
         if (isset($_COOKIE['access_token'])) {
             return $_COOKIE['access_token'];
         }
-        
+
         return null;
     }
 
@@ -780,5 +799,13 @@ class AuthController
         }
 
         return $row;
+    }
+    private function getOrganizationById($orgId)
+    {
+        $result = DB::table('organizations')
+            ->where(['id' => $orgId])
+            ->get(['id', 'setup_completed']);
+
+        return !empty($result) ? (array) $result[0] : null;
     }
 }
