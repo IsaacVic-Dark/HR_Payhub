@@ -18,10 +18,11 @@ const STEPS = [
     'Location',
     'Payroll Settings',
     'Banking',
+    'Admin Profile',
     'Review & Submit',
 ] as const;
 
-type StepIndex = 0 | 1 | 2 | 3 | 4;
+type StepIndex = 0 | 1 | 2 | 3 | 4 | 5;
 
 // ─── Form shape ───────────────────────────────────────────────────────────────
 
@@ -44,6 +45,13 @@ interface WizardData {
     bank_account_number: string;
     bank_branch: string;
     swift_code: string;
+    // Step 5 — Admin employee profile
+    admin_firstname: string;
+    admin_surname: string;
+    admin_email: string;
+    admin_hire_date: string;
+    admin_start_date: string;
+    admin_base_salary: string;
 }
 
 const EMPTY: WizardData = {
@@ -51,6 +59,8 @@ const EMPTY: WizardData = {
     physical_address: '', postal_address: '', county_id: '', location: '',
     payroll_schedule: '', default_payday: '', currency: 'KES',
     bank_account_name: '', bank_account_number: '', bank_branch: '', swift_code: '',
+    admin_firstname: '', admin_surname: '', admin_email: '',
+    admin_hire_date: '', admin_start_date: '', admin_base_salary: '',
 };
 
 // ─── Validation per step ──────────────────────────────────────────────────────
@@ -80,7 +90,24 @@ function validateStep(step: StepIndex, data: WizardData): FieldErrors {
         if (!data.bank_account_name.trim()) e.bank_account_name = 'Account name is required.';
         if (!data.bank_account_number.trim()) e.bank_account_number = 'Account number is required.';
     }
+    if (step === 4) {
+        const e: FieldErrors = {};
+        if (!data.admin_firstname.trim()) e.admin_firstname = 'First name is required.';
+        if (!data.admin_surname.trim()) e.admin_surname = 'Surname is required.';
+        if (!data.admin_email.trim()) e.admin_email = 'Email is required.';
+        if (!data.admin_hire_date) e.admin_hire_date = 'Hire date is required.';
+        if (!data.admin_start_date) e.admin_start_date = 'Start date is required.';
+        if (!data.admin_base_salary || isNaN(Number(data.admin_base_salary)) || Number(data.admin_base_salary) < 0)
+            e.admin_base_salary = 'A valid salary is required.';
+    }
     return e;
+}
+
+function getCookie(name: string): string | null {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
+    return null;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -112,7 +139,7 @@ const COUNTIES = [
 
 export default function SetupPage() {
     const router = useRouter();
-    const { markSetupComplete, checkAuthStatus } = useAuth();
+    const { markSetupComplete } = useAuth();
 
     const [currentStep, setCurrentStep] = useState<StepIndex>(0);
     const [data, setData] = useState<WizardData>(EMPTY);
@@ -138,7 +165,7 @@ export default function SetupPage() {
             return;
         }
         setErrors({});
-        setCurrentStep(s => Math.min(s + 1, 4) as StepIndex);
+        setCurrentStep(s => Math.min(s + 1, 5) as StepIndex);
     };
 
     const goBack = () => {
@@ -152,12 +179,18 @@ export default function SetupPage() {
         try {
             const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organization/complete-setup`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: {
+                    'Content-Type': 'application/json',
+                    ...(getCookie('access_token') && {
+                        'Authorization': `Bearer ${getCookie('access_token')}`,
+                    }),
+                },
                 credentials: 'include',
                 body: JSON.stringify({
                     ...data,
                     county_id: parseInt(data.county_id, 10),
                     default_payday: parseInt(data.default_payday, 10),
+                    admin_base_salary:  parseFloat(data.admin_base_salary),
                 }),
             });
 
@@ -170,7 +203,6 @@ export default function SetupPage() {
             }
 
             markSetupComplete();
-            await checkAuthStatus();   // hydrates AuthContext from the cookie before navigating
             toast.success('Setup complete! Welcome to PayHub.');
             router.push('/dashboard');
         } catch {
@@ -325,6 +357,41 @@ export default function SetupPage() {
             </div>
         );
 
+        if (currentStep === 4) return (
+            <div className="space-y-4">
+                <div>
+                    <Label>First Name *</Label>
+                    <Input {...field('admin_firstname')} placeholder="John" />
+                    {errors.admin_firstname && <p className="text-red-500 text-xs mt-1">{errors.admin_firstname}</p>}
+                </div>
+                <div>
+                    <Label>Surname *</Label>
+                    <Input {...field('admin_surname')} placeholder="Doe" />
+                    {errors.admin_surname && <p className="text-red-500 text-xs mt-1">{errors.admin_surname}</p>}
+                </div>
+                <div>
+                    <Label>Personal Email *</Label>
+                    <Input {...field('admin_email')} type="email" placeholder="john@personal.com" />
+                    {errors.admin_email && <p className="text-red-500 text-xs mt-1">{errors.admin_email}</p>}
+                </div>
+                <div>
+                    <Label>Hire Date *</Label>
+                    <Input {...field('admin_hire_date')} type="date" />
+                    {errors.admin_hire_date && <p className="text-red-500 text-xs mt-1">{errors.admin_hire_date}</p>}
+                </div>
+                <div>
+                    <Label>Start Date *</Label>
+                    <Input {...field('admin_start_date')} type="date" />
+                    {errors.admin_start_date && <p className="text-red-500 text-xs mt-1">{errors.admin_start_date}</p>}
+                </div>
+                <div>
+                    <Label>Base Salary (KES) *</Label>
+                    <Input {...field('admin_base_salary')} type="number" min={0} placeholder="50000" />
+                    {errors.admin_base_salary && <p className="text-red-500 text-xs mt-1">{errors.admin_base_salary}</p>}
+                </div>
+            </div>
+        )
+
         // Step 4 — Review
         const reviewRows: { label: string; value: string }[] = [
             { label: 'KRA PIN', value: data.kra_pin },
@@ -341,6 +408,12 @@ export default function SetupPage() {
             { label: 'Account Number', value: data.bank_account_number },
             { label: 'Bank Branch', value: data.bank_branch || '—' },
             { label: 'SWIFT Code', value: data.swift_code || '—' },
+            { label: 'Admin First Name', value: data.admin_firstname },
+            { label: 'Admin Surname', value: data.admin_surname },
+            { label: 'Admin Email', value: data.admin_email },
+            { label: 'Hire Date', value: data.admin_hire_date },
+            { label: 'Start Date', value: data.admin_start_date },
+            { label: 'Base Salary', value: `KES ${Number(data.admin_base_salary).toLocaleString()}` },
         ];
 
         return (
@@ -382,7 +455,7 @@ export default function SetupPage() {
                                             Step {currentStep + 1} of {STEPS.length} — {STEPS[currentStep]}
                                         </CardTitle>
                                         <CardDescription className="text-xs">
-                                            {currentStep < 4
+                                            {currentStep < 5
                                                 ? 'Fill in the required fields, then click Next.'
                                                 : 'Review everything before submitting.'}
                                         </CardDescription>
@@ -402,7 +475,7 @@ export default function SetupPage() {
                                                 </Button>
                                             )}
                                             <div className="ml-auto">
-                                                {currentStep < 4 && (
+                                                {currentStep < 5 && (
                                                     <Button
                                                         onClick={goNext}
                                                         className="bg-[#be2ed6] hover:bg-[#a526bc] text-white"
@@ -410,7 +483,7 @@ export default function SetupPage() {
                                                         Next <ChevronRight className="ml-1 h-4 w-4" />
                                                     </Button>
                                                 )}
-                                                {currentStep === 4 && (
+                                                {currentStep === 5 && (
                                                     <Button
                                                         onClick={handleSubmit}
                                                         disabled={isSubmitting}
