@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000/api/v1';
 
 const authAPI = axios.create({
     baseURL: `${API_BASE_URL}`,
@@ -27,23 +27,28 @@ authAPI.interceptors.response.use(
     (response) => response,
     async (error) => {
         const originalRequest = error.config;
-        
+
         // If we get a 401 and haven't already tried to refresh
         if (error.response?.status === 401 && !originalRequest._retry) {
             originalRequest._retry = true;
-            
+
             try {
                 // Try to refresh the token
                 await authService.refreshToken();
                 // Retry the original request with new token
                 return authAPI(originalRequest);
             } catch (refreshError) {
-                // Refresh failed, clear cookies and reject
                 clearAuthCookies();
+                if (typeof window !== 'undefined') {
+                    const publicPaths = ['/login', '/register', '/'];
+                    if (!publicPaths.includes(window.location.pathname)) {
+                        window.location.href = '/login';
+                    }
+                }
                 return Promise.reject(refreshError);
             }
         }
-        
+
         return Promise.reject(error);
     }
 );
@@ -112,11 +117,11 @@ export const authService = {
             console.log('Cookies before request:', document.cookie);
             const token = getCookie('access_token');
             console.log('Access token for request:', token ? 'EXISTS' : 'MISSING');
-            
+
             const response = await authAPI.get('/auth/me');
-            
+
             console.log('getCurrentUser response:', response.data);
-            
+
             // Return the response data which should have success and user properties
             return response.data;
         } catch (error) {
@@ -128,7 +133,7 @@ export const authService = {
     async refreshToken() {
         const response = await authAPI.post('/auth/refresh');
         const data = response.data;
-        
+
         if (data.tokens) {
             setAuthCookies(
                 data.tokens.access_token,
@@ -148,9 +153,9 @@ function setAuthCookies(accessToken, refreshToken) {
     });
 
     // Check if we're on localhost
-    const isLocalhost = window.location.hostname === 'localhost' || 
-                       window.location.hostname === '127.0.0.1';
-    
+    const isLocalhost = window.location.hostname === 'localhost' ||
+        window.location.hostname === '127.0.0.1';
+
     // For localhost, use minimal cookie attributes
     if (isLocalhost) {
         // Simple cookie setting for localhost
@@ -176,7 +181,7 @@ function clearAuthCookies() {
     // Try multiple methods to clear cookies
     document.cookie = 'access_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
     document.cookie = 'refresh_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT; SameSite=Lax';
-    
+
     // Also try without path
     document.cookie = 'access_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT';
     document.cookie = 'refresh_token=; expires=Thu, 01 Jan 1970 00:00:00 GMT';

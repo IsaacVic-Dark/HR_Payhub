@@ -1,8 +1,12 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { useRouter } from "next/navigation";
+import React, {
+  createContext, useContext, useState, useEffect, useCallback, ReactNode,
+} from 'react';
+import { useRouter } from 'next/navigation';
 import { authService } from '@/services/api/auth';
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface JobTitle {
   id: number;
@@ -16,7 +20,7 @@ interface Employee {
   surname: string;
   personalemail: string;
   job_title: JobTitle;
-  status: "active" | "inactive";
+  status: 'active' | 'inactive';
 }
 
 interface User {
@@ -25,130 +29,176 @@ interface User {
   username: string;
   user_type: string;
   organization_id: number;
-  employee: Employee;
+  employee: Employee | null;
+  setup_completed: number;
+  subscription_status: string;
 }
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string, password: string) => Promise<boolean>;
+  login: (email: string, password: string) => Promise<User | null>;
   logout: () => Promise<void>;
   isLoading: boolean;
   checkAuthStatus: () => Promise<void>;
+  markSetupComplete: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  const ctx = useContext(AuthContext);
+  if (ctx === undefined) throw new Error('useAuth must be used within an AuthProvider');
+  return ctx;
 };
 
-interface AuthProviderProps {
-  children: ReactNode;
+// ─── JWT payload decoder (no verification — mirrors middleware.js) ─────────────
+
+function decodeJwtData(token: string): Record<string, unknown> | null {
+  try {
+    const base64 = token.split('.')[1];
+    if (!base64) return null;
+    const json = atob(base64.replace(/-/g, '+').replace(/_/g, '/'));
+    const payload = JSON.parse(json);
+    return (payload?.data as Record<string, unknown>) ?? null;
+  } catch {
+    return null;
+  }
 }
+
+/**
+ * Read the access_token cookie value from document.cookie.
+ * Returns null in SSR / when no cookie is present.
+ */
+function getAccessTokenFromCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|;\s*)access_token=([^;]+)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
+
+interface AuthProviderProps { children: ReactNode }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
-  // Load user from localStorage on initial render
-  useEffect(() => {
-    const savedUser = localStorage.getItem('auth_user');
-    if (savedUser) {
-      try {
-        const parsedUser = JSON.parse(savedUser);
-        setUser(parsedUser);
-      } catch (error) {
-        localStorage.removeItem('auth_user');
-      }
-    }
-    checkAuthStatus();
-  }, []);
+  // ── Hydrate from localStorage on mount ────────────────────────────────────
+useEffect(() => {
+  // Don't attempt auth check on public pages — prevents refresh loop on /login
+  const publicPaths = ['/login', '/register', '/'];
+  if (publicPaths.includes(window.location.pathname)) {
+    setIsLoading(false);   // unblock the UI
+    return;
+  }
 
-  // Save user to localStorage whenever it changes
+  const saved = localStorage.getItem('auth_user');
+  if (saved) {
+    try { setUser(JSON.parse(saved)); } catch { localStorage.removeItem('auth_user'); }
+  }
+  checkAuthStatus();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, []);
+
+  // ── Persist to localStorage whenever user changes ─────────────────────────
   useEffect(() => {
-    if (user) {
-      localStorage.setItem('auth_user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('auth_user');
-    }
+    if (user) localStorage.setItem('auth_user', JSON.stringify(user));
+    else localStorage.removeItem('auth_user');
   }, [user]);
 
-  const checkAuthStatus = async () => {
+  // ── checkAuthStatus ────────────────────────────────────────────────────────
+  const checkAuthStatus = useCallback(async () => {
     setIsLoading(true);
     try {
       const response = await authService.getCurrentUser();
-      console.log('checkAuthStatus response:', response);
-      
+
       if (response.success && response.user) {
-        setUser(response.user);
-        return; // Successfully authenticated
-      } else {
-        setUser(null);
-        localStorage.removeItem('auth_user');
+        // Merge setup_completed + subscription_status from JWT if the /me
+        // endpoint doesn't return them directly yet.
+        const merged = mergeJwtClaims(response.user);
+        setUser(merged);
+        return;
       }
-    } catch (error) {
-      console.error('Auth check failed:', error);
+
+      setUser(null);
+      localStorage.removeItem('auth_user');
+    } catch {
       setUser(null);
       localStorage.removeItem('auth_user');
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  // ── login ──────────────────────────────────────────────────────────────────
+  const login = useCallback(async (email: string, password: string): Promise<User | null> => {
     setIsLoading(true);
     try {
       const response = await authService.login({ email, password });
-      console.log('Login API response:', response);
-      
-      if (response.success) {
-        // Fetch the user data immediately after successful login
-        const userResponse = await authService.getCurrentUser();
-        console.log('User data after login:', userResponse);
-        
-        if (userResponse.success && userResponse.user) {
-          setUser(userResponse.user);
-          setIsLoading(false);
-          return true;
-        } else {
-          console.error('Failed to fetch user data after login');
-          setIsLoading(false);
-          return false;
-        }
-      }
-      setIsLoading(false);
-      return false;
-    } catch (error: any) {
-      console.error('Login failed:', error);
-      setIsLoading(false);
-      return false;
-    }
-  };
+      if (!response.success) { setIsLoading(false); return null; }
 
-  const logout = async (): Promise<void> => {
-    try {
-      await authService.logout();
-    } catch (error) {
-      console.error('Logout failed:', error);
-    } finally {
+      const userResponse = await authService.getCurrentUser();
+
+      if (userResponse.success && userResponse.user) {
+        const merged = mergeJwtClaims(userResponse.user);
+        setUser(merged);
+        setIsLoading(false);
+        return merged;
+      }
+
+      setIsLoading(false);
+      return null;
+    } catch {
+      setIsLoading(false);
+      return null;
+    }
+  }, []);
+
+  // ── logout ─────────────────────────────────────────────────────────────────
+  const logout = useCallback(async () => {
+    try { await authService.logout(); } catch { /* ignore */ }
+    finally {
       setUser(null);
       localStorage.removeItem('auth_user');
       router.push('/login');
     }
-  };
+  }, [router]);
 
-  const value = {
-    user,
-    login,
-    logout,
-    isLoading,
-    checkAuthStatus,
+  // ── markSetupComplete ──────────────────────────────────────────────────────
+  /**
+   * Called by the setup wizard after a successful POST /organization/complete-setup.
+   * Updates the in-memory user object without requiring a full token refresh,
+   * so middleware.js stops redirecting to /setup on the very next navigation.
+   */
+  const markSetupComplete = useCallback(() => {
+    setUser(u => u ? { ...u, setup_completed: 1 } : u);
+  }, []);
+
+  // ── Context value ──────────────────────────────────────────────────────────
+  const value: AuthContextType = {
+    user, login, logout, isLoading, checkAuthStatus, markSetupComplete,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Merge setup_completed and subscription_status from the JWT cookie into the
+ * user object returned by the /me endpoint.
+ *
+ * This lets the frontend work correctly even before the /me endpoint is updated
+ * to return these fields directly.
+ */
+function mergeJwtClaims(apiUser: Partial<User>): User {
+  const token = getAccessTokenFromCookie();
+  const jwtData = token ? decodeJwtData(token) : null;
+
+  return {
+    ...(apiUser as User),
+    setup_completed: (apiUser.setup_completed ?? Number(jwtData?.setup_completed ?? 0)),
+    subscription_status: (apiUser.subscription_status ?? String(jwtData?.subscription_status ?? '')),
+  };
+}
