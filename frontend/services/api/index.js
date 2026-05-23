@@ -1,7 +1,7 @@
 import axios from 'axios';
 import { getCookie } from './auth';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000/api/v1';
 
 // Create main API instance
 export const api = axios.create({
