@@ -19,9 +19,9 @@ export default function Page() {
 
   const getUserName = () => {
     if (!user) return "";
-    if (user.employee.firstname && user.employee.surname) {
-      return `${user.employee.firstname} ${user.employee.surname}`;
-    }
+if (user.employee?.firstname && user.employee?.surname) {
+  return `${user.employee.firstname} ${user.employee.surname}`;
+}
     return user.username || "";
   };
 
