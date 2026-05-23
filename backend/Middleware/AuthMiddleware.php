@@ -17,7 +17,7 @@ class AuthMiddleware
         try {
             // Get token from header
             $token = self::getBearerToken();
-            
+
             if (!$token) {
                 return responseJson(
                     success: false,
@@ -29,7 +29,7 @@ class AuthMiddleware
 
             // Validate JWT token
             $tokenData = JWTService::validateToken($token);
-            
+
             if (!$tokenData) {
                 return responseJson(
                     success: false,
@@ -41,7 +41,7 @@ class AuthMiddleware
 
             // Get user data (with caching for performance)
             $user = self::getCachedUser($tokenData['user_id']);
-            
+
             if (!$user) {
                 return responseJson(
                     success: false,
@@ -86,7 +86,6 @@ class AuthMiddleware
             }
 
             return $next($request);
-
         } catch (\Exception $e) {
             error_log('Auth middleware error: ' . $e->getMessage());
             return responseJson(
@@ -113,11 +112,11 @@ class AuthMiddleware
     {
         // Simple in-request caching to reduce DB queries
         static $userCache = [];
-        
+
         if (!isset($userCache[$userId])) {
             $userCache[$userId] = User::find($userId);
         }
-        
+
         return $userCache[$userId];
     }
 
@@ -127,7 +126,7 @@ class AuthMiddleware
             ->where(['user_id' => $userId])
             ->get(['*']);
 
-        return $result[0] ? json_decode(json_encode($result[0]), true) : null;
+        return !empty($result) ? json_decode(json_encode($result[0]), true) : null;
     }
 
     private static function checkRoles($allowedRoles, $userRole)
