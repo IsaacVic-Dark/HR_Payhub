@@ -87,9 +87,9 @@ export function middleware(request) {
     const isSetupRoute = pathname === '/setup' || pathname.startsWith('/setup/')
 
     // 4a. setup not done + not already on /setup (and not an API call) → /setup
-    if (setupCompleted === 0 && !isSetupRoute && !isApiRoute) {
-      return NextResponse.redirect(new URL('/setup', request.url))
-    }
+    // if (setupCompleted === 0 && !isSetupRoute && !isApiRoute) {
+    //   return NextResponse.redirect(new URL('/setup', request.url))
+    // }
 
     // 4b. setup already done + visiting /setup → /dashboard
     if (setupCompleted === 1 && isSetupRoute) {

@@ -453,7 +453,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       )
       .map((item) => item.title);
   });
-  const { isLoading } = useAuth(); // Add this
+  const { isLoading, user } = useAuth();
 
   // Show minimal sidebar while loading
   if (isLoading) {
@@ -533,7 +533,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     });
   };
 
-  const filteredCoreNav = filterNavItems(data.coreNav);
+  const setupComplete = user?.setup_completed === 1;
+
+  const coreNavItems = setupComplete
+    ? filterNavItems(data.coreNav) 
+    : [
+      {
+        title: 'Complete Setup',
+        url: '/setup',
+        icon: IconSettings,
+        roles: ['admin', 'super_admin'],
+      },
+    ].filter(item => hasAccess(item));
+
+  const filteredCoreNav = coreNavItems;
   const filteredPayrollSection = filterNavItems(data.payrollSection);
   const filteredEmployeeSection = filterNavItems(data.employeeSection);
   const filteredSelfServiceSection = filterNavItems(data.selfServiceSection);
