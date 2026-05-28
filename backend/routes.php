@@ -775,6 +775,10 @@ Router::post('/api/v1/subscription/mpesa-callback', SubscriptionController::clas
 // Returns { success, status } and, once completed, { token } for the frontend to store.
 Router::get('/api/v1/subscription/payment-status', SubscriptionController::class . '@paymentStatus');
  
+Router::get('/api/v1/subscription/current', SubscriptionController::class . '@getCurrentSubscription', [
+    'AuthMiddleware',
+]);
+
 // =============================================================================
 // ORGANIZATION SETUP WIZARD
 // POST /api/v1/organization/complete-setup

@@ -104,7 +104,7 @@ class SubscriptionController
                 'subscription_id'    => $subscriptionId,
                 'provider'           => 'mpesa',
                 'transaction_type'   => 'subscription',
-                'provider_request_id'=> $checkoutRequestId,
+                'provider_request_id' => $checkoutRequestId,
                 'amount'             => $amount,
                 'currency'           => 'KES',
                 'status'             => 'initiated',
@@ -332,5 +332,114 @@ class SubscriptionController
 
         http_response_code(200);
         echo json_encode($response);
+    }
+
+    public function getCurrentSubscription(): void
+    {
+        $user = \App\Middleware\AuthMiddleware::getCurrentUser();
+
+        if (!$user) {
+            http_response_code(401);
+            echo json_encode(['success' => false, 'message' => 'Unauthenticated.']);
+            return;
+        }
+
+        $orgId = (int) ($user['organization_id'] ?? 0);
+
+        if (!$orgId) {
+            http_response_code(400);
+            echo json_encode(['success' => false, 'message' => 'No organisation associated with this user.']);
+            return;
+        }
+
+        try {
+            // ── 1. Current subscription for this organisation ─────────────────
+            $subRows = DB::raw(
+                'SELECT os.*, sp.name         AS plan_name,
+                           sp.code        AS plan_code,
+                           sp.billing_cycle,
+                           sp.base_price,
+                           sp.price_per_employee,
+                           sp.trial_days,
+                           sp.max_employees,
+                           sp.features    AS plan_features
+             FROM   organization_subscriptions os
+             JOIN   subscription_plans sp ON sp.id = os.plan_id
+             WHERE  os.organization_id = ?
+             ORDER  BY os.id DESC
+             LIMIT  1',
+                [$orgId]
+            );
+
+            $row          = !empty($subRows) ? (array) $subRows[0] : null;
+            $currentSub   = null;
+            $currentPlan  = null;
+
+            if ($row) {
+                // Separate subscription fields from plan fields
+                $currentSub = [
+                    'id'                       => (int)  $row['id'],
+                    'plan_id'                  => (int)  $row['plan_id'],
+                    'status'                   =>        $row['status'],
+                    'trial_ends_at'            =>        $row['trial_ends_at'],
+                    'current_period_starts_at' =>        $row['current_period_starts_at'],
+                    'current_period_ends_at'   =>        $row['current_period_ends_at'],
+                    'cancelled_at'             =>        $row['cancelled_at'],
+                    'employee_limit'           => $row['employee_limit'] !== null ? (int) $row['employee_limit'] : null,
+                ];
+
+                $currentPlan = [
+                    'id'                 => (int)   $row['plan_id'],
+                    'code'               =>         $row['plan_code'],
+                    'name'               =>         $row['plan_name'],
+                    'billing_cycle'      =>         $row['billing_cycle'],
+                    'base_price'         => (float) $row['base_price'],
+                    'price_per_employee' => $row['price_per_employee'] !== null ? (float) $row['price_per_employee'] : null,
+                    'trial_days'         => $row['trial_days'] !== null ? (int) $row['trial_days'] : null,
+                    'max_employees'      => $row['max_employees'] !== null ? (int) $row['max_employees'] : null,
+                    'features'           => json_decode($row['plan_features'] ?? '[]', true) ?: [],
+                ];
+            }
+
+            // ── 2. All active plans (for the plan-picker UI) ──────────────────
+            $planRows = DB::raw(
+                'SELECT id, code, name, billing_cycle, base_price,
+                    price_per_employee, trial_days, max_employees, features
+             FROM   subscription_plans
+             WHERE  is_active = 1
+             ORDER  BY billing_cycle, base_price ASC',
+                []
+            );
+
+            $allPlans = array_map(static function ($p) {
+                $p = (array) $p;
+                return [
+                    'id'                 => (int)   $p['id'],
+                    'code'               =>         $p['code'],
+                    'name'               =>         $p['name'],
+                    'billing_cycle'      =>         $p['billing_cycle'],
+                    'base_price'         => (float) $p['base_price'],
+                    'price_per_employee' => $p['price_per_employee'] !== null ? (float) $p['price_per_employee'] : null,
+                    'trial_days'         => $p['trial_days'] !== null ? (int) $p['trial_days'] : null,
+                    'max_employees'      => $p['max_employees'] !== null ? (int) $p['max_employees'] : null,
+                    'features'           => json_decode($p['features'] ?? '[]', true) ?: [],
+                    'is_active'          => true,
+                ];
+            }, $planRows ?: []);
+
+            http_response_code(200);
+            echo json_encode([
+                'success' => true,
+                'data'    => [
+                    'current_subscription' => $currentSub,
+                    'current_plan'         => $currentPlan,
+                    'all_plans'            => $allPlans,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            error_log('SubscriptionController::getCurrentSubscription error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Failed to load subscription data.']);
+        }
     }
 }
