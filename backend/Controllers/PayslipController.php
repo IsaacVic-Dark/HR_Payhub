@@ -93,8 +93,8 @@ class PayslipController
             'id'              => $ps->employee_id,
             'full_name'       => trim(
                 ($ps->employee_firstname ?? '') . ' ' .
-                ($ps->employee_middlename ? $ps->employee_middlename . ' ' : '') .
-                ($ps->employee_surname ?? '')
+                    ($ps->employee_middlename ? $ps->employee_middlename . ' ' : '') .
+                    ($ps->employee_surname ?? '')
             ),
             'employee_number' => $ps->employee_number,
             'email'           => $ps->employee_email,
@@ -113,7 +113,7 @@ class PayslipController
             'shif'             => (float) $ps->shif,
             'housing_levy'     => (float) $ps->housing_levy,
             'taxable_income'   => (float) $ps->taxable_income,
-            'tax_before_relief'=> (float) $ps->tax_before_relief,
+            'tax_before_relief' => (float) $ps->tax_before_relief,
             'personal_relief'  => (float) $ps->personal_relief,
             'paye'             => (float) $ps->paye,
             'total_deductions' => (float) $ps->total_deductions,
@@ -123,15 +123,31 @@ class PayslipController
 
         // Remove flat fields
         unset(
-            $ps->payrun_name,   $ps->pay_period_start, $ps->pay_period_end,
-            $ps->pay_frequency, $ps->payrun_status,
-            $ps->employee_firstname, $ps->employee_middlename, $ps->employee_surname,
-            $ps->employee_number, $ps->employee_email,
-            $ps->basic_salary, $ps->overtime_amount, $ps->bonus_amount,
-            $ps->commission_amount, $ps->gross_pay, $ps->nssf, $ps->shif,
-            $ps->housing_levy, $ps->taxable_income, $ps->tax_before_relief,
-            $ps->personal_relief, $ps->paye, $ps->total_deductions,
-            $ps->job_title_id, $ps->department_id
+            $ps->payrun_name,
+            $ps->pay_period_start,
+            $ps->pay_period_end,
+            $ps->pay_frequency,
+            $ps->payrun_status,
+            $ps->employee_firstname,
+            $ps->employee_middlename,
+            $ps->employee_surname,
+            $ps->employee_number,
+            $ps->employee_email,
+            $ps->basic_salary,
+            $ps->overtime_amount,
+            $ps->bonus_amount,
+            $ps->commission_amount,
+            $ps->gross_pay,
+            $ps->nssf,
+            $ps->shif,
+            $ps->housing_levy,
+            $ps->taxable_income,
+            $ps->tax_before_relief,
+            $ps->personal_relief,
+            $ps->paye,
+            $ps->total_deductions,
+            $ps->job_title_id,
+            $ps->department_id
         );
 
         return $ps;
@@ -245,7 +261,10 @@ class PayslipController
             return [
                 'success' => false,
                 'data'    => responseJson(
-                    success: false, data: null, message: "Payslip not found", code: 404
+                    success: false,
+                    data: null,
+                    message: "Payslip not found",
+                    code: 404
                 )
             ];
         }
@@ -267,7 +286,10 @@ class PayslipController
             return [
                 'success' => false,
                 'data'    => responseJson(
-                    success: false, data: null, message: "Payrun not found", code: 404
+                    success: false,
+                    data: null,
+                    message: "Payrun not found",
+                    code: 404
                 )
             ];
         }
@@ -318,7 +340,9 @@ class PayslipController
         try {
             if (!$orgId || !is_numeric($orgId)) {
                 return responseJson(
-                    success: false, message: "Invalid organization ID", code: 400,
+                    success: false,
+                    message: "Invalid organization ID",
+                    code: 400,
                     errors: ['org_id' => 'Must be a valid number']
                 );
             }
@@ -399,8 +423,31 @@ class PayslipController
 
             if ((int) $total === 0) {
                 return responseJson(
-                    success: false, data: null,
-                    message: "No payslips found matching the specified criteria", code: 404
+                    success: true,
+                    data: [],
+                    message: "No payslips found matching the specified criteria",
+                    code: 200,
+                    metadata: [
+                        'pagination' => [
+                            'current_page' => $page,
+                            'per_page'     => $perPage,
+                            'total'        => 0,
+                            'total_pages'  => 0,
+                            'has_next'     => false,
+                            'has_prev'     => false,
+                        ],
+                        'statistics' => [
+                            'total_payslips'   => 0,
+                            'total_gross_pay'  => 0.0,
+                            'total_net_pay'    => 0.0,
+                            'total_deductions' => 0.0,
+                            'by_status' => [
+                                'generated'    => 0,
+                                'sent'         => 0,
+                                'acknowledged' => 0,
+                            ],
+                        ],
+                    ]
                 );
             }
 
@@ -462,8 +509,10 @@ class PayslipController
         } catch (\Exception $e) {
             error_log("Payslip index error: " . $e->getMessage());
             return responseJson(
-                success: false, data: null,
-                message: "Failed to fetch payslips", code: 500,
+                success: false,
+                data: null,
+                message: "Failed to fetch payslips",
+                code: 500,
                 errors: ['exception' => $e->getMessage()]
             );
         }
@@ -497,8 +546,10 @@ class PayslipController
             );
         } catch (\Exception $e) {
             return responseJson(
-                success: false, data: null,
-                message: "Failed to fetch payslip: " . $e->getMessage(), code: 500
+                success: false,
+                data: null,
+                message: "Failed to fetch payslip: " . $e->getMessage(),
+                code: 500
             );
         }
     }
@@ -536,8 +587,10 @@ class PayslipController
 
             if ((int) $total === 0) {
                 return responseJson(
-                    success: true, data: [],
-                    message: "No payslips found for this payrun", code: 200,
+                    success: true,
+                    data: [],
+                    message: "No payslips found for this payrun",
+                    code: 200,
                     metadata: ['pagination' => ['total' => 0], 'payrun' => $payrun['data']]
                 );
             }
@@ -581,8 +634,10 @@ class PayslipController
         } catch (\Exception $e) {
             error_log("Payrun payslips error: " . $e->getMessage());
             return responseJson(
-                success: false, data: null,
-                message: "Failed to fetch payrun payslips", code: 500,
+                success: false,
+                data: null,
+                message: "Failed to fetch payrun payslips",
+                code: 500,
                 errors: ['exception' => $e->getMessage()]
             );
         }
@@ -605,7 +660,8 @@ class PayslipController
 
             if ($payrunData->status !== 'finalized') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Payslips can only be generated from a finalized payrun (current status: {$payrunData->status})",
                     code: 400
                 );
@@ -633,8 +689,10 @@ class PayslipController
 
             if (empty($details)) {
                 return responseJson(
-                    success: false, data: null,
-                    message: "No payrun details found to generate payslips from", code: 404
+                    success: false,
+                    data: null,
+                    message: "No payrun details found to generate payslips from",
+                    code: 404
                 );
             }
 
@@ -706,8 +764,10 @@ class PayslipController
         } catch (\Exception $e) {
             error_log("Generate payslips error: " . $e->getMessage());
             return responseJson(
-                success: false, data: null,
-                message: "Failed to generate payslips: " . $e->getMessage(), code: 500
+                success: false,
+                data: null,
+                message: "Failed to generate payslips: " . $e->getMessage(),
+                code: 500
             );
         }
     }
@@ -729,7 +789,8 @@ class PayslipController
 
             if ($payslipData->status !== 'generated') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Only payslips with status 'generated' can be sent (current: {$payslipData->status})",
                     code: 400
                 );
@@ -755,8 +816,10 @@ class PayslipController
             );
         } catch (\Exception $e) {
             return responseJson(
-                success: false, data: null,
-                message: "Failed to send payslip: " . $e->getMessage(), code: 500
+                success: false,
+                data: null,
+                message: "Failed to send payslip: " . $e->getMessage(),
+                code: 500
             );
         }
     }
@@ -782,8 +845,10 @@ class PayslipController
 
             if (empty($generated)) {
                 return responseJson(
-                    success: false, data: null,
-                    message: "No payslips with status 'generated' found in this payrun", code: 404
+                    success: false,
+                    data: null,
+                    message: "No payslips with status 'generated' found in this payrun",
+                    code: 404
                 );
             }
 
@@ -814,8 +879,10 @@ class PayslipController
         } catch (\Exception $e) {
             error_log("Bulk send error: " . $e->getMessage());
             return responseJson(
-                success: false, data: null,
-                message: "Failed to bulk send payslips: " . $e->getMessage(), code: 500
+                success: false,
+                data: null,
+                message: "Failed to bulk send payslips: " . $e->getMessage(),
+                code: 500
             );
         }
     }
@@ -839,14 +906,17 @@ class PayslipController
             $currentEmployee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
             if ($payslipData->employee_id != $currentEmployee['id']) {
                 return responseJson(
-                    success: false, data: null,
-                    message: "You can only acknowledge your own payslips", code: 403
+                    success: false,
+                    data: null,
+                    message: "You can only acknowledge your own payslips",
+                    code: 403
                 );
             }
 
             if ($payslipData->status !== 'sent') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Only payslips with status 'sent' can be acknowledged (current: {$payslipData->status})",
                     code: 400
                 );
@@ -861,8 +931,10 @@ class PayslipController
             );
         } catch (\Exception $e) {
             return responseJson(
-                success: false, data: null,
-                message: "Failed to acknowledge payslip: " . $e->getMessage(), code: 500
+                success: false,
+                data: null,
+                message: "Failed to acknowledge payslip: " . $e->getMessage(),
+                code: 500
             );
         }
     }
@@ -881,7 +953,10 @@ class PayslipController
 
             if (empty($data['pdf_path'])) {
                 return responseJson(
-                    success: false, data: null, message: "pdf_path is required", code: 400
+                    success: false,
+                    data: null,
+                    message: "pdf_path is required",
+                    code: 400
                 );
             }
 
@@ -897,8 +972,10 @@ class PayslipController
             );
         } catch (\Exception $e) {
             return responseJson(
-                success: false, data: null,
-                message: "Failed to update PDF path: " . $e->getMessage(), code: 500
+                success: false,
+                data: null,
+                message: "Failed to update PDF path: " . $e->getMessage(),
+                code: 500
             );
         }
     }
@@ -923,8 +1000,10 @@ class PayslipController
 
             if (empty($employeeCheck)) {
                 return responseJson(
-                    success: false, data: null,
-                    message: "Employee not found in this organization", code: 404
+                    success: false,
+                    data: null,
+                    message: "Employee not found in this organization",
+                    code: 404
                 );
             }
 
@@ -933,7 +1012,11 @@ class PayslipController
 
             // Determine if current user can see this employee's payslips
             $canSeeAll = in_array($currentUser['user_type'], [
-                'admin', 'payroll_manager', 'finance_manager', 'auditor', 'hr_manager',
+                'admin',
+                'payroll_manager',
+                'finance_manager',
+                'auditor',
+                'hr_manager',
             ]);
 
             if (!$canSeeAll) {
@@ -941,22 +1024,28 @@ class PayslipController
                     $deptIds = $this->getDeptEmployeeIds($currentEmployee['id']);
                     if (!in_array($empId, $deptIds)) {
                         return responseJson(
-                            success: false, data: null,
-                            message: "Access denied to this employee's payslips", code: 403
+                            success: false,
+                            data: null,
+                            message: "Access denied to this employee's payslips",
+                            code: 403
                         );
                     }
                 } elseif ($currentUser['user_type'] === 'department_manager') {
                     $teamIds = $this->getTeamEmployeeIds($currentEmployee['id']);
                     if (!in_array($empId, $teamIds) && $currentEmployee['id'] != $empId) {
                         return responseJson(
-                            success: false, data: null,
-                            message: "Access denied to this employee's payslips", code: 403
+                            success: false,
+                            data: null,
+                            message: "Access denied to this employee's payslips",
+                            code: 403
                         );
                     }
                 } elseif ($currentEmployee['id'] != $empId) {
                     return responseJson(
-                        success: false, data: null,
-                        message: "You can only view your own payslips", code: 403
+                        success: false,
+                        data: null,
+                        message: "You can only view your own payslips",
+                        code: 403
                     );
                 }
             }
@@ -987,14 +1076,17 @@ class PayslipController
 
             if ((int) $total === 0) {
                 return responseJson(
-                    success: true, data: [], message: "No payslips found", code: 200,
+                    success: true,
+                    data: [],
+                    message: "No payslips found",
+                    code: 200,
                     metadata: [
                         'pagination'    => ['total' => 0],
                         'employee_info' => [
                             'employee_id'   => $empId,
                             'employee_name' => trim(
                                 ($employeeCheck[0]->firstname ?? '') . ' ' .
-                                ($employeeCheck[0]->surname ?? '')
+                                    ($employeeCheck[0]->surname ?? '')
                             ),
                         ],
                     ]
@@ -1032,7 +1124,7 @@ class PayslipController
                         'employee_id'   => (int) $empId,
                         'employee_name' => trim(
                             ($employeeCheck[0]->firstname ?? '') . ' ' .
-                            ($employeeCheck[0]->surname ?? '')
+                                ($employeeCheck[0]->surname ?? '')
                         ),
                         'email'         => $employeeCheck[0]->email ?? null,
                     ],
@@ -1041,8 +1133,10 @@ class PayslipController
         } catch (\Exception $e) {
             error_log("Employee payslips error: " . $e->getMessage());
             return responseJson(
-                success: false, data: null,
-                message: "Failed to fetch employee payslips", code: 500,
+                success: false,
+                data: null,
+                message: "Failed to fetch employee payslips",
+                code: 500,
                 errors: ['exception' => $e->getMessage()]
             );
         }
@@ -1106,8 +1200,10 @@ class PayslipController
         } catch (\Exception $e) {
             error_log("Payslip stats error: " . $e->getMessage());
             return responseJson(
-                success: false, data: null,
-                message: "Failed to fetch payslip statistics", code: 500,
+                success: false,
+                data: null,
+                message: "Failed to fetch payslip statistics",
+                code: 500,
                 errors: ['exception' => $e->getMessage()]
             );
         }

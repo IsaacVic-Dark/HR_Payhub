@@ -748,10 +748,32 @@ class LeaveController
 
             if ((int) $total === 0) {
                 return responseJson(
-                    success: false,
-                    data: null,
+                    success: true,
+                    data: [],
                     message: "No leaves found matching the specified criteria",
-                    code: 404
+                    code: 200,
+                    metadata: [
+                        'pagination' => [
+                            'current_page' => $page,
+                            'per_page'     => $perPage,
+                            'total'        => 0,
+                            'total_pages'  => 0,
+                            'has_next'     => false,
+                            'has_prev'     => false,
+                        ],
+                        'statistics' => [
+                            'total_leaves'     => 0,
+                            'total_days_taken' => 0,
+                            'by_status'        => [
+                                'pending'   => 0,
+                                'approved'  => 0,
+                                'rejected'  => 0,
+                                'cancelled' => 0,
+                                'expired'   => 0,
+                            ],
+                            'by_type' => [],
+                        ],
+                    ]
                 );
             }
 
@@ -1706,8 +1728,8 @@ class LeaveController
             if ($status === 'pending' && $approverId && $orgCfg['notify_manager']) {
                 $employeeName = trim(
                     ($employee->firstname ?? '') . ' ' .
-                    ($employee->middlename ? $employee->middlename . ' ' : '') .
-                    ($employee->surname ?? '')
+                        ($employee->middlename ? $employee->middlename . ' ' : '') .
+                        ($employee->surname ?? '')
                 );
                 $this->createLeaveNotification(
                     $approverId,
@@ -1732,8 +1754,8 @@ class LeaveController
                         'id'        => $empId,
                         'full_name' => trim(
                             ($employee->firstname ?? '') . ' ' .
-                            ($employee->middlename ? $employee->middlename . ' ' : '') .
-                            ($employee->surname ?? '')
+                                ($employee->middlename ? $employee->middlename . ' ' : '') .
+                                ($employee->surname ?? '')
                         ),
                         'email'     => $user->email ?? null,
                     ],
