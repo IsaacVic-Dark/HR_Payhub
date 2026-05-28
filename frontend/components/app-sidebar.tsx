@@ -96,7 +96,7 @@ const data = {
           roles: ["super_admin", "admin", "payroll_manager"],
         },
         {
-          title: "Employees",
+          title: "Employees Payrun",
           url: "/payrun/employees",
           roles: ["super_admin", "admin", "payroll_manager"],
         },
@@ -118,30 +118,30 @@ const data = {
     //     },
     //   ],
     // },
-    {
-      title: "Payments",
-      url: "/payments",
-      icon: IconCash,
-      roles: ["super_admin", "admin", "finance_manager"],
-      hasDropdown: true,
-      items: [
-        {
-          title: "Payment Records",
-          url: "/payments/records",
-          roles: ["super_admin", "admin", "finance_manager"],
-        },
-        {
-          title: "Pending Payments",
-          url: "/payments/pending",
-          roles: ["super_admin", "admin", "finance_manager"],
-        },
-        {
-          title: "Process Payments",
-          url: "/payments/process",
-          roles: ["super_admin", "finance_manager"],
-        },
-      ],
-    },
+    // {
+    //   title: "Payments",
+    //   url: "/payments",
+    //   icon: IconCash,
+    //   roles: ["super_admin", "admin", "finance_manager"],
+    //   hasDropdown: true,
+    //   items: [
+    //     {
+    //       title: "Payment Records",
+    //       url: "/payments/records",
+    //       roles: ["super_admin", "admin", "finance_manager"],
+    //     },
+    //     {
+    //       title: "Pending Payments",
+    //       url: "/payments/pending",
+    //       roles: ["super_admin", "admin", "finance_manager"],
+    //     },
+    //     {
+    //       title: "Process Payments",
+    //       url: "/payments/process",
+    //       roles: ["super_admin", "finance_manager"],
+    //     },
+    //   ],
+    // },
     {
       title: "Payslips",
       url: "/payslips",
@@ -154,12 +154,12 @@ const data = {
       icon: IconFileText,
       roles: ["super_admin", "admin", "payroll_manager"],
     },
-    {
-      title: "Tax Reports",
-      url: "/tax-reports",
-      icon: IconFileText,
-      roles: ["super_admin", "admin", "payroll_manager"],
-    },
+    // {
+    //   title: "Tax Reports",
+    //   url: "/tax-reports",
+    //   icon: IconFileText,
+    //   roles: ["super_admin", "admin", "payroll_manager"],
+    // },
   ],
 
   // Employee Management section
