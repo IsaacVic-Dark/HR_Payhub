@@ -43,14 +43,17 @@ function _mpesa_base_url(): string
 // ─────────────────────────────────────────────────────────────────────────────
 function _mpesa_normalize_phone(string $phone): string
 {
-    $phone = preg_replace('/\D/', '', $phone); // strip non-digits
+    $phone = trim($phone);
 
-    if (str_starts_with($phone, '0')) {
-        $phone = '254' . substr($phone, 1);
-    } elseif (str_starts_with($phone, '+254')) {
-        $phone = '254' . substr($phone, 4);
+    // Check format BEFORE stripping non-digits
+    if (str_starts_with($phone, '+254')) {
+        $phone = '254' . preg_replace('/\D/', '', substr($phone, 4));
+    } elseif (str_starts_with($phone, '0')) {
+        $phone = '254' . preg_replace('/\D/', '', substr($phone, 1));
+    } else {
+        $phone = preg_replace('/\D/', '', $phone); // already 254XXXXXXXXX or local
     }
-    // already 254XXXXXXXXX or unknown — return as-is
+
     return $phone;
 }
 
@@ -85,12 +88,15 @@ function mpesa_get_token(): string
     $credentials = base64_encode($consumerKey . ':' . $consumerSecret);
     $url         = _mpesa_base_url() . '/oauth/v1/generate?grant_type=client_credentials';
 
+    $isSandbox = (_mpesa_base_url() === 'https://sandbox.safaricom.co.ke');
+
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_HTTPHEADER     => ['Authorization: Basic ' . $credentials],
         CURLOPT_TIMEOUT        => 15,
-        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYPEER => !$isSandbox,
+        CURLOPT_SSL_VERIFYHOST => $isSandbox ? 0 : 2,
     ]);
 
     $response = curl_exec($ch);
@@ -157,7 +163,7 @@ function mpesa_stk_push(
         'Password'          => $password,
         'Timestamp'         => $timestamp,
         'TransactionType'   => 'CustomerPayBillOnline',
-        'Amount'            => (int) ceil($amount),   // Daraja requires integer
+        'Amount'            => max(1, (int) ceil($amount)),
         'PartyA'            => $phone,
         'PartyB'            => $shortcode,
         'PhoneNumber'       => $phone,
@@ -167,6 +173,8 @@ function mpesa_stk_push(
     ];
 
     $url = _mpesa_base_url() . '/mpesa/stkpush/v1/processrequest';
+
+    $isSandbox = (_mpesa_base_url() === 'https://sandbox.safaricom.co.ke');
 
     $ch = curl_init($url);
     curl_setopt_array($ch, [
@@ -178,7 +186,8 @@ function mpesa_stk_push(
             'Content-Type: application/json',
         ],
         CURLOPT_TIMEOUT        => 30,
-        CURLOPT_SSL_VERIFYPEER => true,
+        CURLOPT_SSL_VERIFYPEER => !$isSandbox,
+        CURLOPT_SSL_VERIFYHOST => $isSandbox ? 0 : 2,
     ]);
 
     $response  = curl_exec($ch);
