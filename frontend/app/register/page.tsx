@@ -16,6 +16,18 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 
 type Plan = 'starter' | 'professional' | 'enterprise';
 
+interface PlanOption {
+  id: number;
+  code: string;
+  name: string;
+  billing_cycle: string;
+  base_price: number;
+  trial_days: number | null;
+  max_employees: number | null;
+  requires_card: boolean;
+  features: string[];
+}
+
 interface FieldErrors {
   email?: string;
   username?: string;
@@ -52,6 +64,28 @@ export default function RegisterPage() {
     ? rawPlan
     : 'starter';
 
+  // Plans
+  const [plans, setPlans] = useState<PlanOption[]>([]);
+  const [selectedPlanCode, setSelectedPlanCode] = useState<string>('');
+
+  useEffect(() => {
+    fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/subscription/plans`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.success && Array.isArray(d.data)) {
+          setPlans(d.data);
+          // default to the plan from URL or first available
+          const urlPlan = d.data.find((p: PlanOption) =>
+            p.code.startsWith(rawPlan)
+          );
+          setSelectedPlanCode(urlPlan?.code ?? d.data[0]?.code ?? '');
+        }
+      })
+      .catch(() => {/* silently ignore — user can still pick */ });
+  }, []);
+
+  const selectedPlan = plans.find(p => p.code === selectedPlanCode) ?? null;
+
   // Form state
   const [email, setEmail] = useState('');
   const [username, setUsername] = useState('');
@@ -83,7 +117,7 @@ export default function RegisterPage() {
       const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',          // send / receive httpOnly cookies
+        credentials: 'include',
         body: JSON.stringify({
           email,
           username,
@@ -91,7 +125,8 @@ export default function RegisterPage() {
           phone,
           country,
           company_name: companyName,
-          plan,                           // included in POST body, not query string
+          plan_code: selectedPlanCode,          // full code e.g. "professional_monthly"
+          plan: selectedPlanCode.split('_')[0], // base name for backward compat
         }),
       });
 
@@ -148,11 +183,11 @@ export default function RegisterPage() {
       }
 
       // ── Starter plan — JWT already set in cookie; redirect to dashboard ──────
-if (data.token) {
-  toast.success('Account created! Redirecting…');
-  await checkAuthStatus();   // hydrates AuthContext from the cookie before navigating
-  router.push('/setup');
-}
+      if (data.token) {
+        toast.success('Account created! Redirecting…');
+        await checkAuthStatus();   // hydrates AuthContext from the cookie before navigating
+        router.push('/setup');
+      }
     } catch {
       toast.error('Network error. Please check your connection and try again.');
     } finally {
@@ -174,12 +209,28 @@ if (data.token) {
           <CardDescription>Get your payroll running in minutes.</CardDescription>
 
           {/* Plan badge */}
-          <div className="pt-1">
-            <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold ${planMeta.color}`}>
-              <Sparkles className="h-3 w-3" />
-              {planMeta.label}
-            </span>
-          </div>
+          {/* Plan selector */}
+          {plans.length > 0 && (
+            <div className="pt-1 flex flex-wrap gap-2">
+              {plans.map(p => (
+                <button
+                  key={p.code}
+                  type="button"
+                  onClick={() => setSelectedPlanCode(p.code)}
+                  className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold border transition-colors ${selectedPlanCode === p.code
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'bg-muted text-muted-foreground border-border hover:border-primary'
+                    }`}
+                >
+                  <Sparkles className="h-3 w-3" />
+                  {p.name}
+                  {p.base_price === 0
+                    ? ' — Free Trial'
+                    : ` — KES ${p.base_price.toLocaleString()}/mo`}
+                </button>
+              ))}
+            </div>
+          )}
         </CardHeader>
 
         <CardContent>
@@ -289,9 +340,9 @@ if (data.token) {
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading
                 ? 'Creating account…'
-                : plan === 'starter'
+                : selectedPlanCode.startsWith('starter')
                   ? 'Start Free Trial'
-                  : `Continue to Payment`}
+                  : 'Continue to Payment — M-Pesa'}
             </Button>
           </form>
 
