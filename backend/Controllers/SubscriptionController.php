@@ -80,7 +80,7 @@ class SubscriptionController
             return;
         }
 
-        require_once __DIR__ . '/../helpers/mpesa.php';
+        require_once __DIR__ . '/../Services/mpesa.php';
 
         try {
             $token       = mpesa_get_token();
@@ -440,6 +440,48 @@ class SubscriptionController
             error_log('SubscriptionController::getCurrentSubscription error: ' . $e->getMessage());
             http_response_code(500);
             echo json_encode(['success' => false, 'message' => 'Failed to load subscription data.']);
+        }
+    }
+
+    // =========================================================================
+    // GET /api/v1/subscription/plans
+    // Public — no auth required (used on pricing/signup pages)
+    // =========================================================================
+    public function getPlans(): void
+    {
+        try {
+            $planRows = DB::raw(
+                'SELECT id, code, name, billing_cycle, base_price,
+                    price_per_employee, trial_days, max_employees,
+                    requires_card, features
+             FROM   subscription_plans
+             WHERE  is_active = 1
+             ORDER  BY billing_cycle, base_price ASC',
+                []
+            );
+
+            $plans = array_map(static function ($p) {
+                $p = (array) $p;
+                return [
+                    'id'                 => (int)   $p['id'],
+                    'code'               =>         $p['code'],
+                    'name'               =>         $p['name'],
+                    'billing_cycle'      =>         $p['billing_cycle'],
+                    'base_price'         => (float) $p['base_price'],
+                    'price_per_employee' => $p['price_per_employee'] !== null ? (float) $p['price_per_employee'] : null,
+                    'trial_days'         => $p['trial_days'] !== null ? (int) $p['trial_days'] : null,
+                    'max_employees'      => $p['max_employees'] !== null ? (int) $p['max_employees'] : null,
+                    'requires_card'      => (bool)  $p['requires_card'],
+                    'features'           => json_decode($p['features'] ?? '[]', true) ?: [],
+                ];
+            }, $planRows ?: []);
+
+            http_response_code(200);
+            echo json_encode(['success' => true, 'data' => $plans]);
+        } catch (\Throwable $e) {
+            error_log('SubscriptionController::getPlans error: ' . $e->getMessage());
+            http_response_code(500);
+            echo json_encode(['success' => false, 'message' => 'Failed to load subscription plans.']);
         }
     }
 }

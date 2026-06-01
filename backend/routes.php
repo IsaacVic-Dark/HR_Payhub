@@ -774,6 +774,8 @@ Router::post('/api/v1/subscription/mpesa-callback', SubscriptionController::clas
 // Polling endpoint — frontend calls every 3 s while waiting for M-Pesa confirmation.
 // Returns { success, status } and, once completed, { token } for the frontend to store.
 Router::get('/api/v1/subscription/payment-status', SubscriptionController::class . '@paymentStatus');
+
+Router::get('/api/v1/subscription/plans', SubscriptionController::class . '@getPlans');
  
 Router::get('/api/v1/subscription/current', SubscriptionController::class . '@getCurrentSubscription', [
     'AuthMiddleware',
