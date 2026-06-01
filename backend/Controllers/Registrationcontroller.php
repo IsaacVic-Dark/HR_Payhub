@@ -81,7 +81,9 @@ class RegistrationController
         $cycle    = (isset($body['billing_cycle']) && in_array($body['billing_cycle'], $allowedCycles, true))
             ? $body['billing_cycle']
             : 'monthly';
-        $planCode = $planBase . '_' . $cycle;   // e.g. "starter_monthly"
+        $planCode = isset($body['plan_code'])
+            ? trim($body['plan_code'])
+            : $planBase . '_' . $cycle;
 
         // ── 3. Look up plan via DB::raw() ─────────────────────────────────────
         // FIX: DB has no queryOne() — use DB::raw() which returns an array of
@@ -232,29 +234,29 @@ class RegistrationController
     }
 
     // ── Sets access_token and refresh_token as httpOnly cookies ──────────────
-private function setTokenCookies(array $tokenData): void
-{
-    $isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
-    $secure = $isProduction;
+    private function setTokenCookies(array $tokenData): void
+    {
+        $isProduction = ($_ENV['APP_ENV'] ?? 'development') === 'production';
+        $secure = $isProduction;
 
-    // access_token — httponly FALSE so JS can read it for JWT decoding
-    setcookie('access_token', $tokenData['access_token'], [
-        'expires'  => time() + 3600,
-        'path'     => '/',
-        'domain'   => '',
-        'secure'   => $secure,
-        'httponly' => false,   // ← must match AuthController::login()
-        'samesite' => 'Lax',
-    ]);
+        // access_token — httponly FALSE so JS can read it for JWT decoding
+        setcookie('access_token', $tokenData['access_token'], [
+            'expires'  => time() + 3600,
+            'path'     => '/',
+            'domain'   => '',
+            'secure'   => $secure,
+            'httponly' => false,   // ← must match AuthController::login()
+            'samesite' => 'Lax',
+        ]);
 
-    // refresh_token — httponly TRUE (never needs JS access)
-    setcookie('refresh_token', $tokenData['refresh_token'], [
-        'expires'  => time() + 604800,
-        'path'     => '/',
-        'domain'   => '',
-        'secure'   => $secure,
-        'httponly' => true,
-        'samesite' => 'Lax',
-    ]);
-}
+        // refresh_token — httponly TRUE (never needs JS access)
+        setcookie('refresh_token', $tokenData['refresh_token'], [
+            'expires'  => time() + 604800,
+            'path'     => '/',
+            'domain'   => '',
+            'secure'   => $secure,
+            'httponly' => true,
+            'samesite' => 'Lax',
+        ]);
+    }
 }
