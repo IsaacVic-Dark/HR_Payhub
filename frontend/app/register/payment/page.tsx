@@ -1,43 +1,47 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from "next/link";
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Smartphone, CheckCircle2, XCircle, Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/lib/AuthContext';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-const POLL_INTERVAL_MS  = 3_000;  //  3 seconds between polls
-const TIMEOUT_MS        = 5 * 60 * 1_000; // 5-minute hard timeout
+const POLL_INTERVAL_MS = 3_000;  //  3 seconds between polls
+const TIMEOUT_MS = 5 * 60 * 1_000; // 5-minute hard timeout
 
 type PaymentState = 'waiting' | 'completed' | 'failed' | 'timeout';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function PaymentWaitingPage() {
-  const router       = useRouter();
+  const router = useRouter();
   const searchParams = useSearchParams();
 
+  const { user, checkAuthStatus } = useAuth();
+
   const checkoutRequestId = searchParams.get('checkout_request_id') ?? '';
-  const phone             = searchParams.get('phone')               ?? '';
-  const amount            = searchParams.get('amount')              ?? '';
-  const planName          = searchParams.get('plan_name')           ?? '';
-  const organizationId    = searchParams.get('organization_id')     ?? '';
-  const subscriptionId    = searchParams.get('subscription_id')     ?? '';
+  const phone = searchParams.get('phone') ?? '';
+  const amount = searchParams.get('amount') ?? '';
+  const planName = searchParams.get('plan_name') ?? '';
+  const organizationId = searchParams.get('organization_id') ?? '';
+  const subscriptionId = searchParams.get('subscription_id') ?? '';
 
-  const [state,       setState]       = useState<PaymentState>('waiting');
-  const [retrying,    setRetrying]    = useState(false);
-  const [elapsed,     setElapsed]     = useState(0);   // seconds, for display
+  const [state, setState] = useState<PaymentState>('waiting');
+  const [retrying, setRetrying] = useState(false);
+  const [elapsed, setElapsed] = useState(0);   // seconds, for display
 
-  const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
-  const timeoutRef   = useRef<ReturnType<typeof setTimeout>  | null>(null);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startTimeRef = useRef<number>(Date.now());
 
   // ── Cleanup helper ──────────────────────────────────────────────────────────
   const clearTimers = () => {
-    if (intervalRef.current)  clearInterval(intervalRef.current);
-    if (timeoutRef.current)   clearTimeout(timeoutRef.current);
+    if (intervalRef.current) clearInterval(intervalRef.current);
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
   };
 
   // ── Poll /subscription/payment-status ──────────────────────────────────────
@@ -58,7 +62,7 @@ export default function PaymentWaitingPage() {
 
     intervalRef.current = setInterval(async () => {
       try {
-        const res  = await fetch(
+        const res = await fetch(
           `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/subscription/payment-status?checkout_request_id=${encodeURIComponent(crid)}`,
           { credentials: 'include' }
         );
@@ -80,14 +84,17 @@ export default function PaymentWaitingPage() {
             // via the pending_tokens mechanism → the backend issues it as a
             // regular Set-Cookie on the next authenticated request.
             // Here we just redirect — the JWT in the cookie is already there.
-            document.cookie = `access_token=${data.token}; path=/; SameSite=Lax`;
+            // When poll returns { status: 'completed', token: '...' }
+            document.cookie = `access_token=${data.token}; path=/; max-age=3600; SameSite=Lax`;
+            await checkAuthStatus();
+            router.push('/setup');
           }
 
           setState('completed');
           toast.success('Payment confirmed! Setting up your account…');
 
           // Small delay so the user sees the success state before redirect
-          setTimeout(() => router.push('/dashboard'), 1_500);
+          setTimeout(() => router.push('/setup'), 1_500);
           return;
         }
 
@@ -130,8 +137,8 @@ export default function PaymentWaitingPage() {
     setElapsed(0);
 
     try {
-      const res  = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/subscription/initiate-payment`, {
-        method:  'POST',
+      const res = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_API_URL}/subscription/initiate-payment`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           organization_id: parseInt(organizationId, 10),
@@ -174,16 +181,16 @@ export default function PaymentWaitingPage() {
 
           {/* Icon */}
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
-            {state === 'waiting'   && <Smartphone className="h-8 w-8 text-primary animate-pulse" />}
+            {state === 'waiting' && <Smartphone className="h-8 w-8 text-primary animate-pulse" />}
             {state === 'completed' && <CheckCircle2 className="h-8 w-8 text-emerald-500" />}
             {(state === 'failed' || state === 'timeout') && <XCircle className="h-8 w-8 text-destructive" />}
           </div>
 
           <CardTitle className="text-xl">
-            {state === 'waiting'   && 'Waiting for M-Pesa Payment'}
+            {state === 'waiting' && 'Waiting for M-Pesa Payment'}
             {state === 'completed' && 'Payment Confirmed!'}
-            {state === 'failed'    && 'Payment Failed'}
-            {state === 'timeout'   && 'Payment Timed Out'}
+            {state === 'failed' && 'Payment Failed'}
+            {state === 'timeout' && 'Payment Timed Out'}
           </CardTitle>
 
           <CardDescription>
@@ -191,8 +198,8 @@ export default function PaymentWaitingPage() {
               <>Check your phone — enter your <strong>M-Pesa PIN</strong> to complete payment.</>
             )}
             {state === 'completed' && 'Your subscription is active. Redirecting to your dashboard…'}
-            {state === 'failed'    && 'The payment was declined or cancelled. Please try again.'}
-            {state === 'timeout'   && 'We didn\'t receive a payment confirmation within 5 minutes. Please contact support if you were charged.'}
+            {state === 'failed' && 'The payment was declined or cancelled. Please try again.'}
+            {state === 'timeout' && 'We didn\'t receive a payment confirmation within 5 minutes. Please contact support if you were charged.'}
           </CardDescription>
         </CardHeader>
 
@@ -201,7 +208,7 @@ export default function PaymentWaitingPage() {
           {/* Payment details */}
           {(state === 'waiting' || state === 'failed') && (
             <div className="rounded-lg border bg-muted/50 p-4 text-sm text-left space-y-1.5">
-              {phone  && <div className="flex justify-between"><span className="text-muted-foreground">Phone</span><span className="font-medium">{phone}</span></div>}
+              {phone && <div className="flex justify-between"><span className="text-muted-foreground">Phone</span><span className="font-medium">{phone}</span></div>}
               {amount && <div className="flex justify-between"><span className="text-muted-foreground">Amount</span><span className="font-medium">KES {parseFloat(amount).toLocaleString()}</span></div>}
               {planName && <div className="flex justify-between"><span className="text-muted-foreground">Plan</span><span className="font-medium capitalize">{planName}</span></div>}
             </div>
@@ -234,9 +241,12 @@ export default function PaymentWaitingPage() {
               </Button>
               <p className="text-xs text-muted-foreground">
                 Need help?{' '}
-                <a href="mailto:support@payhub.co.ke" className="text-primary underline underline-offset-2">
+                <Link
+                  href="/help"
+                  className="text-primary underline underline-offset-2"
+                >
                   Contact support
-                </a>
+                </Link>
               </p>
             </div>
           )}
