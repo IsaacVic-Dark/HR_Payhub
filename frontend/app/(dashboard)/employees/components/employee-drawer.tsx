@@ -147,11 +147,6 @@ export function EmployeeDrawerAdd({
     if (!formData.surname.trim()) {
       newErrors.surname = "Surname is required";
     }
-    if (!formData.email.trim()) {
-      newErrors.email = "Email is required";
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
-      newErrors.email = "Invalid email format";
-    }
     if (!formData.workemail.trim()) {
       newErrors.workemail = "Work email is required";
     } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.workemail)) {
@@ -219,7 +214,7 @@ export function EmployeeDrawerAdd({
       } = {
         firstname: formData.firstname,
         surname: formData.surname,
-        email: formData.email,
+        workemail: formData.workemail,
         employee_number: formData.employee_number,
         phone: formData.phone,
         hire_date: formData.hire_date,
