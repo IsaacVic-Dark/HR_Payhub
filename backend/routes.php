@@ -18,6 +18,9 @@ use App\Controllers\LoanController;
 use App\Controllers\P9Controller;
 use App\Controllers\SubscriptionController;
 use App\Controllers\RegistrationController;
+use App\Controllers\AttendanceController;
+use App\Controllers\PublicHolidayController;
+use App\Controllers\OvertimeApprovalController;
 
 // Authentication routes - NO authentication required
 Router::post('/api/v1/auth/login', [AuthController::getInstance(), 'login']);
@@ -794,3 +797,396 @@ Router::post('/api/v1/organization/complete-setup', OrganizationController::clas
 Router::get('/api/test', function ($d) {
     echo json_encode($d);
 });
+
+// =============================================================================
+// LOAN ROUTES  — replace the existing LOAN ROUTES block in routes.php
+// =============================================================================
+
+// GET /api/v1/organizations/{org_id}/loan-types
+// Lists all active, approved loan configs for an org, including finance_threshold.
+// Roles: all authenticated org members
+Router::get('api/v1/organizations/{org_id}/loan-types', LoanController::class . '@getLoanTypes', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Org-level loan collection
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/loans
+// ?status=pending|validated|system_rejected|manager_approved|manager_rejected|
+//         hr_approved|hr_rejected|compliance_review|finance_approved|finance_rejected|
+//         approved|active|rejected|repaid|appealed
+// &config_id= &employee_id= &month= &year= &page= &per_page=
+// Visibility: admin/hr/finance/payroll → full org; dept_manager/hr_officer → team; employee → own
+Router::get('api/v1/organizations/{org_id}/loans', LoanController::class . '@index', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/loans
+// HR / Admin creates a loan on behalf of an employee. System validation runs immediately.
+// Body: { "employee_id", "config_id", "amount", "start_date", "end_date"?,
+//         "interest_rate"?, "monthly_deduction"?, "purpose"? }
+// Roles: admin, hr_manager, payroll_manager
+Router::post('api/v1/organizations/{org_id}/loans', LoanController::class . '@store', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Single loan — read, update, delete
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/loans/{loan_id}
+// Roles: all authenticated (scoped by middleware per role)
+Router::get('api/v1/organizations/{org_id}/loans/{loan_id}', LoanController::class . '@show', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// PUT|PATCH /api/v1/organizations/{org_id}/loans/{loan_id}
+// Update a loan that is still in pending|validated state.
+// Body (all optional): { amount, start_date, end_date, monthly_deduction, interest_rate, purpose }
+// Roles: admin, hr_manager, payroll_manager
+Router::put('api/v1/organizations/{org_id}/loans/{loan_id}', LoanController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+Router::patch('api/v1/organizations/{org_id}/loans/{loan_id}', LoanController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// DELETE /api/v1/organizations/{org_id}/loans/{loan_id}
+// Hard-delete; only pending or validated loans.
+// Roles: admin, hr_manager
+Router::delete('api/v1/organizations/{org_id}/loans/{loan_id}', LoanController::class . '@destroy', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// STEP 3 — Line Manager approval
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/manager-approve
+// Advances loan: validated → manager_approved
+// Roles: department_manager (own team), hr_manager (fallback), admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/manager-approve', LoanController::class . '@managerApprove', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'department_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/manager-reject
+// Advances loan: validated → manager_rejected
+// Body: { "rejection_reason": "..." }  — required
+// Roles: department_manager (own team), hr_manager (fallback), admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/manager-reject', LoanController::class . '@managerReject', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'department_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// STEP 4 — HR Manager approval
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/hr-approve
+// Advances loan: manager_approved → hr_approved (if above threshold)
+//                              OR → finance_approved (if at/below threshold, skipping Finance step)
+// Roles: hr_manager, admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/hr-approve', LoanController::class . '@hrApprove', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/hr-reject
+// Advances loan: manager_approved → hr_rejected
+// Body: { "rejection_reason": "..." }  — required
+// Roles: hr_manager, admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/hr-reject', LoanController::class . '@hrReject', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/hr-flag-compliance
+// Advances loan: manager_approved → compliance_review
+// Body (optional): { "reason": "..." }
+// Roles: hr_manager, admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/hr-flag-compliance', LoanController::class . '@hrFlagCompliance', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// STEP 5 — Finance Manager approval (high-value loans only)
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/finance-approve
+// Advances loan: hr_approved → finance_approved
+// Triggered only for loans above the org's finance_threshold in organization_configs.
+// finance_director is not a DB role — it maps to finance_manager.
+// Roles: finance_manager, admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/finance-approve', LoanController::class . '@financeApprove', [
+    ['AuthMiddleware', ['admin', 'finance_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/finance-reject
+// Advances loan: hr_approved → finance_rejected
+// Body: { "rejection_reason": "..." }  — required
+// Roles: finance_manager, admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/finance-reject', LoanController::class . '@financeReject', [
+    ['AuthMiddleware', ['admin', 'finance_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// STEP 6 — Disbursement setup (dedicated endpoint)
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/disburse
+// Sets repayment deduction schedule and marks loan status → approved.
+// Only callable AFTER all required approvals are done (loan must be in finance_approved).
+// Body: { "disbursement_date"?, "monthly_deduction"?, "end_date"? }
+// Roles: finance_manager, payroll_manager, admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/disburse', LoanController::class . '@disburse', [
+    ['AuthMiddleware', ['admin', 'finance_manager', 'payroll_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Admin fast-track (single-step approve / reject — bypasses workflow)
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/approve
+// Direct approval regardless of current step. Admin-only safety valve.
+// Roles: admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/approve', LoanController::class . '@approve', [
+    ['AuthMiddleware', ['admin']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/reject
+// Direct rejection regardless of current step. Admin-only safety valve.
+// Body (optional): { "rejection_reason": "..." }
+// Roles: admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/reject', LoanController::class . '@reject', [
+    ['AuthMiddleware', ['admin']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Repayments
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/repayments
+// Record a repayment instalment (manual or payroll deduction).
+// Loan must be in approved|active status.
+// Body: { "amount", "repayment_date", "method"? (manual|payroll_deduction), "notes"?, "payrun_id"? }
+// Roles: admin, payroll_manager, payroll_officer, finance_manager
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/repayments', LoanController::class . '@recordRepayment', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer', 'finance_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// GET /api/v1/organizations/{org_id}/loans/{loan_id}/repayments
+// Full repayment history for one loan.
+// Roles: admin, hr_manager, finance_manager, payroll_manager, payroll_officer, auditor
+//        + the employee who owns the loan (enforced in controller)
+Router::get('api/v1/organizations/{org_id}/loans/{loan_id}/repayments', LoanController::class . '@repaymentHistory', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Appeal flow
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/appeal
+// Employee submits an appeal after any rejection.
+// Body: { "appeal_reason": "...", "supporting_docs"? }
+// Roles: employee (own loans only), admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/appeal', LoanController::class . '@submitAppeal', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/loans/{loan_id}/appeal/review
+// HR reviews the pending appeal: upheld (rejection stands) or overturned (re-enters HR queue at Step 4).
+// Body: { "decision": "upheld|overturned", "reason": "..." }
+// Roles: hr_manager, admin
+Router::post('api/v1/organizations/{org_id}/loans/{loan_id}/appeal/review', LoanController::class . '@reviewAppeal', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'LoanAuthorizationMiddleware',
+]);
+
+// ---------------------------------------------------------------------------
+// Employee self-service
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/employees/{emp_id}/loans
+// Employee submits their own application. System validation runs immediately.
+// Roles: all authenticated (controller enforces self-only for 'employee' role)
+Router::post('api/v1/organizations/{org_id}/employees/{emp_id}/loans', LoanController::class . '@applyLoan', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// GET /api/v1/organizations/{org_id}/employees/{emp_id}/loans
+// All loans for one employee across all time.
+// Roles: all authenticated (scoped per role in controller)
+Router::get('api/v1/organizations/{org_id}/employees/{emp_id}/loans', LoanController::class . '@employeeLoans', [
+    'AuthMiddleware',
+    'LoanAuthorizationMiddleware',
+]);
+
+// =============================================================================
+// ATTENDANCE MODULE
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Employee self-service: Check In / Check Out
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/attendance/check-in
+// Any authenticated employee checks themself in. AttendanceAuthorizationMiddleware
+// derives the employee from the session, so no employee_id param is needed here.
+Router::post('api/v1/organizations/{org_id}/attendance/check-in', AttendanceController::class . '@checkIn', [
+    ['AuthMiddleware', ['employee', 'admin', 'hr_manager', 'department_manager', 'payroll_manager', 'payroll_officer', 'accountant', 'finance_manager', 'auditor', 'compliance_officer']],
+    ['AttendanceAuthorizationMiddleware', 'write'],
+]);
+
+// POST /api/v1/organizations/{org_id}/attendance/check-out
+Router::post('api/v1/organizations/{org_id}/attendance/check-out', AttendanceController::class . '@checkOut', [
+    ['AuthMiddleware', ['employee', 'admin', 'hr_manager', 'department_manager', 'payroll_manager', 'payroll_officer', 'accountant', 'finance_manager', 'auditor', 'compliance_officer']],
+    ['AttendanceAuthorizationMiddleware', 'write'],
+]);
+
+// ---------------------------------------------------------------------------
+// HR manual / biometric-device entry
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/employees/{employee_id}/attendance/manual
+// Body: { punch_type: check_in|check_out, punch_time, reason, source?, device_id?, remarks? }
+// Used both for HR manual corrections and for a biometric-device integration
+// layer that authenticates as an HR/service account and relays device punches.
+// Roles: admin, hr_manager
+Router::post('api/v1/organizations/{org_id}/employees/{employee_id}/attendance/manual', AttendanceController::class . '@manualPunch', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    ['AttendanceAuthorizationMiddleware', 'write'],
+]);
+
+// ---------------------------------------------------------------------------
+// Listing & detail
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/attendance
+// Query params: employee_id?, department_id?, status?, date_from?, date_to?
+// Roles: admin, hr_manager, payroll_manager, payroll_officer, department_manager
+//        (own team), auditor, compliance_officer, employee (own only — controller
+//        should be called with employee_id filter equal to self; middleware
+//        additionally blocks cross-employee listing at the detail level)
+Router::get('api/v1/organizations/{org_id}/attendance', AttendanceController::class . '@index', [
+    'AuthMiddleware',
+    ['AttendanceAuthorizationMiddleware', 'read'],
+]);
+
+// GET /api/v1/organizations/{org_id}/employees/{employee_id}/attendance/{date}
+// Full day detail: computed summary + raw punches + adjustments + overtime status.
+// NB: Date should be in this format: YYYY-MM-DD
+Router::get('api/v1/organizations/{org_id}/employees/{employee_id}/attendance/{date}', AttendanceController::class . '@show', [
+    'AuthMiddleware',
+    ['AttendanceAuthorizationMiddleware', 'read'],
+]);
+
+// PUT /api/v1/organizations/{org_id}/employees/{employee_id}/attendance/{date}
+// Body: { check_in_time?, check_out_time?, reason (required) }
+// HR correction — fully audit-logged in attendance_adjustments.
+// Roles: admin, hr_manager
+Router::put('api/v1/organizations/{org_id}/employees/{employee_id}/attendance/{date}', AttendanceController::class . '@adjustDay', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    ['AttendanceAuthorizationMiddleware', 'write'],
+]);
+
+// ---------------------------------------------------------------------------
+// Holiday-work approval (separate from overtime approval)
+// ---------------------------------------------------------------------------
+
+// POST /api/v1/organizations/{org_id}/employees/{employee_id}/attendance/{date}/approve-holiday-work
+// Roles: admin, hr_manager, payroll_manager (payroll may sign off on holiday pay)
+Router::post('api/v1/organizations/{org_id}/employees/{employee_id}/attendance/{date}/approve-holiday-work', AttendanceController::class . '@approveHolidayWork', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    ['AttendanceAuthorizationMiddleware', 'write'],
+]);
+
+// POST /api/v1/organizations/{org_id}/employees/{employee_id}/attendance/{date}/reject-holiday-work
+Router::post('api/v1/organizations/{org_id}/employees/{employee_id}/attendance/{date}/reject-holiday-work', AttendanceController::class . '@rejectHolidayWork', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    ['AttendanceAuthorizationMiddleware', 'write'],
+]);
+
+// ---------------------------------------------------------------------------
+// Payroll-ready summary
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/attendance/payroll-summary?date_from=&date_to=
+// Roles: admin, hr_manager, payroll_manager, payroll_officer, finance_manager
+Router::get('api/v1/organizations/{org_id}/attendance/payroll-summary', AttendanceController::class . '@payrollSummary', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager', 'payroll_officer', 'finance_manager']],
+    ['AttendanceAuthorizationMiddleware', 'read'],
+]);
+
+// ---------------------------------------------------------------------------
+// Public holidays (HR-managed)
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/public-holidays?year=
+Router::get('api/v1/organizations/{org_id}/public-holidays', PublicHolidayController::class . '@index', [
+    'AuthMiddleware',
+    ['AttendanceAuthorizationMiddleware', 'read'],
+]);
+
+// POST /api/v1/organizations/{org_id}/public-holidays
+// Roles: admin, hr_manager
+Router::post('api/v1/organizations/{org_id}/public-holidays', PublicHolidayController::class . '@store', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+]);
+
+// PUT /api/v1/organizations/{org_id}/public-holidays/{id}
+Router::put('api/v1/organizations/{org_id}/public-holidays/{id}', PublicHolidayController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+]);
+
+// DELETE /api/v1/organizations/{org_id}/public-holidays/{id}
+Router::delete('api/v1/organizations/{org_id}/public-holidays/{id}', PublicHolidayController::class . '@destroy', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+]);
+
+// ---------------------------------------------------------------------------
+// Overtime approval workflow (approval required before salary inclusion)
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/overtime-approvals?status=pending|approved|rejected
+// Roles: admin, hr_manager, payroll_manager, payroll_officer
+Router::get('api/v1/organizations/{org_id}/overtime-approvals', OvertimeApprovalController::class . '@index', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager', 'payroll_officer']],
+]);
+
+// POST /api/v1/organizations/{org_id}/overtime-approvals/{id}/approve
+// Body (optional): { overtime_rate?, approval_notes? }
+// Roles: admin, hr_manager, payroll_manager
+Router::post('api/v1/organizations/{org_id}/overtime-approvals/{id}/approve', OvertimeApprovalController::class . '@approve', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    ['AttendanceAuthorizationMiddleware', 'write'],
+]);
+
+// POST /api/v1/organizations/{org_id}/overtime-approvals/{id}/reject
+// Body: { rejection_reason } — required
+// Roles: admin, hr_manager, payroll_manager
+Router::post('api/v1/organizations/{org_id}/overtime-approvals/{id}/reject', OvertimeApprovalController::class . '@reject', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    ['AttendanceAuthorizationMiddleware', 'write'],
+]);
