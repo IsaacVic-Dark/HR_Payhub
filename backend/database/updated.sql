@@ -370,67 +370,91 @@ CREATE TABLE IF NOT EXISTS `leave_balances` (
 
 -- Dumping structure for table payhub.loans
 CREATE TABLE IF NOT EXISTS `loans` (
-  `id` INT NOT NULL AUTO_INCREMENT,
-
-  `organization_id` INT NOT NULL,
-  `employee_id` INT NOT NULL,
-  `config_id` INT NOT NULL,
-
-  `amount` DECIMAL(15,2) NOT NULL,
-  `interest_rate` DECIMAL(5,2) DEFAULT NULL,
-
-  `monthly_deduction` DECIMAL(15,2) DEFAULT NULL,
-  `balance_remaining` DECIMAL(15,2) DEFAULT NULL,
-  `total_repaid` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
-
-  `purpose` TEXT DEFAULT NULL,
-  `rejection_reason` TEXT DEFAULT NULL,
-
-  `approved_by` INT DEFAULT NULL,
-  `rejected_by` INT DEFAULT NULL,
-
-  `approved_at` TIMESTAMP NULL DEFAULT NULL,
-  `rejected_at` TIMESTAMP NULL DEFAULT NULL,
-
-  `start_date` DATE NOT NULL,
-  `end_date` DATE DEFAULT NULL,
-
-  `status` ENUM('pending','approved','rejected','repaid') DEFAULT 'pending',
-
-  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
+  `id`                          INT            NOT NULL AUTO_INCREMENT,
+  `organization_id`             INT            NOT NULL,
+  `employee_id`                 INT            NOT NULL,
+  `config_id`                   INT            NOT NULL,
+ 
+  `amount`                      DECIMAL(15,2)  NOT NULL,
+  `interest_rate`               DECIMAL(5,2)   DEFAULT NULL,
+  `monthly_deduction`           DECIMAL(15,2)  DEFAULT NULL,
+  `balance_remaining`           DECIMAL(15,2)  DEFAULT NULL,
+  `total_repaid`                DECIMAL(15,2)  NOT NULL DEFAULT 0.00,
+ 
+  `purpose`                     TEXT           DEFAULT NULL,
+  `rejection_reason`            TEXT           DEFAULT NULL,
+  `system_rejection_reason`     TEXT           DEFAULT NULL,
+ 
+  -- Final (legacy) approver columns — still used when a single admin approves directly
+  `approved_by`                 INT            DEFAULT NULL,
+  `rejected_by`                 INT            DEFAULT NULL,
+  `approved_at`                 TIMESTAMP      NULL DEFAULT NULL,
+  `rejected_at`                 TIMESTAMP      NULL DEFAULT NULL,
+ 
+  -- Step 3: Line Manager
+  `manager_approved_by`         INT            DEFAULT NULL,
+  `manager_approved_at`         TIMESTAMP      NULL DEFAULT NULL,
+  `manager_rejected_by`         INT            DEFAULT NULL,
+  `manager_rejected_at`         TIMESTAMP      NULL DEFAULT NULL,
+  `manager_rejection_reason`    TEXT           DEFAULT NULL,
+ 
+  -- Step 4: HR Manager
+  `hr_approved_by`              INT            DEFAULT NULL,
+  `hr_approved_at`              TIMESTAMP      NULL DEFAULT NULL,
+  `hr_rejected_by`              INT            DEFAULT NULL,
+  `hr_rejected_at`              TIMESTAMP      NULL DEFAULT NULL,
+  `hr_rejection_reason`         TEXT           DEFAULT NULL,
+ 
+  -- Step 5: Finance Manager (only if amount > threshold)
+  `finance_approved_by`         INT            DEFAULT NULL,
+  `finance_approved_at`         TIMESTAMP      NULL DEFAULT NULL,
+  `finance_rejected_by`         INT            DEFAULT NULL,
+  `finance_rejected_at`         TIMESTAMP      NULL DEFAULT NULL,
+  `finance_rejection_reason`    TEXT           DEFAULT NULL,
+ 
+  -- Step 6: Disbursement
+  `disbursed_by`                INT            DEFAULT NULL,
+  `disbursed_at`                TIMESTAMP      NULL DEFAULT NULL,
+  `disbursement_date`           DATE           DEFAULT NULL,
+ 
+  `start_date`                  DATE           NOT NULL,
+  `end_date`                    DATE           DEFAULT NULL,
+ 
+  `status` ENUM(
+    'pending','validated','system_rejected',
+    'manager_approved','manager_rejected',
+    'hr_approved','hr_rejected','compliance_review',
+    'finance_approved','finance_rejected',
+    'approved','active','rejected','repaid','appealed'
+  ) NOT NULL DEFAULT 'pending',
+ 
+  `created_at`  TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ 
   PRIMARY KEY (`id`),
-
-  -- Indexes
-  KEY `idx_loans_org` (`organization_id`),
-  KEY `idx_loans_employee` (`employee_id`),
-  KEY `idx_loans_config` (`config_id`),
-  KEY `idx_loans_status` (`status`),
-  KEY `idx_loans_approved_by` (`approved_by`),
-  KEY `idx_loans_rejected_by` (`rejected_by`),
-
-  -- Foreign Keys
-  CONSTRAINT `loans_org_fk`
-    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`)
-    ON DELETE CASCADE,
-
-  CONSTRAINT `loans_employee_fk`
-    FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`)
-    ON DELETE CASCADE,
-
-  CONSTRAINT `loans_config_fk`
-    FOREIGN KEY (`config_id`) REFERENCES `organization_configs` (`id`)
-    ON DELETE CASCADE,
-
-  CONSTRAINT `loans_approved_by_fk`
-    FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`)
-    ON DELETE SET NULL,
-
-  CONSTRAINT `loans_rejected_by_fk`
-    FOREIGN KEY (`rejected_by`) REFERENCES `users` (`id`)
-    ON DELETE SET NULL
-
+  KEY `idx_loans_org`                 (`organization_id`),
+  KEY `idx_loans_employee`            (`employee_id`),
+  KEY `idx_loans_config`              (`config_id`),
+  KEY `idx_loans_status`              (`status`),
+  KEY `idx_loans_approved_by`         (`approved_by`),
+  KEY `idx_loans_rejected_by`         (`rejected_by`),
+  KEY `idx_loans_manager_approved_by` (`manager_approved_by`),
+  KEY `idx_loans_hr_approved_by`      (`hr_approved_by`),
+  KEY `idx_loans_finance_approved_by` (`finance_approved_by`),
+  KEY `idx_loans_disbursed_by`        (`disbursed_by`),
+ 
+  CONSTRAINT `loans_org_fk`                  FOREIGN KEY (`organization_id`)    REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `loans_employee_fk`             FOREIGN KEY (`employee_id`)        REFERENCES `employees`     (`id`) ON DELETE CASCADE,
+  CONSTRAINT `loans_config_fk`               FOREIGN KEY (`config_id`)          REFERENCES `organization_configs` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `loans_approved_by_fk`          FOREIGN KEY (`approved_by`)        REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loans_rejected_by_fk`          FOREIGN KEY (`rejected_by`)        REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loans_manager_approved_by_fk`  FOREIGN KEY (`manager_approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loans_manager_rejected_by_fk`  FOREIGN KEY (`manager_rejected_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loans_hr_approved_by_fk`       FOREIGN KEY (`hr_approved_by`)     REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loans_hr_rejected_by_fk`       FOREIGN KEY (`hr_rejected_by`)     REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loans_finance_approved_by_fk`  FOREIGN KEY (`finance_approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loans_finance_rejected_by_fk`  FOREIGN KEY (`finance_rejected_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `loans_disbursed_by_fk`         FOREIGN KEY (`disbursed_by`)       REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 -- -----------------------------------------------------------------------------
 -- 2. loan_repayments  — track individual repayments / deductions
@@ -470,6 +494,54 @@ CREATE TABLE IF NOT EXISTS `loan_repayments` (
  
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- =============================================================================
+-- 3. CREATE loan_appeals — employee appeal after any rejection
+-- =============================================================================
+ 
+CREATE TABLE IF NOT EXISTS `loan_appeals` (
+  `id`                  INT           NOT NULL AUTO_INCREMENT,
+  `loan_id`             INT           NOT NULL,
+  `organization_id`     INT           NOT NULL,
+  `employee_id`         INT           NOT NULL     COMMENT 'The employee filing the appeal',
+ 
+  -- Appeal submission
+  `appeal_reason`       TEXT          NOT NULL     COMMENT 'Employee explanation for the appeal',
+  `supporting_docs`     VARCHAR(500)  DEFAULT NULL COMMENT 'Path to uploaded supporting documents',
+ 
+  -- HR decision
+  `reviewed_by`         INT           DEFAULT NULL COMMENT 'HR Manager who reviewed the appeal',
+  `reviewed_at`         TIMESTAMP     NULL DEFAULT NULL,
+  `hr_decision`         ENUM('upheld','overturned') DEFAULT NULL
+                        COMMENT 'upheld = rejection stands; overturned = loan re-enters approval flow',
+  `hr_decision_reason`  TEXT          DEFAULT NULL COMMENT 'HR notes on their decision',
+ 
+  `status`              ENUM('pending','upheld','overturned') NOT NULL DEFAULT 'pending',
+ 
+  `created_at`          TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`          TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ 
+  PRIMARY KEY (`id`),
+ 
+  -- Only one active appeal per loan at a time
+  UNIQUE KEY `unique_active_appeal` (`loan_id`, `status`),
+ 
+  KEY `idx_appeals_loan`     (`loan_id`),
+  KEY `idx_appeals_org`      (`organization_id`),
+  KEY `idx_appeals_employee` (`employee_id`),
+  KEY `idx_appeals_reviewer` (`reviewed_by`),
+  KEY `idx_appeals_status`   (`status`),
+ 
+  CONSTRAINT `la_loan_fk`
+    FOREIGN KEY (`loan_id`)         REFERENCES `loans`         (`id`) ON DELETE CASCADE,
+  CONSTRAINT `la_org_fk`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `la_employee_fk`
+    FOREIGN KEY (`employee_id`)     REFERENCES `employees`     (`id`) ON DELETE CASCADE,
+  CONSTRAINT `la_reviewer_fk`
+    FOREIGN KEY (`reviewed_by`)     REFERENCES `users`         (`id`) ON DELETE SET NULL
+ 
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
 -- Data exporting was unselected.
 
 -- Dumping structure for table payhub.notifications
@@ -495,93 +567,84 @@ CREATE TABLE IF NOT EXISTS `notifications` (
 -- Data exporting was unselected.
 
 -- Dumping structure for table payhub.organizations
-CREATE TABLE IF NOT EXISTS `organizations` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `name` varchar(100) NOT NULL, -- Consider increasing length to 255
-  `payroll_number_prefix` varchar(10) DEFAULT 'EMP',
-  `kra_pin` varchar(11) DEFAULT NULL,
-  `nssf_number` varchar(15) DEFAULT NULL,
-  `nhif_number` varchar(15) DEFAULT NULL,
-  `legal_type` enum('LTD','PLC','Sole_Proprietor','Partnership','NGO','Government','School','Other') DEFAULT NULL,
-  `registration_number` varchar(50) DEFAULT NULL,
-  `physical_address` varchar(255) DEFAULT NULL, -- Specific address
-  `location` varchar(255) DEFAULT NULL, -- Original, more generic field
-  `postal_address` varchar(255) DEFAULT NULL,
-  `postal_code_id` int DEFAULT NULL,
-  `county_id` int DEFAULT NULL, -- Specific county in Kenya
-  `primary_phone` varchar(20) DEFAULT NULL,
-  `secondary_phone` varchar(20) DEFAULT NULL,
-  `official_email` varchar(255) DEFAULT NULL,
-  `logo_url` varchar(255) DEFAULT NULL,
-  `currency` varchar(10) DEFAULT 'KES',
-  `payroll_schedule` enum('Monthly','Bi-Monthly','Weekly') DEFAULT 'Monthly',
-  `payroll_lock_date` date DEFAULT NULL,
-  `default_payday` int DEFAULT NULL,
-  `bank_id` int DEFAULT NULL,
-  `bank_account_name` varchar(255) DEFAULT NULL,
-  `bank_account_number` varchar(255) DEFAULT NULL,
-  `bank_branch` varchar(255) DEFAULT NULL,
-  `swift_code` varchar(11) DEFAULT NULL,
-  `nssf_branch_code` varchar(50) DEFAULT NULL,
-  `nhif_branch_code` varchar(50) DEFAULT NULL,
-  `primary_administrator_id` int DEFAULT NULL, -- Link to users table
-  `is_active` tinyint(1) DEFAULT '1',
-  `setup_completed`    tinyint(1) DEFAULT '0',
-`setup_completed_at` timestamp  NULL DEFAULT NULL,
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  `domain` varchar(100) DEFAULT NULL,
+CREATE TABLE IF NOT EXISTS `organization_configs` (
+  `id`                INT           NOT NULL AUTO_INCREMENT,
+  `organization_id`   INT           NOT NULL,
+  `config_type`       ENUM('tax','deduction','loan','benefit','per_diem','advance','refund','leave','attendance') NOT NULL,
+  `name`              VARCHAR(100)  NOT NULL,
+  `percentage`        DECIMAL(5,2)  DEFAULT NULL,
+  `fixed_amount`      DECIMAL(15,2) DEFAULT NULL,
+  `finance_threshold` DECIMAL(15,2) DEFAULT NULL
+    COMMENT 'For config_type=loan: loans above this value require Finance Manager approval. NULL = no Finance step.',
+  `value_text`        VARCHAR(100)  DEFAULT NULL,
+  `settings`          JSON          DEFAULT NULL,
+  `status`            ENUM('pending','approved','rejected','deleted_pending') NOT NULL DEFAULT 'approved',
+  `created_by`        INT           NULL,
+  `approved_by`       INT           NULL,
+  `rejected_by`       INT           NULL,
+  `approved_at`       TIMESTAMP     NULL,
+  `rejected_at`       TIMESTAMP     NULL,
+  `rejection_reason`  TEXT          NULL,
+  `is_active`         TINYINT(1)    DEFAULT '1',
+  `created_at`        TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`        TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ 
   PRIMARY KEY (`id`),
-  KEY `idx_org_kra_pin` (`kra_pin`),
-  KEY `idx_org_county_id` (`county_id`)
-  -- Foreign keys to be added after referenced tables are confirmed to exist
-  -- FOREIGN KEY (`county_id`) REFERENCES `counties` (`id`),
-  -- FOREIGN KEY (`bank_id`) REFERENCES `banks` (`id`),
-  FOREIGN KEY (`primary_administrator_id`) REFERENCES `users` (`id`)
+  UNIQUE KEY `unique_config` (`organization_id`, `config_type`, `name`),
+ 
+  CONSTRAINT `organization_configs_ibfk_1`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `organization_configs_created_by_fk`
+    FOREIGN KEY (`created_by`)      REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `organization_configs_approved_by_fk`
+    FOREIGN KEY (`approved_by`)     REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `organization_configs_rejected_by_fk`
+    FOREIGN KEY (`rejected_by`)     REFERENCES `users` (`id`) ON DELETE SET NULL
+ 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
 
-CREATE TABLE IF NOT EXISTS `organization_configs` (
-  `id`               INT          NOT NULL AUTO_INCREMENT,
-  `organization_id`  INT          NOT NULL,
-  `config_type`      ENUM('tax','deduction','loan','benefit','per_diem','advance','refund','leave') NOT NULL,
-  `name`             VARCHAR(100) NOT NULL,
-  `percentage`       DECIMAL(5,2)  DEFAULT NULL,
-  `fixed_amount`     DECIMAL(15,2) DEFAULT NULL,
-  `value_text`       VARCHAR(100)  DEFAULT NULL  COMMENT 'Scalar text value for settings that are not numeric (e.g. "monthly", "true", "01-01")',
-  `settings`         JSON          DEFAULT NULL  COMMENT 'Structured / array values (e.g. approval workflow roles)',
-  `status`           ENUM('pending','approved','rejected','deleted_pending') NOT NULL DEFAULT 'approved',
-  `created_by`       INT NULL,
-  `approved_by`      INT NULL,
-  `rejected_by`      INT NULL,
-  `approved_at`      TIMESTAMP NULL,
-  `rejected_at`      TIMESTAMP NULL,
-  `rejection_reason` TEXT NULL,
-  `is_active`        TINYINT(1)   DEFAULT '1',
-  `created_at`       TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at`       TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+-- CREATE TABLE IF NOT EXISTS `organization_configs` (
+--   `id`               INT          NOT NULL AUTO_INCREMENT,
+--   `organization_id`  INT          NOT NULL,
+--   `config_type`      ENUM('tax','deduction','loan','benefit','per_diem','advance','refund','leave') NOT NULL,
+--   `name`             VARCHAR(100) NOT NULL,
+--   `percentage`       DECIMAL(5,2)  DEFAULT NULL,
+--   `fixed_amount`     DECIMAL(15,2) DEFAULT NULL,
+--   `value_text`       VARCHAR(100)  DEFAULT NULL  COMMENT 'Scalar text value for settings that are not numeric (e.g. "monthly", "true", "01-01")',
+--   `settings`         JSON          DEFAULT NULL  COMMENT 'Structured / array values (e.g. approval workflow roles)',
+--   `status`           ENUM('pending','approved','rejected','deleted_pending') NOT NULL DEFAULT 'approved',
+--   `created_by`       INT NULL,
+--   `approved_by`      INT NULL,
+--   `rejected_by`      INT NULL,
+--   `approved_at`      TIMESTAMP NULL,
+--   `rejected_at`      TIMESTAMP NULL,
+--   `rejection_reason` TEXT NULL,
+--   `is_active`        TINYINT(1)   DEFAULT '1',
+--   `created_at`       TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+--   `updated_at`       TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_config` (`organization_id`,`config_type`,`name`),
+--   PRIMARY KEY (`id`),
+--   UNIQUE KEY `unique_config` (`organization_id`,`config_type`,`name`),
 
-  CONSTRAINT `organization_configs_ibfk_1`
-    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`)
-    ON DELETE CASCADE,
+--   CONSTRAINT `organization_configs_ibfk_1`
+--     FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`)
+--     ON DELETE CASCADE,
 
-  CONSTRAINT `organization_configs_created_by_fk`
-    FOREIGN KEY (`created_by`)  REFERENCES `users`(`id`)
-    ON DELETE SET NULL,
+--   CONSTRAINT `organization_configs_created_by_fk`
+--     FOREIGN KEY (`created_by`)  REFERENCES `users`(`id`)
+--     ON DELETE SET NULL,
 
-  CONSTRAINT `organization_configs_approved_by_fk`
-    FOREIGN KEY (`approved_by`) REFERENCES `users`(`id`)
-    ON DELETE SET NULL,
+--   CONSTRAINT `organization_configs_approved_by_fk`
+--     FOREIGN KEY (`approved_by`) REFERENCES `users`(`id`)
+--     ON DELETE SET NULL,
 
-  CONSTRAINT `organization_configs_rejected_by_fk`
-    FOREIGN KEY (`rejected_by`) REFERENCES `users`(`id`)
-    ON DELETE SET NULL
+--   CONSTRAINT `organization_configs_rejected_by_fk`
+--     FOREIGN KEY (`rejected_by`) REFERENCES `users`(`id`)
+--     ON DELETE SET NULL
 
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
 -- Data exporting was unselected.
@@ -976,6 +1039,191 @@ CREATE TABLE IF NOT EXISTS `pending_tokens` (
  
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
   COMMENT='Short-lived one-time JWT tokens bridging mpesaCallback → paymentStatus polling.';
+
+  CREATE TABLE IF NOT EXISTS `employee_attendance_punches` (
+  `id`              INT NOT NULL AUTO_INCREMENT,
+  `organization_id`  INT NOT NULL,
+  `employee_id`      INT NOT NULL,
+  `attendance_date`  DATE NOT NULL,
+  `punch_type`       ENUM('check_in','check_out') NOT NULL,
+  `punch_time`       DATETIME NOT NULL,
+  `source`           ENUM('biometric','manual','api') NOT NULL DEFAULT 'manual',
+  `device_id`        VARCHAR(100) DEFAULT NULL,
+  `remarks`          VARCHAR(255) DEFAULT NULL,
+  `created_by`       INT DEFAULT NULL,
+  `status`           ENUM('pending','approved','rejected','deleted_pending') NOT NULL DEFAULT 'approved',
+  `approved_by`      INT DEFAULT NULL,
+  `rejected_by`      INT DEFAULT NULL,
+  `approved_at`      TIMESTAMP NULL,
+  `rejected_at`      TIMESTAMP NULL,
+  `rejection_reason` TEXT NULL,
+  `is_active`        TINYINT(1) DEFAULT '1',
+  `created_at`       TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`       TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  KEY `idx_attendance_punches_org_emp_date` (`organization_id`, `employee_id`, `attendance_date`),
+  KEY `idx_attendance_punches_emp_time` (`employee_id`, `punch_time`),
+
+  CONSTRAINT `employee_attendance_punches_ibfk_1`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `employee_attendance_punches_ibfk_2`
+    FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `employee_attendance_punches_created_by_fk`
+    FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `employee_attendance_punches_approved_by_fk`
+    FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `employee_attendance_punches_rejected_by_fk`
+    FOREIGN KEY (`rejected_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE IF NOT EXISTS `employee_attendance_days` (
+  `id`                INT NOT NULL AUTO_INCREMENT,
+  `organization_id`    INT NOT NULL,
+  `employee_id`        INT NOT NULL,
+  `attendance_date`    DATE NOT NULL,
+  `check_in_time`      DATETIME DEFAULT NULL,
+  `check_out_time`     DATETIME DEFAULT NULL,
+  `worked_minutes`     INT NOT NULL DEFAULT 0,
+  `scheduled_minutes`  INT NOT NULL DEFAULT 0,
+  `overtime_minutes`   INT NOT NULL DEFAULT 0,
+  `late_minutes`       INT NOT NULL DEFAULT 0,
+  `early_leave_minutes` INT NOT NULL DEFAULT 0,
+  `is_public_holiday`  TINYINT(1) NOT NULL DEFAULT 0,
+  `is_weekend`         TINYINT(1) NOT NULL DEFAULT 0,
+  `status`             ENUM('present','absent','partial','holiday','leave') NOT NULL DEFAULT 'absent',
+  `approval_status`    ENUM('not_required','pending','approved','rejected') NOT NULL DEFAULT 'not_required',
+  `salary_included`    TINYINT(1) NOT NULL DEFAULT 0,
+  `source_summary`     JSON DEFAULT NULL,
+  `created_by`         INT DEFAULT NULL,
+  `approved_by`        INT DEFAULT NULL,
+  `approved_at`        TIMESTAMP NULL,
+  `is_active`          TINYINT(1) DEFAULT '1',
+  `created_at`         TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`         TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_attendance_day` (`organization_id`, `employee_id`, `attendance_date`),
+  KEY `idx_attendance_days_emp_date` (`employee_id`, `attendance_date`),
+  KEY `idx_attendance_days_status` (`organization_id`, `attendance_date`, `status`),
+
+  CONSTRAINT `employee_attendance_days_ibfk_1`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `employee_attendance_days_ibfk_2`
+    FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `employee_attendance_days_created_by_fk`
+    FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `employee_attendance_days_approved_by_fk`
+    FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE IF NOT EXISTS `attendance_adjustments` (
+  `id`                INT NOT NULL AUTO_INCREMENT,
+  `organization_id`    INT NOT NULL,
+  `attendance_day_id`  INT NOT NULL,
+  `adjustment_type`    ENUM('edit','override','late_entry','missing_checkout','delete') NOT NULL,
+  `old_value`          JSON DEFAULT NULL,
+  `new_value`          JSON DEFAULT NULL,
+  `reason`             TEXT NOT NULL,
+  `created_by`         INT DEFAULT NULL,
+  `approved_by`        INT DEFAULT NULL,
+  `approved_at`        TIMESTAMP NULL,
+  `status`             ENUM('pending','approved','rejected','deleted_pending') NOT NULL DEFAULT 'approved',
+  `rejection_reason`   TEXT NULL,
+  `is_active`          TINYINT(1) DEFAULT '1',
+  `created_at`         TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`         TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  KEY `idx_attendance_adjustments_day` (`attendance_day_id`),
+  KEY `idx_attendance_adjustments_org` (`organization_id`, `attendance_day_id`),
+
+  CONSTRAINT `attendance_adjustments_ibfk_1`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `attendance_adjustments_ibfk_2`
+    FOREIGN KEY (`attendance_day_id`) REFERENCES `employee_attendance_days` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `attendance_adjustments_created_by_fk`
+    FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `attendance_adjustments_approved_by_fk`
+    FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE IF NOT EXISTS `public_holidays` (
+  `id`                INT NOT NULL AUTO_INCREMENT,
+  `organization_id`    INT NOT NULL,
+  `holiday_date`      DATE NOT NULL,
+  `name`              VARCHAR(150) NOT NULL,
+  `is_recurring`      TINYINT(1) NOT NULL DEFAULT 0,
+  `applies_to_all`    TINYINT(1) NOT NULL DEFAULT 1,
+  `notes`             TEXT DEFAULT NULL,
+  `status`            ENUM('pending','approved','rejected','deleted_pending') NOT NULL DEFAULT 'approved',
+  `created_by`        INT DEFAULT NULL,
+  `approved_by`       INT DEFAULT NULL,
+  `rejected_by`       INT DEFAULT NULL,
+  `approved_at`       TIMESTAMP NULL,
+  `rejected_at`       TIMESTAMP NULL,
+  `rejection_reason`  TEXT NULL,
+  `is_active`         TINYINT(1) DEFAULT '1',
+  `created_at`        TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`        TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_public_holiday` (`organization_id`, `holiday_date`, `name`),
+  KEY `idx_public_holidays_org_date` (`organization_id`, `holiday_date`),
+
+  CONSTRAINT `public_holidays_ibfk_1`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `public_holidays_created_by_fk`
+    FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `public_holidays_approved_by_fk`
+    FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `public_holidays_rejected_by_fk`
+    FOREIGN KEY (`rejected_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE IF NOT EXISTS `overtime_approvals` (
+  `id`                INT NOT NULL AUTO_INCREMENT,
+  `organization_id`    INT NOT NULL,
+  `attendance_day_id`  INT NOT NULL,
+  `employee_id`        INT NOT NULL,
+  `overtime_minutes`  INT NOT NULL DEFAULT 0,
+  `overtime_rate`     DECIMAL(10,2) DEFAULT NULL,
+  `overtime_amount`   DECIMAL(15,2) DEFAULT NULL,
+  `requested_by`      INT DEFAULT NULL,
+  `approved_by`       INT DEFAULT NULL,
+  `rejected_by`       INT DEFAULT NULL,
+  `status`            ENUM('pending','approved','rejected','deleted_pending') NOT NULL DEFAULT 'pending',
+  `approval_notes`    TEXT DEFAULT NULL,
+  `rejection_reason`  TEXT DEFAULT NULL,
+  `approved_at`       TIMESTAMP NULL,
+  `rejected_at`       TIMESTAMP NULL,
+  `salary_included`   TINYINT(1) NOT NULL DEFAULT 0,
+  `is_active`         TINYINT(1) DEFAULT '1',
+  `created_at`        TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`        TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_overtime_per_day` (`organization_id`, `employee_id`, `attendance_day_id`),
+  KEY `idx_overtime_approvals_emp_status` (`employee_id`, `status`),
+  KEY `idx_overtime_approvals_day` (`attendance_day_id`),
+
+  CONSTRAINT `overtime_approvals_ibfk_1`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `overtime_approvals_ibfk_2`
+    FOREIGN KEY (`attendance_day_id`) REFERENCES `employee_attendance_days` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `overtime_approvals_ibfk_3`
+    FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `overtime_approvals_requested_by_fk`
+    FOREIGN KEY (`requested_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `overtime_approvals_approved_by_fk`
+    FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `overtime_approvals_rejected_by_fk`
+    FOREIGN KEY (`rejected_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
  
 -- Optional: auto-purge expired rows every hour (requires MySQL Event Scheduler)
 -- SET GLOBAL event_scheduler = ON;
