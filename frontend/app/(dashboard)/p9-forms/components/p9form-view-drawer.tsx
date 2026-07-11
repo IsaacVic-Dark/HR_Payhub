@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { type P9FormType } from "@/services/api/p9forms";
 import { Download, Send, CheckCircle, X, FileText, Calendar, User, Building, Hash } from "lucide-react";
 import { format } from "date-fns";
+import {formatCurrency} from "@/utils/currency";
 
 interface P9FormViewDrawerProps {
   open: boolean;
@@ -24,13 +25,6 @@ export function P9FormViewDrawer({
   onDownload,
 }: P9FormViewDrawerProps) {
   if (!p9Form) return null;
-
-  const formatCurrency = (value: number) => {
-    return `Kshs ${value.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
-  };
 
   const getStatusColor = (status: string) => {
     switch (status) {

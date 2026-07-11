@@ -12,7 +12,7 @@ import {
 import { toast } from "sonner";
 import { DataTable, ColumnDef } from "@/components/table";
 import { useAuth } from "@/lib/AuthContext";
-import { formatCurrency } from "@/lib/utils";
+import {formatCurrency} from "@/utils/currency";
 import {
   AlertDialog,
   AlertDialogAction,
