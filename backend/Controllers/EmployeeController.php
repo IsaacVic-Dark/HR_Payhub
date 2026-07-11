@@ -312,21 +312,23 @@ class EmployeeController
                 }
 
                 // 6. Insert employee — user_id will be null if has_user is false
-                $workemail = $hasUser
-                    ? $email  // already generated in the has_user block above
-                    : (!empty($data['workemail'])
-                        ? $data['workemail']
-                        : null);  // will be set by migration for existing; new ones need it supplied or leave null
+                // $workemail = $hasUser
+                //     ? $email  // already generated in the has_user block above
+                //     : (!empty($data['workemail'])
+                //         ? $data['workemail']
+                //         : null);  // will be set by migration for existing; new ones need it supplied or leave null
+
+                $workemail = $data['workemail'];
 
                 $insertEmployeeSQL = "INSERT INTO employees (
-    organization_id, user_id, has_user, employee_number, phone,
-    hire_date, start_date, job_title, department_id, reports_to,
-    base_salary, bank_account_number, tax_id, workemail, created_at
-) VALUES (
-    :org_id, :user_id, :has_user, :employee_number, :phone,
-    :hire_date, :start_date, :job_title, :department_id, :reports_to,
-    :base_salary, :bank_account_number, :tax_id, :workemail, NOW()
-)";
+                    organization_id, user_id, has_user, employee_number, phone,
+                    hire_date, start_date, job_title, department_id, reports_to,
+                    base_salary, bank_account_number, tax_id, workemail, personalemail, created_at
+                ) VALUES (
+                    :org_id, :user_id, :has_user, :employee_number, :phone,
+                    :hire_date, :start_date, :job_title, :department_id, :reports_to,
+                    :base_salary, :bank_account_number, :tax_id, :workemail, :personalemail, NOW()
+                )";
 
                 DB::raw($insertEmployeeSQL, [
                     ':org_id'              => $orgId,
