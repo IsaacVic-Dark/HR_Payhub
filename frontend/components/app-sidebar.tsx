@@ -275,6 +275,12 @@ const data = {
       icon: IconClipboardList,
       roles: ["employee"],
     },
+    {
+      title: "My Loans",
+      url: "/myloans",
+      icon: IconBriefcase,
+      roles: ["employee"],
+    },
   ],
 
   // Configuration section
