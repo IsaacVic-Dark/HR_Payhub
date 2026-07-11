@@ -10,6 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PayrunDetailType } from "@/services/api/payrun-detail";
 import { User, DollarSign, Receipt, Briefcase } from "lucide-react";
+import {formatCurrency} from "@/utils/currency";
 
 interface PayrunDetailDrawerProps {
   open: boolean;
@@ -24,11 +25,6 @@ export function PayrunDetailDrawer({
   detail,
   loading = false,
 }: PayrunDetailDrawerProps) {
-  const fmt = (value: number) =>
-    `Kshs ${value.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    })}`;
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
@@ -101,23 +97,23 @@ export function PayrunDetailDrawer({
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-gray-600">Basic Salary</span>
-                    <p className="font-medium">{fmt(detail.basic_salary)}</p>
+                    <p className="font-medium">{formatCurrency(detail.basic_salary)}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Overtime</span>
-                    <p className="font-medium">{fmt(detail.overtime_amount)}</p>
+                    <p className="font-medium">{formatCurrency(detail.overtime_amount)}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Bonus</span>
-                    <p className="font-medium">{fmt(detail.bonus_amount)}</p>
+                    <p className="font-medium">{formatCurrency(detail.bonus_amount)}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Commission</span>
-                    <p className="font-medium">{fmt(detail.commission_amount)}</p>
+                    <p className="font-medium">{formatCurrency(detail.commission_amount)}</p>
                   </div>
                   <div className="col-span-2 pt-2 border-t flex items-center justify-between">
                     <span className="text-gray-600 font-medium">Gross Pay</span>
-                    <p className="font-semibold text-base">{fmt(detail.gross_pay)}</p>
+                    <p className="font-semibold text-base">{formatCurrency(detail.gross_pay)}</p>
                   </div>
                 </div>
               </div>
@@ -131,38 +127,38 @@ export function PayrunDetailDrawer({
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <span className="text-gray-600">NSSF</span>
-                    <p className="font-medium text-red-600">{fmt(detail.nssf)}</p>
+                    <p className="font-medium text-red-600">{formatCurrency(detail.nssf)}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">SHIF</span>
-                    <p className="font-medium text-red-600">{fmt(detail.shif)}</p>
+                    <p className="font-medium text-red-600">{formatCurrency(detail.shif)}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Housing Levy</span>
-                    <p className="font-medium text-red-600">{fmt(detail.housing_levy)}</p>
+                    <p className="font-medium text-red-600">{formatCurrency(detail.housing_levy)}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Taxable Income</span>
-                    <p className="font-medium">{fmt(detail.taxable_income)}</p>
+                    <p className="font-medium">{formatCurrency(detail.taxable_income)}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Tax Before Relief</span>
-                    <p className="font-medium">{fmt(detail.tax_before_relief)}</p>
+                    <p className="font-medium">{formatCurrency(detail.tax_before_relief)}</p>
                   </div>
                   <div>
                     <span className="text-gray-600">Personal Relief</span>
                     <p className="font-medium text-green-600">
-                      − {fmt(detail.personal_relief)}
+                      − {formatCurrency(detail.personal_relief)}
                     </p>
                   </div>
                   <div className="col-span-2 pt-2 border-t flex items-center justify-between">
                     <span className="text-gray-600">PAYE</span>
-                    <p className="font-medium text-red-600">{fmt(detail.paye)}</p>
+                    <p className="font-medium text-red-600">{formatCurrency(detail.paye)}</p>
                   </div>
                   <div className="col-span-2 pt-2 border-t flex items-center justify-between">
                     <span className="text-gray-600 font-medium">Total Deductions</span>
                     <p className="font-semibold text-base text-red-600">
-                      {fmt(detail.total_deductions)}
+                      {formatCurrency(detail.total_deductions)}
                     </p>
                   </div>
                 </div>
@@ -172,7 +168,7 @@ export function PayrunDetailDrawer({
               <div className="rounded-lg bg-green-50 border border-green-200 p-4 flex items-center justify-between">
                 <span className="text-sm font-medium text-gray-700">Net Pay</span>
                 <p className="text-2xl font-bold text-green-600">
-                  {fmt(detail.net_pay)}
+                  {formatCurrency(detail.net_pay)}
                 </p>
               </div>
             </>
