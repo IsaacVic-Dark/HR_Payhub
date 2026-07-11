@@ -7,7 +7,7 @@ type EmployeeType = {
   id: number;
   organization_id: number;
   user_id: number;
-  email: string;
+  // email: string;
   phone: string;
   hire_date: string;
   job_title: string;
@@ -22,11 +22,21 @@ type EmployeeType = {
   employment_type: EmploymentType;
   work_location: WorkLocation;
   username: string;
-  personal_email: string | null;
+  personal_email?: string;
   first_name: string;
   middle_name: string | null;
   surname: string;
-  workemail: string | null;
+  workemail?: string | null;
+};
+
+// Shape returned when the `with_minimal=1` query param is used —
+// e.g. for employee-picker dropdowns (manual attendance entry, etc.)
+type MinimalEmployeeType = {
+  id: number;
+  firstname: string;
+  middlename: string | null;
+  surname: string;
+  personalemail: string;
 };
 
 interface ApiResponse<T = any> {
@@ -55,6 +65,10 @@ interface EmployeeFilters {
   work_location?: string;
   sort_by?: string;
   sort_order?: "asc" | "desc";
+  // Returns a lightweight { id, firstname, middlename, surname, personalemail }
+  // shape instead of the full EmployeeType — use getEmployeesMinimal() below
+  // rather than passing this directly to getEmployees().
+  with_minimal?: 0 | 1;
 }
 
 interface CreateEmployeeData {
@@ -160,6 +174,9 @@ class EmployeeAPI {
     if (filters.sort_order) {
       params.append("sort_order", filters.sort_order);
     }
+    if (filters.with_minimal) {
+      params.append("with_minimal", "1");
+    }
 
     return params.toString();
   }
@@ -195,6 +212,32 @@ class EmployeeAPI {
       });
 
       return this.handleResponse<EmployeeType[]>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch employees",
+      };
+    }
+  }
+
+  // Lightweight employee list for pickers/dropdowns — { id, firstname, middlename, surname, personalemail }
+  // GET /organizations/{org_id}/employees?with_minimal=1
+  async getEmployeesMinimal(
+    organizationId: number,
+    filters: Omit<EmployeeFilters, "with_minimal"> = {}
+  ): Promise<ApiResponse<MinimalEmployeeType[]>> {
+    try {
+      const queryParams = this.buildQueryParams({ ...filters, with_minimal: 1 });
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees${queryParams ? `?${queryParams}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<MinimalEmployeeType[]>(response);
     } catch (error) {
       return {
         success: false,
@@ -330,6 +373,7 @@ class EmployeeAPI {
 export const employeeAPI = new EmployeeAPI();
 export type {
   EmployeeType,
+  MinimalEmployeeType,
   EmployeeFilters,
   ApiResponse,
   EmployeesResponseData,
