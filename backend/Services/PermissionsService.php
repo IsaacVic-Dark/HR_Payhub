@@ -234,7 +234,7 @@ class PermissionsService
             "/my-deductions",
             "/my-allowances",
             "/my-tax-info",
-            "/my-loans",
+            "/myloans",
             "/my-ytd-earnings",
             "/my-profile",
             "/my-profile/edit-request",
