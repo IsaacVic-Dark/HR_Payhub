@@ -11,6 +11,7 @@ import { FileText, Filter, Download, Send, CheckCircle, Eye, Plus } from "lucide
 import { toast } from "sonner";
 import { P9FormViewDrawer } from "@/app/(dashboard)/p9-forms/components/p9form-view-drawer";
 import { P9FormGenerateModal } from "@/app/(dashboard)/p9-forms/components/p9form-generate-modal";
+import {formatCurrency} from "@/utils/currency";
 
 export default function P9FormsPage() {
   const pathname = usePathname();
@@ -352,10 +353,7 @@ export default function P9FormsPage() {
       header: "Gross Pay",
       cell: (p9Form) => (
         <div className="font-medium">
-          Kshs {p9Form.total_gross_pay.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
+          {formatCurrency(p9Form.total_gross_pay)}
         </div>
       ),
     },
@@ -364,10 +362,7 @@ export default function P9FormsPage() {
       header: "PAYE",
       cell: (p9Form) => (
         <div className="font-medium text-red-600">
-          Kshs {p9Form.total_paye.toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-            maximumFractionDigits: 2,
-          })}
+          {formatCurrency(p9Form.total_paye)}
         </div>
       ),
     },
