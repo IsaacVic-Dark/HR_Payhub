@@ -30,6 +30,11 @@ type DepartmentEmployeeType = {
   created_at: string;
 };
 
+type MinimalDepartmentType = {
+  id: number;
+  name: string;
+};
+
 interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -44,6 +49,7 @@ interface DepartmentFilters {
   per_page?: number;
   is_active?: 0 | 1;
   search?: string;
+  with_minimal?: 0 | 1;
 }
 
 interface DepartmentEmployeeFilters {
@@ -139,6 +145,31 @@ class DepartmentAPI {
       });
 
       return this.handleResponse<DepartmentType[]>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to fetch departments",
+      };
+    }
+  }
+
+  // Lightweight department list for pickers/dropdowns — { id, name }
+  // GET /organizations/{org_id}/departments?with_minimal=1
+  async getDepartmentsMinimal(
+    organizationId: number,
+    filters: Omit<DepartmentFilters, "with_minimal" | "page" | "per_page"> = {}
+  ): Promise<ApiResponse<MinimalDepartmentType[]>> {
+    try {
+      const queryParams = this.buildQueryParams({ ...filters, with_minimal: 1 });
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/departments${queryParams ? `?${queryParams}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<MinimalDepartmentType[]>(response);
     } catch (error) {
       return {
         success: false,
@@ -297,6 +328,7 @@ export const departmentAPI = new DepartmentAPI();
 export type {
   DepartmentType,
   DepartmentEmployeeType,
+  MinimalDepartmentType,
   DepartmentFilters,
   DepartmentEmployeeFilters,
   CreateDepartmentPayload,
