@@ -33,10 +33,10 @@ class DepartmentController
                 );
             }
 
-            // Pagination
-            $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
-            $perPage = isset($_GET['per_page']) ? max(1, min(100, (int) $_GET['per_page'])) : 10;
-            $offset = ($page - 1) * $perPage;
+            // Minimal mode — returns only id, name for pickers/dropdowns
+            // (e.g. the attendance list's department filter). Skips pagination,
+            // the head-employee join, and the employee_count subquery.
+            $withMinimal = isset($_GET['with_minimal']) && $_GET['with_minimal'] == '1';
 
             // Optional filters
             $isActive = isset($_GET['is_active']) ? (int) $_GET['is_active'] : null;
@@ -57,6 +57,30 @@ class DepartmentController
             }
 
             $where = "WHERE " . implode(" AND ", $conditions);
+
+            if ($withMinimal) {
+                $departments = DB::raw(
+                    "SELECT d.id, d.name FROM departments d $where ORDER BY d.name ASC",
+                    $params
+                );
+
+                if (!is_array($departments)) {
+                    $departments = [];
+                }
+
+                return responseJson(
+                    success: true,
+                    data: $departments,
+                    message: "Departments fetched successfully",
+                    code: 200,
+                    metadata: ['total' => count($departments)]
+                );
+            }
+
+            // Pagination
+            $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
+            $perPage = isset($_GET['per_page']) ? max(1, min(100, (int) $_GET['per_page'])) : 10;
+            $offset = ($page - 1) * $perPage;
 
             // Count total
             $countResult = DB::raw(
@@ -523,10 +547,10 @@ class DepartmentController
 
             // Check if any active employees belong to this department
             $activeEmployees = DB::raw(
-            "SELECT COUNT(*) as total FROM employees
+                "SELECT COUNT(*) as total FROM employees
             WHERE department_id = :dept_id AND organization_id = :org_id
             AND status NOT IN ('resigned', 'terminated', 'retired', 'deceased')",
-            [':dept_id' => $id, ':org_id' => $org_id]
+                [':dept_id' => $id, ':org_id' => $org_id]
             );
 
             $employeeCount = (int) ($activeEmployees[0]->total ?? 0);
@@ -727,15 +751,15 @@ class DepartmentController
             $offset = ($page - 1) * $perPage;
 
             $countResult = DB::raw(
-            "SELECT COUNT(*) as total FROM employees
+                "SELECT COUNT(*) as total FROM employees
             WHERE department_id = :dept_id AND organization_id = :org_id
             AND status NOT IN ('resigned', 'terminated', 'retired', 'deceased')",
-            [':dept_id' => $id, ':org_id' => $org_id]
+                [':dept_id' => $id, ':org_id' => $org_id]
             );
             $total = (int) ($countResult[0]->total ?? 0);
 
             $employees = DB::raw(
-            "SELECT e.id, e.firstname, e.surname, u.email, e.employee_number, e.job_title_id,
+                "SELECT e.id, e.firstname, e.surname, u.email, e.employee_number, e.job_title_id,
                     e.department_id, e.status, e.employment_type, e.created_at
             FROM employees e
             LEFT JOIN users u ON e.user_id = u.id
@@ -743,7 +767,7 @@ class DepartmentController
             AND e.status NOT IN ('resigned', 'terminated', 'retired', 'deceased')
             ORDER BY e.firstname ASC, e.surname ASC
             LIMIT :limit OFFSET :offset",
-            [':dept_id' => $id, ':org_id' => $org_id, ':limit' => (int) $perPage, ':offset' => (int) $offset]
+                [':dept_id' => $id, ':org_id' => $org_id, ':limit' => (int) $perPage, ':offset' => (int) $offset]
             );
 
             if (!is_array($employees)) {
