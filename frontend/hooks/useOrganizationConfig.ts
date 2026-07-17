@@ -15,6 +15,8 @@ export const useOrganizationConfig = () => {
     per_diem: [],
     advance: [],
     refund: [],
+    leave: [],
+    attendance: [],
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -53,10 +55,11 @@ export const useOrganizationConfig = () => {
   }, [fetchConfigs]);
 
   const createConfig = async (configData: {
-    config_type: "tax" | "deduction" | "loan" | "benefit" | "per_diem" | "advance" | "refund";
+    config_type: "tax" | "deduction" | "loan" | "benefit" | "per_diem" | "advance" | "refund" | "leave" | "attendance";
     name: string;
     percentage?: number | null;
     fixed_amount?: number | null;
+    value_text?: string | null;
     is_active?: number;
   }) => {
     if (!user?.organization_id) {
@@ -90,6 +93,7 @@ export const useOrganizationConfig = () => {
     name?: string;
     percentage?: number | null;
     fixed_amount?: number | null;
+    value_text?: string | null;
     is_active?: number;
   }) => {
     if (!user?.organization_id) {
