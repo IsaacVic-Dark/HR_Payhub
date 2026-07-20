@@ -22,7 +22,7 @@ export default function Page() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { user } = useAuth();
-  const { canReviewPayrun, canFinalizePayrun } = usePermissions();
+  const { canReviewPayrun, canFinalizePayrun, canReopenPayrun } = usePermissions();
   const [payrunDetails, setPayrunDetails] = useState<PayrunDetailType[]>([]);
   const [payrun, setPayrun] = useState<PayrunType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -34,7 +34,7 @@ export default function Page() {
   const [totalPages, setTotalPages] = useState(0);
   const [processDialogOpen, setProcessDialogOpen] = useState(false);
   const [processLoading, setProcessLoading] = useState(false);
-  const [dialogAction, setDialogAction] = useState<"review" | "finalize">(
+  const [dialogAction, setDialogAction] = useState<"review" | "finalize" | "reopen">(
     "review",
   );
 
@@ -220,7 +220,35 @@ export default function Page() {
     }
   };
 
-  const openDialog = (action: "review" | "finalize") => {
+  const handleReopenPayrun = async (reason?: string) => {
+    if (!user?.organization_id || !payrunId) return;
+    setProcessLoading(true);
+    try {
+      const result = await payrunAPI.reopenPayrun(
+        user.organization_id,
+        parseInt(payrunId),
+        reason,
+      );
+      if (result.success) {
+        toast.success(result.message || "Payrun reopened successfully");
+        setProcessDialogOpen(false);
+        setPayrun((prev) => (prev ? { ...prev, status: "draft" } : prev));
+      } else {
+        toast.error(
+          result.error || result.message || "Failed to reopen payrun",
+        );
+        // modal stays open
+      }
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "An unexpected error occurred",
+      );
+    } finally {
+      setProcessLoading(false);
+    }
+  };
+
+  const openDialog = (action: "review" | "finalize" | "reopen") => {
     setDialogAction(action);
     setProcessDialogOpen(true);
   };
@@ -265,11 +293,6 @@ export default function Page() {
       ),
     },
     {
-      key: "employee_number",
-      header: "Employee Number",
-      cell: (detail) => detail.employee_number || "—",
-    },
-    {
       key: "department",
       header: "Department",
       cell: (detail) => detail.department || "—",
@@ -283,6 +306,11 @@ export default function Page() {
       key: "gross_pay",
       header: "Gross Pay",
       cell: (detail) => formatCurrency(detail.gross_pay),
+    },
+    {
+      key: "overtime_amount",
+      header: "Overtime",
+      cell: (detail) => formatCurrency(detail.overtime_amount),
     },
     {
       key: "total_deductions",
@@ -329,158 +357,183 @@ export default function Page() {
   if (!payrunId) {
     return (
       <>
-          <div className="flex flex-1 flex-col">
-            <div className="mt-4 mx-6 space-y-2">
-              <h1 className="text-2xl font-medium">Employee Payruns</h1>
+        <div className="flex flex-1 flex-col">
+          <div className="mt-4 mx-6 space-y-2">
+            <h1 className="text-2xl font-medium">Employee Payruns</h1>
 
-              {/* Still loading / redirecting */}
-              {loading && !noPayrunsExist && !error && (
-                <p className="text-base text-muted-foreground">
-                  Loading latest payrun…
+            {/* Still loading / redirecting */}
+            {loading && !noPayrunsExist && !error && (
+              <p className="text-base text-muted-foreground">
+                Loading latest payrun…
+              </p>
+            )}
+
+            {/* No payruns exist at all */}
+            {noPayrunsExist && (
+              <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-6 mt-4">
+                <p className="text-sm font-medium text-yellow-800">
+                  No payruns found
                 </p>
-              )}
+                <p className="text-sm text-yellow-700 mt-1">
+                  There are no payruns in your organisation yet. Create a
+                  payrun first before viewing employee pay details.
+                </p>
+                <Button
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => router.push("/payrun/history")}
+                >
+                  Go to Payrun History
+                </Button>
+              </div>
+            )}
 
-              {/* No payruns exist at all */}
-              {noPayrunsExist && (
-                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-6 mt-4">
-                  <p className="text-sm font-medium text-yellow-800">
-                    No payruns found
-                  </p>
-                  <p className="text-sm text-yellow-700 mt-1">
-                    There are no payruns in your organisation yet. Create a
-                    payrun first before viewing employee pay details.
-                  </p>
-                  <Button
-                    size="sm"
-                    className="mt-4"
-                    onClick={() => router.push("/payrun/history")}
-                  >
-                    Go to Payrun History
-                  </Button>
-                </div>
-              )}
-
-              {/* Error while fetching latest */}
-              {error && !noPayrunsExist && (
-                <div className="rounded-lg border border-red-200 bg-red-50 p-6 mt-4">
-                  <p className="text-sm font-medium text-red-800">
-                    Something went wrong
-                  </p>
-                  <p className="text-sm text-red-700 mt-1">{error}</p>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="mt-4"
-                    onClick={() => router.refresh()}
-                  >
-                    Retry
-                  </Button>
-                </div>
-              )}
-            </div>
+            {/* Error while fetching latest */}
+            {error && !noPayrunsExist && (
+              <div className="rounded-lg border border-red-200 bg-red-50 p-6 mt-4">
+                <p className="text-sm font-medium text-red-800">
+                  Something went wrong
+                </p>
+                <p className="text-sm text-red-700 mt-1">{error}</p>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="mt-4"
+                  onClick={() => router.refresh()}
+                >
+                  Retry
+                </Button>
+              </div>
+            )}
           </div>
-        </>
+        </div>
+      </>
     );
   }
 
   return (
     <>
-        <div className="flex flex-1 flex-col">
-          <div className="@container/main flex flex-1 flex-col gap-2">
-            <div className="mt-4 mx-6 space-y-2">
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => router.push("/payrun/history")}
-                >
-                  <ArrowLeft className="h-4 w-4 mr-2" />
-                  Back to Payrun History
-                </Button>
-              </div>
-              <h1 className="text-2xl font-medium">
-                {payrun ? payrun.payrun_name : "Employee Payruns"}
-              </h1>
-              <p className="text-base text-muted-foreground">
-                Employee pay details for this payrun
-              </p>
+      <div className="flex flex-1 flex-col">
+        <div className="@container/main flex flex-1 flex-col gap-2">
+          <div className="mt-4 mx-6 space-y-2">
+            <div className="flex items-center gap-4">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/payrun/history")}
+              >
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back to Payrun History
+              </Button>
             </div>
-            <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-              <div className="w-full mx-auto p-4 bg-white">
-                <div className="rounded-lg shadow-sm border p-4">
-                  <DataTable
-                    data={payrunDetails}
-                    columns={columns}
-                    pagination={{
-                      page,
-                      limit: perPage,
-                      totalItems,
-                      totalPages,
-                    }}
-                    tableTitle="Payrun Employees Details"
-                    filters={
-                      <button className="flex items-center gap-1 px-3 py-1.5 border rounded-md text-xs">
-                        <Filter className="w-3 h-3" /> Filters
-                      </button>
-                    }
-                    searchInput={{ placeholder: "Find Employee" }}
-                    button={
-                      user && payrun?.status !== "finalized" && (
-                        <div className="flex items-center gap-2">
-                          {canReviewPayrun && (
-                            <button
-                              className="flex items-center gap-1 px-3 py-1.5 border border-blue-600 text-blue-600 rounded-md text-xs hover:bg-blue-50"
-                              onClick={() => openDialog("review")}
-                            >
-                              Review Payrun
-                            </button>
-                          )}
-                          {canFinalizePayrun && (
-                            <button
-                              className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
-                              onClick={() => openDialog("finalize")}
-                            >
-                              Finalize Payrun
-                            </button>
-                          )}
-                        </div>
-                      )
-                    }
-                    onPageChange={handlePageChange}
-                    onLimitChange={handleLimitChange}
-                    loading={loading}
-                    error={error}
-                    emptyMessage="No employee pay details found"
-                  />
-                </div>
+            <h1 className="text-2xl font-medium">
+              {payrun ? payrun.payrun_name : "Employee Payruns"}
+            </h1>
+            <p className="text-base text-muted-foreground">
+              Employee pay details for this payrun
+            </p>
+          </div>
+          <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
+            <div className="w-full mx-auto p-4 bg-white">
+              <div className="rounded-lg shadow-sm border p-4">
+                <DataTable
+                  data={payrunDetails}
+                  columns={columns}
+                  pagination={{
+                    page,
+                    limit: perPage,
+                    totalItems,
+                    totalPages,
+                  }}
+                  tableTitle="Payrun Employees Details"
+                  filters={
+                    <button className="flex items-center gap-1 px-3 py-1.5 border rounded-md text-xs">
+                      <Filter className="w-3 h-3" /> Filters
+                    </button>
+                  }
+                  searchInput={{ placeholder: "Find Employee" }}
+                  button={
+                    user && payrun?.status !== "finalized" && (
+                      <div className="flex items-center gap-2">
+                        {payrun?.status === "reviewed" ? (
+                          <>
+                            {canReopenPayrun && (
+                              <button
+                                className="flex items-center gap-1 px-3 py-1.5 border border-amber-600 text-amber-600 rounded-md text-xs hover:bg-amber-50"
+                                onClick={() => openDialog("reopen")}
+                              >
+                                Reopen Payrun
+                              </button>
+                            )}
+                            {canFinalizePayrun && (
+                              <button
+                                className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                                onClick={() => openDialog("finalize")}
+                              >
+                                Finalize Payrun
+                              </button>
+                            )}
+                          </>
+                        ) : (
+                          <>
+                            {canReviewPayrun && (
+                              <button
+                                className="flex items-center gap-1 px-3 py-1.5 border border-blue-600 text-blue-600 rounded-md text-xs hover:bg-blue-50"
+                                onClick={() => openDialog("review")}
+                              >
+                                Review Payrun
+                              </button>
+                            )}
+                            {canFinalizePayrun && (
+                              <button
+                                className="flex items-center gap-1 px-3 py-1.5 bg-green-600 text-white rounded-md text-xs hover:bg-green-700"
+                                onClick={() => openDialog("finalize")}
+                              >
+                                Finalize Payrun
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    )
+                  }
+                  onPageChange={handlePageChange}
+                  onLimitChange={handleLimitChange}
+                  loading={loading}
+                  error={error}
+                  emptyMessage="No employee pay details found"
+                />
               </div>
             </div>
           </div>
         </div>
-        <PayrollActionDialog
-          open={processDialogOpen}
-          onOpenChange={setProcessDialogOpen}
-          action={dialogAction}
-          payrunStatus={payrun?.status}
-          payrunName={payrun?.payrun_name}
-          payPeriodStart={payrun?.pay_period_start}
-          payPeriodEnd={payrun?.pay_period_end}
-          totalGrossPay={payrun?.total_gross_pay}
-          totalDeductions={payrun?.total_deductions}
-          employeeCount={payrun?.employee_count}
-          onConfirm={
-            dialogAction === "review"
-              ? handleReviewPayrun
-              : handleFinalizePayrun
-          }
-          loading={processLoading}
-        />
-        <PayrunDetailDrawer
-          open={detailDrawerOpen}
-          onOpenChange={setDetailDrawerOpen}
-          detail={selectedDetail}
-          loading={detailLoading}
-        />
-      </>
+      </div>
+      <PayrollActionDialog
+        open={processDialogOpen}
+        onOpenChange={setProcessDialogOpen}
+        action={dialogAction}
+        payrunStatus={payrun?.status}
+        payrunName={payrun?.payrun_name}
+        payPeriodStart={payrun?.pay_period_start}
+        payPeriodEnd={payrun?.pay_period_end}
+        totalGrossPay={payrun?.total_gross_pay}
+        totalDeductions={payrun?.total_deductions}
+        employeeCount={payrun?.employee_count}
+        onConfirm={
+          dialogAction === "review"
+            ? handleReviewPayrun
+            : dialogAction === "finalize"
+              ? handleFinalizePayrun
+              : handleReopenPayrun
+        }
+        loading={processLoading}
+      />
+      <PayrunDetailDrawer
+        open={detailDrawerOpen}
+        onOpenChange={setDetailDrawerOpen}
+        detail={selectedDetail}
+        loading={detailLoading}
+      />
+    </>
   );
 }

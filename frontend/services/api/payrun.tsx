@@ -6,6 +6,8 @@ type PayrunType = {
   pay_period_end: string;
   pay_frequency: string;
   status: string;
+  payrun_type: "regular" | "off_cycle";
+  parent_payrun_id: number | null;
   total_gross_pay: number;
   total_deductions: number;
   total_net_pay: number;
@@ -336,6 +338,33 @@ class PayrunAPI {
         success: false,
         error:
           error instanceof Error ? error.message : "Failed to finalize payrun",
+      };
+    }
+  }
+
+  // Re-open a reviewed payrun (reviewed → draft). Optional `reason` is passed
+  // through to the audit log server-side.
+  async reopenPayrun(
+    organizationId: number,
+    payrunId: number,
+    reason?: string,
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/payrun/${payrunId}/reopen`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(reason ? { reason } : {}),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to reopen payrun",
       };
     }
   }
