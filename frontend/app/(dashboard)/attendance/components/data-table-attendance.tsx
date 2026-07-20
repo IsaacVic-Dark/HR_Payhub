@@ -4,12 +4,23 @@ import React, { useState, useMemo, useEffect } from "react";
 import { Filter, Search, Eye, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { DataTable, ColumnDef } from "@/components/table";
 import { useAuth } from "@/lib/AuthContext";
 import {
   AttendanceDay,
   AttendanceFilters,
 } from "@/services/api/attendance";
+import { employeeAPI, MinimalEmployeeType } from "@/services/api/employee";
+import { departmentAPI, MinimalDepartmentType } from "@/services/api/department";
 import { AttendanceViewDrawer } from "@/app/(dashboard)/attendance/components/attendance-view-drawer";
 import { ManualPunchDialog } from "@/app/(dashboard)/attendance/components/manual-punch-dialog";
 
@@ -103,6 +114,13 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({
   const [selectedStatus, setSelectedStatus] = useState<string>("");
   const [showFilters, setShowFilters] = useState(false);
 
+  const [employees, setEmployees] = useState<MinimalEmployeeType[]>([]);
+  const [departments, setDepartments] = useState<MinimalDepartmentType[]>([]);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>("");
+  const [selectedDepartmentId, setSelectedDepartmentId] = useState<string>("");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
 
@@ -113,9 +131,30 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({
   // Manual entry modal
   const [manualPunchOpen, setManualPunchOpen] = useState(false);
 
+  const activeFilters: AttendanceFilters = useMemo(
+    () => ({
+      status: selectedStatus || undefined,
+      employee_id: selectedEmployeeId || undefined,
+      department_id: selectedDepartmentId || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
+    }),
+    [selectedStatus, selectedEmployeeId, selectedDepartmentId, dateFrom, dateTo],
+  );
+
   useEffect(() => {
-    fetchAttendance({ status: selectedStatus || undefined });
-  }, [fetchAttendance, selectedStatus]);
+    fetchAttendance(activeFilters);
+  }, [fetchAttendance, activeFilters]);
+
+  useEffect(() => {
+    if (!user?.organization_id) return;
+    employeeAPI.getEmployeesMinimal(user.organization_id).then((res) => {
+      if (res.success && res.data) setEmployees(res.data);
+    });
+    departmentAPI.getDepartmentsMinimal(user.organization_id).then((res) => {
+      if (res.success && res.data) setDepartments(res.data);
+    });
+  }, [user?.organization_id]);
 
   const filtered = useMemo(() => {
     return records.filter((r) => {
@@ -140,10 +179,15 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({
   const clearFilters = () => {
     setSearchTerm("");
     setSelectedStatus("");
+    setSelectedEmployeeId("");
+    setSelectedDepartmentId("");
+    setDateFrom("");
+    setDateTo("");
     setPage(1);
   };
 
-  const hasActiveFilters = searchTerm || selectedStatus;
+  const hasActiveFilters =
+    searchTerm || selectedStatus || selectedEmployeeId || selectedDepartmentId || dateFrom || dateTo;
 
   const handleEditClick = (record: AttendanceDay) => {
     // TODO: wire up an attendance-correction modal against adjustDay() once designed
@@ -283,26 +327,104 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({
 
           {showFilters && (
             <div className="mb-6 p-4 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">
-                    Status
-                  </label>
-                  <select
-                    value={selectedStatus}
-                    onChange={(e) => {
-                      setSelectedStatus(e.target.value);
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Status</label>
+                  <Select
+                    value={selectedStatus || "all"}
+                    onValueChange={(value) => {
+                      setSelectedStatus(value === "all" ? "" : value);
                       setPage(1);
                     }}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
                   >
-                    <option value="">All Status</option>
-                    {statuses.map((status) => (
-                      <option key={status} value={status}>
-                        {STATUS_CONFIG[status].label}
-                      </option>
-                    ))}
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="All Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectItem value="all">All Status</SelectItem>
+                        {statuses.map((status) => (
+                          <SelectItem key={status} value={status}>
+                            {STATUS_CONFIG[status].label}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Employee</label>
+                  <Select
+                    value={selectedEmployeeId || "all"}
+                    onValueChange={(value) => {
+                      setSelectedEmployeeId(value === "all" ? "" : value);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="All Employees" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Employees</SelectLabel>
+                        <SelectItem value="all">All Employees</SelectItem>
+                        {employees.map((emp) => (
+                          <SelectItem key={emp.id} value={emp.id.toString()}>
+                            {[emp.firstname, emp.middlename, emp.surname].filter(Boolean).join(" ")}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Department</label>
+                  <Select
+                    value={selectedDepartmentId || "all"}
+                    onValueChange={(value) => {
+                      setSelectedDepartmentId(value === "all" ? "" : value);
+                      setPage(1);
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="All Departments" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectGroup>
+                        <SelectLabel>Departments</SelectLabel>
+                        <SelectItem value="all">All Departments</SelectItem>
+                        {departments.map((dept) => (
+                          <SelectItem key={dept.id} value={dept.id.toString()}>
+                            {dept.name}
+                          </SelectItem>
+                        ))}
+                      </SelectGroup>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Date From</label>
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    max={dateTo || undefined}
+                    onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Date To</label>
+                  <input
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom || undefined}
+                    onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  />
                 </div>
               </div>
               <div className="mt-3 flex justify-end">
@@ -347,8 +469,7 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({
           open={manualPunchOpen}
           onOpenChange={setManualPunchOpen}
           organizationId={user.organization_id}
-          onSuccess={() => fetchAttendance({ status: selectedStatus || undefined })}
-        />
+          onSuccess={() => fetchAttendance(activeFilters)} />
       )}
     </>
   );

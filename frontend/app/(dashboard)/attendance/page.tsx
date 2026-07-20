@@ -12,6 +12,14 @@ import {
   AttendanceFilters,
 } from "@/services/api/attendance";
 
+function getTodayDateString(): string {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 export default function Page() {
   const { user } = useAuth();
 
@@ -27,7 +35,13 @@ export default function Page() {
       setLoading(true);
       setError(null);
       try {
-        const result = await attendanceAPI.getAttendance(user.organization_id, filters);
+        const defaultDate = getTodayDateString();
+        const finalFilters: AttendanceFilters = {
+          date_from: defaultDate,
+          date_to: defaultDate,
+          ...filters,
+        };
+        const result = await attendanceAPI.getAttendance(user.organization_id, finalFilters);
 
         if (result.success && result.data) {
           setRecords(result.data);
