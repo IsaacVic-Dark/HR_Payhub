@@ -10,7 +10,7 @@ use App\Middleware\AuthMiddleware;
 class AttendanceController
 {
     /**
-     * POST /api/v1/organizations/{org_id}/attendance/check-in
+     * POST /api/v1/organizations/{org_id}/attendance/check-indexin
      * Employee self-service check-in. Also usable by biometric middleware
      * relaying a device punch for the *currently authenticated* employee.
      */
