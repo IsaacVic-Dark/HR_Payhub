@@ -199,6 +199,16 @@ Router::post('api/v1/organizations/{org_id}/payrun/{payrun_id}/finalize', Payrun
     'PayrunAuthorizationMiddleware'
 ]);
 
+// Re-open a reviewed payrun (reviewed → draft) — e.g. to add late overtime or
+// fix an accidental input before finalization. Blocked once a bank file has
+// been generated or a statutory remittance has posted for the payrun.
+// Body (optional): { "reason": "..." }
+// Allowed roles: admin, payroll_manager, hr_manager, payroll_officer
+Router::post('api/v1/organizations/{org_id}/payrun/{payrun_id}/reopen', PayrunController::class . '@reopenPayrun', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'hr_manager', 'payroll_officer']],
+    'PayrunAuthorizationMiddleware'
+]);
+
 // Audit Log routes with comprehensive authentication and authorization
 Router::get('api/v1/organizations/{org_id}/audit-logs', AuditLogController::class . '@index', [
     'AuthMiddleware',
@@ -1187,6 +1197,16 @@ Router::post('api/v1/organizations/{org_id}/overtime-approvals/{id}/approve', Ov
 // Body: { rejection_reason } — required
 // Roles: admin, hr_manager, payroll_manager
 Router::post('api/v1/organizations/{org_id}/overtime-approvals/{id}/reject', OvertimeApprovalController::class . '@reject', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
+    ['AttendanceAuthorizationMiddleware', 'write'],
+]);
+
+// POST /api/v1/organizations/{org_id}/overtime-approvals/{id}/resolve
+// Body: { "resolution": "off_cycle" | "carry_forward" } — required
+// Used when approve() flags an overtime item as requires_resolution because its
+// attendance date falls inside a payrun that's already reviewed or finalized.
+// Roles: admin, hr_manager, payroll_manager
+Router::post('api/v1/organizations/{org_id}/overtime-approvals/{id}/resolve', OvertimeApprovalController::class . '@resolve', [
     ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
     ['AttendanceAuthorizationMiddleware', 'write'],
 ]);
