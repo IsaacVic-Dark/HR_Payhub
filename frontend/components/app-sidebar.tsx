@@ -100,6 +100,11 @@ const data = {
           url: "/payrun/employees",
           roles: ["super_admin", "admin", "payroll_manager"],
         },
+        {
+          title: "Overtime Approvals",
+          url: "/payrun/overtime-approvals",
+          roles: ["super_admin", "admin", "payroll_manager"],
+        },
       ],
     },
     // {
