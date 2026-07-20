@@ -216,7 +216,12 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   `user_id` int NOT NULL,
   `entity_type` varchar(50) NOT NULL,
   `entity_id` int NOT NULL,
-  `action` enum('create','update','delete') NOT NULL,
+  `action` enum(
+    'create','update','delete',
+    'review','finalize','reopen','auto_create',
+    'locked_period_detected','off_cycle_adjustment_linked',
+    'carry_forward_applied','carry_forward_queued'
+  ) NOT NULL,
   `details` json DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -657,6 +662,8 @@ CREATE TABLE IF NOT EXISTS `payruns` (
   `pay_period_start` date NOT NULL,
   `pay_period_end` date NOT NULL,
   `pay_frequency` enum('weekly','bi-weekly','monthly') DEFAULT 'monthly',
+  `payrun_type` enum('regular','off_cycle') NOT NULL DEFAULT 'regular' COMMENT 'off_cycle = an adjustment run created to pay overtime that landed in an already-locked period',
+  `parent_payrun_id` int DEFAULT NULL COMMENT 'For off_cycle runs: the original (finalized) payrun this adjustment belongs to',
   `status` enum('draft','reviewed','finalized') DEFAULT 'draft',
   `total_gross_pay` decimal(15,2) DEFAULT '0.00',
   `total_deductions` decimal(15,2) DEFAULT '0.00',
@@ -680,11 +687,14 @@ CREATE TABLE IF NOT EXISTS `payruns` (
   KEY `idx_payrun_period` (`pay_period_start`,`pay_period_end`),
   KEY `idx_payrun_status` (`status`),
   KEY `idx_payrun_deleted_at` (`deleted_at`),
+  KEY `idx_payrun_type` (`payrun_type`),
+  KEY `idx_payrun_parent` (`parent_payrun_id`),
   CONSTRAINT `payruns_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `payruns_ibfk_2` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`),
   CONSTRAINT `payruns_ibfk_3` FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`id`),
   CONSTRAINT `payruns_ibfk_4` FOREIGN KEY (`finalized_by`) REFERENCES `users` (`id`),
-  CONSTRAINT `payruns_ibfk_5` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`)
+  CONSTRAINT `payruns_ibfk_5` FOREIGN KEY (`deleted_by`) REFERENCES `users` (`id`),
+  CONSTRAINT `payruns_parent_fk` FOREIGN KEY (`parent_payrun_id`) REFERENCES `payruns` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
@@ -809,17 +819,18 @@ CREATE TABLE IF NOT EXISTS `payslips` (
   `generated_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   `sent_at`           TIMESTAMP NULL DEFAULT NULL,
   `pdf_path`          VARCHAR(500)  DEFAULT NULL  COMMENT 'Server path to stored PDF',
-
+  `metadata`          JSON DEFAULT NULL COMMENT 'e.g. {"type":"off_cycle_adjustment","original_payrun_id":12,"overtime_approval_id":45}',
+ 
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_payslip` (`payrun_id`, `employee_id`),
   KEY `payslips_org`    (`organization_id`),
   KEY `payslips_detail` (`payrun_detail_id`),
-
+ 
   CONSTRAINT `payslips_org_fk`    FOREIGN KEY (`organization_id`)  REFERENCES `organizations`  (`id`) ON DELETE CASCADE,
   CONSTRAINT `payslips_run_fk`    FOREIGN KEY (`payrun_id`)        REFERENCES `payruns`        (`id`) ON DELETE CASCADE,
   CONSTRAINT `payslips_detail_fk` FOREIGN KEY (`payrun_detail_id`) REFERENCES `payrun_details` (`id`) ON DELETE CASCADE,
   CONSTRAINT `payslips_emp_fk`    FOREIGN KEY (`employee_id`)      REFERENCES `employees`      (`id`) ON DELETE CASCADE
-
+ 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
@@ -1202,15 +1213,22 @@ CREATE TABLE IF NOT EXISTS `overtime_approvals` (
   `approved_at`       TIMESTAMP NULL,
   `rejected_at`       TIMESTAMP NULL,
   `salary_included`   TINYINT(1) NOT NULL DEFAULT 0,
+  `finalized_period_payrun_id` INT DEFAULT NULL COMMENT 'Set by approve() when the attendance date falls inside a reviewed/finalized payrun — awaiting officer resolution',
+  `resolution`        ENUM('off_cycle','carry_forward') DEFAULT NULL COMMENT 'Officer choice for how a locked-period overtime is paid (see resolve())',
+  `resolved_payrun_id` INT DEFAULT NULL COMMENT 'The off-cycle run or next regular payrun that actually paid this overtime',
+  `resolved_by`       INT DEFAULT NULL,
+  `resolved_at`       TIMESTAMP NULL DEFAULT NULL,
   `is_active`         TINYINT(1) DEFAULT '1',
   `created_at`        TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at`        TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
+ 
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_overtime_per_day` (`organization_id`, `employee_id`, `attendance_day_id`),
   KEY `idx_overtime_approvals_emp_status` (`employee_id`, `status`),
   KEY `idx_overtime_approvals_day` (`attendance_day_id`),
-
+  KEY `idx_overtime_finalized_period` (`finalized_period_payrun_id`),
+  KEY `idx_overtime_resolved_payrun` (`resolved_payrun_id`),
+ 
   CONSTRAINT `overtime_approvals_ibfk_1`
     FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `overtime_approvals_ibfk_2`
@@ -1219,10 +1237,12 @@ CREATE TABLE IF NOT EXISTS `overtime_approvals` (
     FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
   CONSTRAINT `overtime_approvals_requested_by_fk`
     FOREIGN KEY (`requested_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `overtime_approvals_approved_by_fk`
-    FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `overtime_approvals_rejected_by_fk`
-    FOREIGN KEY (`rejected_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+  CONSTRAINT `overtime_finalized_period_fk`
+    FOREIGN KEY (`finalized_period_payrun_id`) REFERENCES `payruns` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `overtime_resolved_payrun_fk`
+    FOREIGN KEY (`resolved_payrun_id`) REFERENCES `payruns` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `overtime_resolved_by_fk`
+    FOREIGN KEY (`resolved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
  
 -- Optional: auto-purge expired rows every hour (requires MySQL Event Scheduler)
