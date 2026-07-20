@@ -6,6 +6,7 @@ use App\Services\DB;
 
 class OrganizationConfigAuthorizationMiddleware
 {
+
     public function handle($request, $next)
     {
         $user = AuthMiddleware::getCurrentUser();
