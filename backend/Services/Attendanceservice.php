@@ -188,6 +188,16 @@ class AttendanceService
             $officeEndMin    = self::timeToMinutes($config['end_time']);
             $earlyLeaveMinutes = max(0, $officeEndMin - $checkOutMinutes);
             $overtimeMinutes   = max(0, $checkOutMinutes - $officeEndMin);
+        } elseif ($workedMinutes > 0 && !$isWorkday && !$isHoliday) {
+            // Work performed on a day the employee isn't scheduled to work at all
+            // (e.g. a weekend). There's no office start/end time to compare
+            // against here, so the entire worked duration is overtime — unlike
+            // the branch above, which only counts minutes *past* the scheduled
+            // end time. Without this branch, scheduledMinutes is already 0 for
+            // non-workdays, so overtimeMinutes silently stayed 0 no matter how
+            // long the employee worked, and no overtime_approvals row was ever
+            // raised for it.
+            $overtimeMinutes = $workedMinutes;
         }
 
         // Determine status
