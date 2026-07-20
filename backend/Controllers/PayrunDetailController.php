@@ -195,12 +195,17 @@ class PayrunDetailController
                 );
             }
 
-            // Only create details for payruns that are not finalized
-            if ($payrun[0]->status === 'finalized') {
+            // Only create details for payruns that are still editable.
+            // Reviewed payruns must be reopened first (PayrunController::reopenPayrun),
+            // finalized payruns are permanently locked.
+            if (in_array($payrun[0]->status, ['reviewed', 'finalized'])) {
+                $msg = $payrun[0]->status === 'finalized'
+                    ? "Cannot add details to a finalized payrun"
+                    : "Cannot add details to a reviewed payrun — reopen it first";
                 return responseJson(
                     success: false,
                     data: null,
-                    message: "Cannot add details to a finalized payrun",
+                    message: $msg,
                     code: 403
                 );
             }
@@ -358,12 +363,15 @@ class PayrunDetailController
 
             $current = $existingDetail[0];
 
-            // Guard: finalized payruns are locked
-            if ($current->payrun_status === 'finalized') {
+            // Guard: reviewed and finalized payruns are locked
+            if (in_array($current->payrun_status, ['reviewed', 'finalized'])) {
+                $msg = $current->payrun_status === 'finalized'
+                    ? "Cannot update details of a finalized payrun"
+                    : "Cannot update details of a reviewed payrun — reopen it first";
                 return responseJson(
                     success: false,
                     data: null,
-                    message: "Cannot update details of a finalized payrun",
+                    message: $msg,
                     code: 403
                 );
             }
@@ -451,12 +459,15 @@ class PayrunDetailController
                 );
             }
 
-            // Guard: finalized payruns are locked
-            if ($existingDetail[0]->payrun_status === 'finalized') {
+            // Guard: reviewed and finalized payruns are locked
+            if (in_array($existingDetail[0]->payrun_status, ['reviewed', 'finalized'])) {
+                $msg = $existingDetail[0]->payrun_status === 'finalized'
+                    ? "Cannot delete details from a finalized payrun"
+                    : "Cannot delete details from a reviewed payrun — reopen it first";
                 return responseJson(
                     success: false,
                     data: null,
-                    message: "Cannot delete details from a finalized payrun",
+                    message: $msg,
                     code: 403
                 );
             }
