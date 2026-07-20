@@ -7,6 +7,13 @@ use App\Services\DB;
 class OrganizationConfigController
 {
     /**
+     * config_type / name that identify the org-wide overtime rate setting
+     * inside the generic organization_configs table.
+     */
+    private const OVERTIME_RATE_CONFIG_TYPE = 'attendance';
+    private const OVERTIME_RATE_CONFIG_NAME = 'Overtime Rate';
+
+    /**
      * Get all organization configurations
      */
     public function index($org_id)
@@ -281,6 +288,7 @@ class OrganizationConfigController
                 'name' => $data['name'],
                 'percentage' => $data['percentage'] ?? null,
                 'fixed_amount' => $data['fixed_amount'] ?? null,
+                'value_text' => $data['value_text'] ?? null,
                 'is_active' => isset($data['is_active']) ? (int)$data['is_active'] : 1,
                 'status' => 'pending' // New field for approval workflow
             ];
@@ -295,6 +303,25 @@ class OrganizationConfigController
                 );
             }
 
+            // Overtime Rate is an operational setting (org's flat hourly overtime rate),
+            // not a policy that needs approval - apply it immediately and validate accordingly.
+            if ($this->isOvertimeRateConfig($insertData['config_type'], $insertData['name'])) {
+                $overtimeError = $this->validateOvertimeRatePayload($insertData['percentage'], $insertData['fixed_amount']);
+                if ($overtimeError) {
+                    return responseJson(
+                        success: false,
+                        data: null,
+                        message: $overtimeError,
+                        code: 400
+                    );
+                }
+
+                $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
+                $insertData['status'] = 'approved';
+                $insertData['approved_by'] = $currentUser['id'] ?? null;
+                $insertData['approved_at'] = date('Y-m-d H:i:s');
+            }
+
             DB::table('organization_configs')->insert($insertData);
             $configId = DB::lastInsertId();
 
@@ -304,7 +331,9 @@ class OrganizationConfigController
             return responseJson(
                 success: true,
                 data: ['id' => $configId],
-                message: "Configuration created successfully (pending approval)",
+                message: $insertData['status'] === 'approved'
+                    ? "Configuration created successfully"
+                    : "Configuration created successfully (pending approval)",
                 code: 201
             );
         } catch (\Exception $e) {
@@ -347,7 +376,7 @@ class OrganizationConfigController
             $updateData = [];
 
             // Build update data
-            $allowedFields = ['config_type', 'name', 'percentage', 'fixed_amount', 'is_active'];
+            $allowedFields = ['config_type', 'name', 'percentage', 'fixed_amount', 'value_text', 'is_active'];
             foreach ($allowedFields as $field) {
                 if (isset($data[$field])) {
                     $updateData[$field] = $data[$field];
@@ -363,9 +392,13 @@ class OrganizationConfigController
                 );
             }
 
+            // Resolve the effective config_type/name after this update (for duplicate + overtime checks)
+            $newType = $updateData['config_type'] ?? $config->config_type;
+            $newName = $updateData['name'] ?? $config->name;
+
             // Validate percentage and fixed_amount are not both set
-            $newPercentage = $updateData['percentage'] ?? $config->percentage;
-            $newFixedAmount = $updateData['fixed_amount'] ?? $config->fixed_amount;
+            $newPercentage = array_key_exists('percentage', $updateData) ? $updateData['percentage'] : $config->percentage;
+            $newFixedAmount = array_key_exists('fixed_amount', $updateData) ? $updateData['fixed_amount'] : $config->fixed_amount;
 
             if ($newPercentage !== null && $newFixedAmount !== null) {
                 return responseJson(
@@ -378,9 +411,6 @@ class OrganizationConfigController
 
             // Check for duplicate name if name is being updated
             if (isset($updateData['name']) || isset($updateData['config_type'])) {
-                $newName = $updateData['name'] ?? $config->name;
-                $newType = $updateData['config_type'] ?? $config->config_type;
-
                 $duplicateCheckQuery  = "
                     SELECT * FROM organization_configs 
                     WHERE organization_id = :org_id 
@@ -406,8 +436,29 @@ class OrganizationConfigController
                 }
             }
 
-            // Add status for approval workflow
-            $updateData['status'] = 'pending';
+            // Overtime Rate is an operational setting, not a policy that needs approval -
+            // validate it as a flat hourly amount and apply the change immediately.
+            $isOvertimeRate = $this->isOvertimeRateConfig($newType, $newName);
+
+            if ($isOvertimeRate) {
+                $overtimeError = $this->validateOvertimeRatePayload($newPercentage, $newFixedAmount);
+                if ($overtimeError) {
+                    return responseJson(
+                        success: false,
+                        data: null,
+                        message: $overtimeError,
+                        code: 400
+                    );
+                }
+
+                $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
+                $updateData['status'] = 'approved';
+                $updateData['approved_by'] = $currentUser['id'] ?? null;
+                $updateData['approved_at'] = date('Y-m-d H:i:s');
+            } else {
+                // Add status for approval workflow
+                $updateData['status'] = 'pending';
+            }
 
             DB::table('organization_configs')->update($updateData, 'id', $id);
 
@@ -417,7 +468,9 @@ class OrganizationConfigController
             return responseJson(
                 success: true,
                 data: null,
-                message: "Configuration updated successfully (pending approval)"
+                message: $isOvertimeRate
+                    ? "Overtime rate updated successfully"
+                    : "Configuration updated successfully (pending approval)"
             );
         } catch (\Exception $e) {
             return responseJson(
@@ -735,6 +788,40 @@ class OrganizationConfigController
         }
 
         return false;
+    }
+
+    /**
+     * Determine whether a given config_type/name pair refers to the
+     * org-wide Overtime Rate setting.
+     */
+    private function isOvertimeRateConfig($configType, $name)
+    {
+        return strtolower(trim((string)$configType)) === self::OVERTIME_RATE_CONFIG_TYPE
+            && strtolower(trim((string)$name)) === strtolower(self::OVERTIME_RATE_CONFIG_NAME);
+    }
+
+    /**
+     * Validate the payload for an overtime rate create/update.
+     * Overtime rate is always a flat hourly amount (fixed_amount) -
+     * percentage-based overtime is not supported.
+     *
+     * Returns an error message string on failure, or null if valid.
+     */
+    private function validateOvertimeRatePayload($percentage, $fixedAmount)
+    {
+        if ($percentage !== null) {
+            return "Overtime rate must be a flat hourly amount; 'percentage' is not allowed for the Overtime Rate config";
+        }
+
+        if ($fixedAmount === null || $fixedAmount === '' || !is_numeric($fixedAmount)) {
+            return "Overtime rate requires a valid numeric 'fixed_amount' (the hourly overtime rate)";
+        }
+
+        if ((float)$fixedAmount <= 0) {
+            return "Overtime rate 'fixed_amount' must be greater than zero";
+        }
+
+        return null;
     }
 
     /**
