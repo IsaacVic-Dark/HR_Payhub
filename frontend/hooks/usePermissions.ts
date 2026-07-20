@@ -34,6 +34,10 @@ export function usePermissions() {
     // after canProcessPayments
     canReviewPayrun: ['admin', 'payroll_manager', 'payroll_officer', 'hr_manager'].includes(userRole || ''),
     canFinalizePayrun: ['admin', 'payroll_manager', 'finance_manager'].includes(userRole || ''),
+    // Matches PayrunController::reopenPayrun's allowed roles
+    canReopenPayrun: ['admin', 'payroll_manager', 'payroll_officer', 'hr_manager'].includes(userRole || ''),
+    // Matches OvertimeApprovalController approve/reject/resolve routes' allowed roles
+    canManageOvertimeApprovals: ['admin', 'hr_manager', 'payroll_manager'].includes(userRole || ''),
 
     // Settings & Configuration
     canManageSettings: ['super_admin', 'admin'].includes(userRole || ''),
