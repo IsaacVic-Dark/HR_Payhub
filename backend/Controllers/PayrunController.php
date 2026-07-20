@@ -484,12 +484,18 @@ class PayrunController
 
             $payrun = $existingPayrun[0];
 
-            // Check if payrun is finalized
-            if ($payrun->status === 'finalized') {
+            // Lock guard: reviewed and finalized payruns cannot be edited directly.
+            // A reviewed payrun must go through reopenPayrun() first (reviewed → draft);
+            // a finalized payrun is permanently locked — use an off-cycle adjustment or
+            // carry-forward instead (see OvertimeApprovalController::resolve()).
+            if (in_array($payrun->status, ['reviewed', 'finalized'])) {
+                $msg = $payrun->status === 'finalized'
+                    ? "Cannot update finalized payruns"
+                    : "Cannot update a reviewed payrun — reopen it first (POST /payrun/{$payrun_id}/reopen)";
                 return responseJson(
                     success: false,
                     data: null,
-                    message: "Cannot update finalized payruns",
+                    message: $msg,
                     code: 400
                 );
             }
@@ -926,9 +932,170 @@ class PayrunController
     }
 
     // ----------------------------------------------------------------
+    // RE-OPEN  — reviewed → draft
+    // Use when late overtime needs to be added, or an accidental input
+    // needs correcting, before the payrun is finalized.
+    // Allowed: admin, payroll_manager, hr_manager, payroll_officer (same as review)
+    //
+    // Design note: the reopened payrun is left in `draft`, NOT silently
+    // recalculated and pushed back to `reviewed`. Editing (PayrunDetailController)
+    // already recalculates gross_pay/net_pay per line item, and processPayrun()
+    // recalculates the full org-wide tax figures. Auto-flipping status back to
+    // `reviewed` here would skip the officer's deliberate re-check step, which
+    // defeats the point of having a reviewed checkpoint at all.
+    // ----------------------------------------------------------------
+    public function reopenPayrun($org_id, $payrun_id)
+    {
+        try {
+            // ---- Input validation ----
+            if (!$org_id || !is_numeric($org_id)) {
+                return responseJson(
+                    success: false,
+                    message: "Invalid or missing organisation ID",
+                    code: 400,
+                    errors: ['org_id' => 'Must be a valid number']
+                );
+            }
+
+            if (!$payrun_id || !is_numeric($payrun_id)) {
+                return responseJson(
+                    success: false,
+                    message: "Invalid or missing payrun ID",
+                    code: 400,
+                    errors: ['payrun_id' => 'Must be a valid number']
+                );
+            }
+
+            // ---- Auth ----
+            $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
+            if (!$currentUser) {
+                return responseJson(
+                    success: false,
+                    message: "Authentication required",
+                    code: 401
+                );
+            }
+
+            $allowedRoles = ['admin', 'payroll_manager', 'hr_manager', 'payroll_officer'];
+            if (!in_array($currentUser['user_type'], $allowedRoles)) {
+                return responseJson(
+                    success: false,
+                    message: "You do not have permission to reopen payruns",
+                    code: 403
+                );
+            }
+
+            // ---- Fetch payrun ----
+            $payrunRows = DB::raw(
+                "SELECT * FROM payruns WHERE id = :id AND organization_id = :org_id AND deleted_at IS NULL",
+                [':id' => $payrun_id, ':org_id' => $org_id]
+            );
+
+            if (!is_array($payrunRows) || empty($payrunRows)) {
+                return responseJson(
+                    success: false,
+                    message: "Payrun not found",
+                    code: 404
+                );
+            }
+
+            $payrun = $payrunRows[0];
+
+            // ---- Status guard: only a reviewed payrun can be reopened ----
+            if ($payrun->status !== 'reviewed') {
+                $msg = $payrun->status === 'finalized'
+                    ? "This payrun has already been finalized and can no longer be reopened. " .
+                      "Use an off-cycle adjustment or carry-forward for any late overtime instead."
+                    : "Only reviewed payruns can be reopened (current status: {$payrun->status})";
+                return responseJson(
+                    success: false,
+                    message: $msg,
+                    code: 400
+                );
+            }
+
+            // ---- Lock guard: no bank file generated / no statutory remittance posted ----
+            // $remitted = DB::raw(
+            //     "SELECT COUNT(*) as cnt FROM statutory_remittances
+            //      WHERE payrun_id = :payrun_id AND status = 'remitted'",
+            //     [':payrun_id' => $payrun_id]
+            // );
+            // if (!empty($remitted) && (int) $remitted[0]->cnt > 0) {
+            //     return responseJson(
+            //         success: false,
+            //         message: "Cannot reopen: statutory remittances have already been posted for this payrun",
+            //         code: 400
+            //     );
+            // }
+
+            $sentPayslips = DB::raw(
+                "SELECT COUNT(*) as cnt FROM payslips
+                 WHERE payrun_id = :payrun_id AND status IN ('sent','acknowledged')",
+                [':payrun_id' => $payrun_id]
+            );
+            if (!empty($sentPayslips) && (int) $sentPayslips[0]->cnt > 0) {
+                return responseJson(
+                    success: false,
+                    message: "Cannot reopen: payslips have already been sent to employees for this payrun",
+                    code: 400
+                );
+            }
+
+            $body   = json_decode(file_get_contents('php://input'), true);
+            $reason = is_array($body) ? ($body['reason'] ?? null) : null;
+
+            $now = date('Y-m-d H:i:s');
+
+            // ---- Update: reviewed → draft (clear the review stamp) ----
+            DB::table('payruns')->update(
+                [
+                    'status'      => 'draft',
+                    'reviewed_by' => null,
+                    'reviewed_at' => null,
+                ],
+                'id',
+                $payrun_id
+            );
+
+            // ---- Audit ----
+            $this->createAuditLog($org_id, $currentUser['id'], 'payruns', $payrun_id, 'reopen', [
+                'previous_status' => 'reviewed',
+                'new_status'      => 'draft',
+                'reason'          => $reason,
+                'reopened_at'     => $now,
+            ]);
+
+            return responseJson(
+                success: true,
+                data: [
+                    'payrun_id'   => (int) $payrun_id,
+                    'status'      => 'draft',
+                    'reopened_by' => $currentUser['id'],
+                    'reopened_at' => $now,
+                ],
+                message: "Payrun reopened successfully. Edit employee details as needed, then run " .
+                    "processPayrun and reviewPayrun again to return it to 'reviewed'."
+            );
+        } catch (\Exception $e) {
+            error_log("PayrunController::reopenPayrun error: " . $e->getMessage());
+            error_log($e->getTraceAsString());
+            return responseJson(
+                success: false,
+                message: "An unexpected error occurred while reopening the payrun",
+                code: 500,
+                errors: [
+                    'exception' => $e->getMessage(),
+                    'file'      => $e->getFile(),
+                    'line'      => $e->getLine(),
+                ]
+            );
+        }
+    }
+
+    // ----------------------------------------------------------------
     // FINALIZE  — reviewed → finalized
     // Allowed: admin, payroll_manager, finance_manager
-    // Side-effect: auto-creates next month's draft payrun
+    // Side-effect: auto-creates next month's draft payrun (regular payruns only)
     // ----------------------------------------------------------------
     public function finalizePayrun($org_id, $payrun_id)
     {
@@ -1015,6 +1182,12 @@ class PayrunController
                     $payrun_id
                 );
 
+                // Off-cycle / adjustment runs (e.g. "March 2026 Adjustment 01") finalize
+                // standalone — they must NOT spawn a further "next month" draft payrun.
+                if (isset($payrun->payrun_type) && $payrun->payrun_type === 'off_cycle') {
+                    return ['next_payrun_id' => null, 'skipped' => []];
+                }
+
                 // 2. Calculate next pay period (same day, one month forward)
                 $nextStart = date('Y-m-d', strtotime($payrun->pay_period_start . ' +1 month'));
                 $nextEnd   = date('Y-m-d', strtotime($payrun->pay_period_end   . ' +1 month'));
@@ -1039,7 +1212,7 @@ class PayrunController
 
                 if (!empty($existing)) {
                     // Already exists — skip creation, return its ID
-                    return (int) $existing[0]->id;
+                    return ['next_payrun_id' => (int) $existing[0]->id, 'skipped' => []];
                 }
 
                 // 5. Insert next payrun (draft, totals start at zero — updated after details are inserted)
@@ -1072,16 +1245,34 @@ class PayrunController
 
                 $config = loadTaxConfig((int) $org_id);
 
+                // Pull in any approved overtime that was explicitly marked
+                // "carry forward to next payrun" (req #4) while this next payrun
+                // didn't exist yet — see OvertimeApprovalController::resolve().
+                // Keyed by employee_id => ['total' => float, 'ids' => [overtime_approval_id, ...]]
+                $carryForwardMap = $this->getPendingCarryForwardMap((int) $org_id);
+
                 $totalGross      = 0.00;
                 $totalDeductions = 0.00;
                 $totalNet        = 0.00;
                 $skipped         = [];
+                $carriedIds      = [];
 
                 foreach ($employees as $emp) {
                     try {
-                        $basicSalary = (float) $emp->basic_salary;
-                        // Gross = basic only (variable pay is zero on a fresh draft)
-                        $grossPay = $basicSalary;
+                        $basicSalary   = (float) $emp->basic_salary;
+                        $carryOvertime = $carryForwardMap[$emp->employee_id]['total'] ?? 0.00;
+
+                        if ($carryOvertime > 0) {
+                            $carriedIds = array_merge($carriedIds, $carryForwardMap[$emp->employee_id]['ids']);
+                        }
+
+                        // Gross = basic + any carried-forward overtime (bonus/commission
+                        // reset to zero on a fresh draft, matching existing convention).
+                        // Consistent with pushToDraftPayrun(), carried-forward overtime is
+                        // added to gross but NOT separately retaxed here — it flows through
+                        // the org's normal PAYE-on-basic-salary convention like any other
+                        // overtime added to a draft payrun.
+                        $grossPay = $basicSalary + $carryOvertime;
 
                         $tax = calculateNetPay($basicSalary, $grossPay, $config);
 
@@ -1090,7 +1281,7 @@ class PayrunController
                             'organization_id'    => $org_id,
                             'employee_id'        => $emp->employee_id,
                             'basic_salary'       => $tax['basic_salary'],
-                            'overtime_amount'    => 0.00,
+                            'overtime_amount'    => round($carryOvertime, 2),
                             'bonus_amount'       => 0.00,
                             'commission_amount'  => 0.00,
                             'nssf'               => $tax['nssf'],
@@ -1128,6 +1319,23 @@ class PayrunController
                     'id',
                     $nextPayrunId
                 );
+
+                // Close out the loop: any carried-forward overtime just folded into
+                // this new draft is now resolved and consumed.
+                if (!empty($carriedIds)) {
+                    $placeholders = implode(',', array_fill(0, count($carriedIds), '?'));
+                    DB::raw(
+                        "UPDATE overtime_approvals
+                         SET salary_included = 1, resolved_payrun_id = ?, resolved_by = ?, resolved_at = ?
+                         WHERE id IN ($placeholders)",
+                        array_merge([$nextPayrunId, $currentUser['id'], $now], $carriedIds)
+                    );
+
+                    $this->createAuditLog($org_id, $currentUser['id'], 'payruns', $nextPayrunId, 'carry_forward_applied', [
+                        'overtime_approval_ids' => $carriedIds,
+                        'target_payrun_id'      => $nextPayrunId,
+                    ]);
+                }
 
                 return ['next_payrun_id' => (int) $nextPayrunId, 'skipped' => $skipped];
             });
@@ -1202,35 +1410,44 @@ class PayrunController
                 'next_payrun_id'   => $nextPayrunId,
             ]);
 
-            // ---- Audit: auto-created next payrun ----
-            $this->createAuditLog($org_id, $currentUser['id'], 'payruns', $nextPayrunId, 'auto_create', [
-                'source'           => 'finalization_of_payrun_' . $payrun_id,
-                'carried_forward'  => 'basic_salary, employee_list',
-                'reset_fields'     => 'overtime_amount, bonus_amount, commission_amount, gross_pay, total_deductions, net_pay',
-            ]);
+            // ---- Audit: auto-created next payrun (regular payruns only) ----
+            if ($nextPayrunId !== null) {
+                $this->createAuditLog($org_id, $currentUser['id'], 'payruns', $nextPayrunId, 'auto_create', [
+                    'source'           => 'finalization_of_payrun_' . $payrun_id,
+                    'carried_forward'  => 'basic_salary, employee_list',
+                    'reset_fields'     => 'bonus_amount, commission_amount, gross_pay, total_deductions, net_pay',
+                ]);
+            }
+
+            $nextPayrunBlock = $nextPayrunId !== null
+                ? [
+                    'id'                => $nextPayrunId,
+                    'status'            => 'draft',
+                    'message'           => 'Next payrun has been automatically created as a draft with tax pre-calculated',
+                    'skipped_employees' => $skippedEmployees,
+                ]
+                : null; // off-cycle / adjustment runs don't spawn a next payrun
 
             return responseJson(
                 success: true,
                 data: [
                     'payrun_id'    => (int) $payrun_id,
+                    'payrun_type'  => $payrun->payrun_type ?? 'regular',
                     'status'       => 'finalized',
                     'finalized_by' => $currentUser['id'],
                     'finalized_at' => $now,
-                    'next_payrun'  => [
-                        'id'                => $nextPayrunId,
-                        'status'            => 'draft',
-                        'message'           => 'Next payrun has been automatically created as a draft with tax pre-calculated',
-                        'skipped_employees' => $skippedEmployees,
-                    ],
+                    'next_payrun'  => $nextPayrunBlock,
                     'payslips' => [
                         'generated' => $payslipsGenerated,
                         'skipped'   => $payslipSkipped,   // already existed
                         'errors'    => $payslipErrors,
                     ],
                 ],
-                message: !empty($skippedEmployees)
-                    ? "Payrun finalized. Next draft created with " . count($skippedEmployees) . " employee(s) skipped due to invalid salary data."
-                    : "Payrun finalized successfully. Next month's draft payrun has been created with tax pre-calculated."
+                message: $nextPayrunId === null
+                    ? "Off-cycle payrun finalized successfully."
+                    : (!empty($skippedEmployees)
+                        ? "Payrun finalized. Next draft created with " . count($skippedEmployees) . " employee(s) skipped due to invalid salary data."
+                        : "Payrun finalized successfully. Next month's draft payrun has been created with tax pre-calculated.")
             );
         } catch (\Exception $e) {
             error_log("PayrunController::finalizePayrun error: " . $e->getMessage());
@@ -1246,6 +1463,44 @@ class PayrunController
                 ]
             );
         }
+    }
+
+    // =========================================================================
+    // Carry-forward helper
+    // =========================================================================
+
+    /**
+     * Fetch approved overtime that officers have explicitly resolved as
+     * "carry_forward" but that hasn't landed in a payrun yet (resolved_payrun_id
+     * still NULL). Used by finalizePayrun() to fold it into the freshly-created
+     * next draft payrun.
+     *
+     * @return array employee_id => ['total' => float, 'ids' => int[]]
+     */
+    private function getPendingCarryForwardMap(int $orgId): array
+    {
+        $rows = DB::raw(
+            "SELECT id, employee_id, overtime_amount
+             FROM overtime_approvals
+             WHERE organization_id = :org_id
+               AND status = 'approved'
+               AND resolution = 'carry_forward'
+               AND resolved_payrun_id IS NULL
+               AND salary_included = 0",
+            [':org_id' => $orgId]
+        );
+
+        $map = [];
+        foreach ($rows as $row) {
+            $empId = $row->employee_id;
+            if (!isset($map[$empId])) {
+                $map[$empId] = ['total' => 0.00, 'ids' => []];
+            }
+            $map[$empId]['total'] += (float) $row->overtime_amount;
+            $map[$empId]['ids'][]  = $row->id;
+        }
+
+        return $map;
     }
 
     // =========================================================================
