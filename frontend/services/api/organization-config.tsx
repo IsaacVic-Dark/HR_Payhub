@@ -1,73 +1,49 @@
-"use client";
-export interface OrganizationConfig {
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+type ConfigType =
+  | "tax"
+  | "deduction"
+  | "loan"
+  | "benefit"
+  | "per_diem"
+  | "advance"
+  | "refund"
+  | "leave"
+  | "attendance";
+
+// Shape returned by the PHP backend for a single config row
+type RawConfigItem = {
   id: number;
   organization_id: number;
-  config_type:
-    | "tax"
-    | "deduction"
-    | "loan"
-    | "benefit"
-    | "per_diem"
-    | "advance"
-    | "refund"
-    | "leave";
+  config_type: ConfigType;
   name: string;
-  percentage: string | null;
-  fixed_amount: string | null;
-  is_active: number;
-  created_at: string;
-  updated_at: string;
-  status: "pending" | "approved" | "rejected" | "deleted_pending";
-  created_by: number | null;
-  approved_by: number | null;
-  rejected_by: number | null;
-  approved_at: string | null;
-  rejected_at: string | null;
-  rejection_reason: string | null;
-}
+  percentage: number | null;
+  fixed_amount: number | null;
+  value_text: string | null;
+  is_active: 0 | 1;
+  created_at?: string;
+  updated_at?: string;
+};
 
-export interface OrganizationConfigResponse {
-  success: boolean;
-  data: OrganizationConfig[];
-  message?: string;
-  code: number;
-  timestamp: number;
-  metadata?: {
-    statistics: {
-      total: number;
-      by_type: {
-        tax: number;
-        deduction: number;
-        loan: number;
-        benefit: number;
-        per_diem: number;
-        advance: number;
-        refund: number;
-          leave: number;
-      };
-      active_configs: number;
-      inactive_configs: number;
-    };
-  };
-}
-
-export interface OrganizationConfigCreateData {
-  config_type: OrganizationConfig["config_type"];
+// Shape the UI works with (is_active normalized to boolean)
+type UIConfigItem = {
+  id: number;
+  organization_id: number;
+  config_type: ConfigType;
   name: string;
-  percentage?: number | null;
-  fixed_amount?: number | null;
-  is_active?: number;
-}
+  percentage: number | null;
+  fixed_amount: number | null;
+  value_text: string | null;
+  is_active: boolean;
+  created_at?: string;
+  updated_at?: string;
+};
 
-export interface OrganizationConfigUpdateData {
-  config_type?: OrganizationConfig["config_type"];
-  name?: string;
-  percentage?: number | null;
-  fixed_amount?: number | null;
-  is_active?: number;
-}
+type ConfigsByType = Record<ConfigType, UIConfigItem[]>;
 
-export interface ApiResponse<T = any> {
+interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
   message?: string;
@@ -76,37 +52,37 @@ export interface ApiResponse<T = any> {
   metadata?: any;
 }
 
-export interface OrganizationConfigFilters {
-  config_type?: OrganizationConfig["config_type"];
-  is_active?: number;
-  search?: string;
-}
-
-export interface UIConfigItem {
-  id: number;
+// Payload for creating a config
+interface CreateConfigPayload {
+  config_type: ConfigType;
   name: string;
-  percentage: number | null;
-  fixed_amount: number | null;
-  is_active: boolean;
-  config_type: OrganizationConfig["config_type"];
+  percentage?: number | null;
+  fixed_amount?: number | null;
+  value_text?: string | null;
+  is_active?: number;
 }
 
-export interface ConfigsByType {
-  tax: UIConfigItem[];
-  deduction: UIConfigItem[];
-  loan: UIConfigItem[];
-  benefit: UIConfigItem[];
-  per_diem: UIConfigItem[];
-  advance: UIConfigItem[];
-  refund: UIConfigItem[];
-  leave: UIConfigItem[];
+// Payload for updating a config
+interface UpdateConfigPayload {
+  name?: string;
+  percentage?: number | null;
+  fixed_amount?: number | null;
+  value_text?: string | null;
+  is_active?: number;
 }
 
-export interface ApprovalData {
-  rejection_reason?: string;
-}
+const CONFIG_TYPES: ConfigType[] = [
+  "tax",
+  "deduction",
+  "loan",
+  "benefit",
+  "per_diem",
+  "advance",
+  "refund",
+  "leave",
+  "attendance",
+];
 
-// API Service
 class OrganizationConfigAPI {
   private async handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
     try {
@@ -161,34 +137,11 @@ class OrganizationConfigAPI {
     return headers;
   }
 
-  private buildQueryParams(filters: OrganizationConfigFilters): string {
-    const params = new URLSearchParams();
-
-    if (filters.config_type) {
-      params.append("config_type", filters.config_type);
-    }
-    if (filters.is_active !== undefined) {
-      params.append("is_active", filters.is_active.toString());
-    }
-    if (filters.search) {
-      params.append("search", filters.search);
-    }
-
-    return params.toString();
-  }
-
-  // Get all configurations for an organization
   async getOrganizationConfigs(
-    organizationId: number,
-    filters: OrganizationConfigFilters = {},
-  ): Promise<ApiResponse<OrganizationConfig[]>> {
+    organizationId: number
+  ): Promise<ApiResponse<RawConfigItem[]>> {
     try {
-      const queryParams = this.buildQueryParams(filters);
-      const url = `${
-        process.env.NEXT_PUBLIC_BACKEND_API_URL
-      }/organizations/${organizationId}/configs${
-        queryParams ? `?${queryParams}` : ""
-      }`;
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/configs`;
 
       const response = await fetch(url, {
         method: "GET",
@@ -196,87 +149,40 @@ class OrganizationConfigAPI {
         headers: this.getAuthHeaders(),
       });
 
-      const result = await this.handleResponse<OrganizationConfig[]>(response);
+      return this.handleResponse<RawConfigItem[]>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch configurations",
+      };
+    }
+  }
 
-      // Transform the data to match your expected structure
-      if (result.success && result.data) {
-        return {
-          ...result,
-          data: Array.isArray(result.data) ? result.data : [result.data],
-        };
+  // Groups a flat list of raw config rows into a ConfigsByType map,
+  // normalizing is_active (0/1) to boolean along the way.
+  transformToUIConfig(data: RawConfigItem[]): ConfigsByType {
+    const grouped = CONFIG_TYPES.reduce((acc, type) => {
+      acc[type] = [];
+      return acc;
+    }, {} as ConfigsByType);
+
+    for (const raw of data) {
+      const uiItem: UIConfigItem = { ...raw, is_active: Boolean(raw.is_active) };
+      if (!grouped[uiItem.config_type]) {
+        grouped[uiItem.config_type] = [];
       }
-
-      return result;
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to fetch organization configurations",
-        errors: {},
-      };
+      grouped[uiItem.config_type].push(uiItem);
     }
+
+    return grouped;
   }
 
-  // Get a single configuration
-  async getConfigById(
-    organizationId: number,
-    configId: number,
-  ): Promise<ApiResponse<OrganizationConfig>> {
-    try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/configs/${configId}`;
-
-      const response = await fetch(url, {
-        method: "GET",
-        credentials: "include",
-        headers: this.getAuthHeaders(),
-      });
-
-      return this.handleResponse<OrganizationConfig>(response);
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to fetch configuration",
-        errors: {},
-      };
-    }
-  }
-
-  // Create a new configuration
   async createConfig(
     organizationId: number,
-    configData: OrganizationConfigCreateData,
-  ): Promise<ApiResponse<{ id: number }>> {
+    configData: CreateConfigPayload
+  ): Promise<ApiResponse<RawConfigItem>> {
     try {
-      // Validate that either percentage OR fixed_amount is provided, but not both
-      // Check for actual values, not just undefined (null is allowed)
-      const hasPercentage =
-        configData.percentage !== undefined && configData.percentage !== null;
-      const hasFixedAmount =
-        configData.fixed_amount !== undefined &&
-        configData.fixed_amount !== null;
-
-      if (hasPercentage && hasFixedAmount) {
-        return {
-          success: false,
-          error: "Cannot set both percentage and fixed amount",
-          errors: {},
-        };
-      }
-
-      // Validate that at least one of percentage or fixed_amount is provided
-      if (!hasPercentage && !hasFixedAmount) {
-        return {
-          success: false,
-          error: "Either percentage or fixed amount must be provided",
-          errors: {},
-        };
-      }
-
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/configs`;
 
       const response = await fetch(url, {
@@ -286,68 +192,44 @@ class OrganizationConfigAPI {
         body: JSON.stringify(configData),
       });
 
-      return this.handleResponse<{ id: number }>(response);
+      return this.handleResponse<RawConfigItem>(response);
     } catch (error) {
       return {
         success: false,
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to create configuration",
-        errors: {},
+          error instanceof Error ? error.message : "Failed to create configuration",
       };
     }
   }
 
-  // Update a configuration
   async updateConfig(
     organizationId: number,
     configId: number,
-    configData: OrganizationConfigUpdateData,
-  ): Promise<ApiResponse> {
+    configData: UpdateConfigPayload
+  ): Promise<ApiResponse<RawConfigItem>> {
     try {
-      // Validate that either percentage OR fixed_amount is provided, but not both
-      // Check for actual values, not just undefined (null is allowed)
-      const hasPercentage =
-        configData.percentage !== undefined && configData.percentage !== null;
-      const hasFixedAmount =
-        configData.fixed_amount !== undefined &&
-        configData.fixed_amount !== null;
-
-      if (hasPercentage && hasFixedAmount) {
-        return {
-          success: false,
-          error: "Cannot set both percentage and fixed amount",
-          errors: {},
-        };
-      }
-
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/configs/${configId}`;
 
       const response = await fetch(url, {
-        method: "PUT",
+        method: "PATCH",
         credentials: "include",
         headers: this.getAuthHeaders(),
         body: JSON.stringify(configData),
       });
 
-      return this.handleResponse(response);
+      return this.handleResponse<RawConfigItem>(response);
     } catch (error) {
       return {
         success: false,
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to update configuration",
-        errors: {},
+          error instanceof Error ? error.message : "Failed to update configuration",
       };
     }
   }
 
-  // Delete a configuration
   async deleteConfig(
     organizationId: number,
-    configId: number,
+    configId: number
   ): Promise<ApiResponse> {
     try {
       const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/configs/${configId}`;
@@ -363,139 +245,19 @@ class OrganizationConfigAPI {
       return {
         success: false,
         error:
-          error instanceof Error
-            ? error.message
-            : "Failed to delete configuration",
-        errors: {},
+          error instanceof Error ? error.message : "Failed to delete configuration",
       };
     }
-  }
-
-  // Approve a configuration
-  async approveConfig(
-    organizationId: number,
-    configId: number,
-  ): Promise<ApiResponse> {
-    try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/configs/${configId}/approve`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: this.getAuthHeaders(),
-      });
-
-      return this.handleResponse(response);
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to approve configuration",
-        errors: {},
-      };
-    }
-  }
-
-  // Reject a configuration
-  async rejectConfig(
-    organizationId: number,
-    configId: number,
-    rejectionData?: ApprovalData,
-  ): Promise<ApiResponse> {
-    try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/configs/${configId}/reject`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        credentials: "include",
-        headers: this.getAuthHeaders(),
-        body: JSON.stringify(rejectionData || {}),
-      });
-
-      return this.handleResponse(response);
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to reject configuration",
-        errors: {},
-      };
-    }
-  }
-
-  // Get pending approvals
-  async getPendingApprovals(
-    organizationId: number,
-  ): Promise<ApiResponse<OrganizationConfig[]>> {
-    try {
-      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/configs/pending`;
-
-      const response = await fetch(url, {
-        method: "GET",
-        credentials: "include",
-        headers: this.getAuthHeaders(),
-      });
-
-      return this.handleResponse<OrganizationConfig[]>(response);
-    } catch (error) {
-      return {
-        success: false,
-        error:
-          error instanceof Error
-            ? error.message
-            : "Failed to fetch pending approvals",
-        errors: {},
-      };
-    }
-  }
-
-  // In organization-config.tsx, update the transformToUIConfig function:
-  transformToUIConfig(configs: OrganizationConfig[]): ConfigsByType {
-    const result: ConfigsByType = {
-      tax: [],
-      deduction: [],
-      loan: [],
-      benefit: [],
-      per_diem: [],
-      advance: [],
-      refund: [],
-      leave: [],
-    };
-
-    configs.forEach((config) => {
-      const uiConfig: UIConfigItem = {
-        id: config.id,
-        name: config.name,
-        percentage: config.percentage ? parseFloat(config.percentage) : null,
-        fixed_amount: config.fixed_amount
-          ? parseFloat(config.fixed_amount)
-          : null,
-        is_active: config.is_active === 1,
-        config_type: config.config_type,
-      };
-
-      // REMOVE this filter - show ALL configurations
-      // if (config.status === 'approved') {
-      result[config.config_type].push(uiConfig);
-      // }
-    });
-
-    return result;
   }
 }
 
 export const organizationConfigAPI = new OrganizationConfigAPI();
 export type {
-  OrganizationConfig,
-  OrganizationConfigCreateData,
-  OrganizationConfigUpdateData,
-  ApiResponse,
-  OrganizationConfigFilters,
+  ConfigType,
+  RawConfigItem,
   UIConfigItem,
   ConfigsByType,
-  ApprovalData,
+  ApiResponse,
+  CreateConfigPayload,
+  UpdateConfigPayload,
 };
