@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   IconReceipt,
   IconGift,
@@ -17,6 +17,7 @@ import {
   IconCreditCard,
   IconDownload,
   IconCalendarTime,
+  IconClock,
 } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -39,11 +40,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UIConfigItem } from "@/services/api/organization-config";
+import {
+  UIConfigItem,
+  organizationConfigAPI,
+} from "@/services/api/organization-config";
 import { toast } from "sonner";
 import { useOrganization } from "./components/organization-actions";
 import { useOrganizationConfig } from "@/hooks/useOrganizationConfig";
 import { type OrganizationType } from "@/services/api/organization";
+import { useAuth } from "@/lib/AuthContext";
 
 const sidebarItems = [
   { key: "profile", label: "My Profile", icon: IconBuilding },
@@ -53,6 +58,7 @@ const sidebarItems = [
   { key: "benefit", label: "Benefits", icon: IconGift },
   { key: "per_diem", label: "Per Diem", icon: IconPlane },
   { key: "leave", label: "Leave Settings", icon: IconCalendarTime },
+  { key: "attendance", label: "Attendance", icon: IconClock },
   { key: "advance", label: "Advances", icon: IconArrowForward },
   { key: "refund", label: "Refunds", icon: IconCreditCard },
   { key: "notifications", label: "Notifications", icon: IconBell },
@@ -288,7 +294,8 @@ function LeaveSettingsSection({
   isLoading,
 }: LeaveSettingsSectionProps) {
   // Helper: find a config value by name
-  const getConfigValue = (name: string) => configs.find((c) => c.name === name);
+  const getConfigValue = (name: string) =>
+    (configs ?? []).find((c) => c.name === name);
 
   // Derive general settings from live API data, fall back to defaults
   const [generalSettings, setGeneralSettings] = useState({
@@ -674,6 +681,381 @@ function LeaveSettingsSection({
   );
 }
 
+// Attendance Settings Section Component
+interface AttendanceSettingsSectionProps {
+  configs: UIConfigItem[]; // attendance rows from organization_configs
+  isLoading: boolean;
+  fetchConfigs: () => Promise<void>;
+}
+
+// value_text-based fields. "Overtime Rate" is handled separately since it's fixed_amount.
+const ATTENDANCE_TEXT_FIELDS = [
+  "work_start_time",
+  "work_end_time",
+  "grace_minutes",
+  "overtime_policy",
+  "overtime_after_minutes",
+  "public_holiday_handling",
+] as const;
+type AttendanceTextField = (typeof ATTENDANCE_TEXT_FIELDS)[number];
+
+interface AttendanceValues {
+  work_start_time: string; // "HH:MM" for <input type="time">
+  work_end_time: string;
+  grace_minutes: string;
+  overtime_policy: string;
+  overtime_after_minutes: string;
+  public_holiday_handling: string;
+  overtime_rate: string; // KES per hour
+}
+
+const DEFAULT_ATTENDANCE_VALUES: AttendanceValues = {
+  work_start_time: "08:00",
+  work_end_time: "17:00",
+  grace_minutes: "15",
+  overtime_policy: "approval_required",
+  overtime_after_minutes: "30",
+  public_holiday_handling: "paid",
+  overtime_rate: "",
+};
+
+// "08:00:00" (DB) <-> "08:00" (<input type="time">)
+const toTimeInputValue = (dbTime: string | null | undefined) =>
+  dbTime ? dbTime.slice(0, 5) : null;
+const toDbTimeValue = (inputTime: string) =>
+  inputTime.length === 5 ? `${inputTime}:00` : inputTime;
+
+const buildAttendanceValues = (configs: UIConfigItem[]): AttendanceValues => {
+  const getByName = (name: string) =>
+    (configs ?? []).find((c) => c.name === name);
+  return {
+    work_start_time:
+      toTimeInputValue(getByName("work_start_time")?.value_text) ??
+      DEFAULT_ATTENDANCE_VALUES.work_start_time,
+    work_end_time:
+      toTimeInputValue(getByName("work_end_time")?.value_text) ??
+      DEFAULT_ATTENDANCE_VALUES.work_end_time,
+    grace_minutes:
+      getByName("grace_minutes")?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.grace_minutes,
+    overtime_policy:
+      getByName("overtime_policy")?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.overtime_policy,
+    overtime_after_minutes:
+      getByName("overtime_after_minutes")?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.overtime_after_minutes,
+    public_holiday_handling:
+      getByName("public_holiday_handling")?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.public_holiday_handling,
+    overtime_rate:
+      getByName("Overtime Rate")?.fixed_amount?.toString() ??
+      DEFAULT_ATTENDANCE_VALUES.overtime_rate,
+  };
+};
+
+function AttendanceSettingsSection({
+  configs,
+  isLoading,
+  fetchConfigs,
+}: AttendanceSettingsSectionProps) {
+  const { user } = useAuth();
+  const [values, setValues] = useState<AttendanceValues>(
+    DEFAULT_ATTENDANCE_VALUES,
+  );
+  const [initialized, setInitialized] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Sync local editable state from live data once it arrives (avoids clobbering
+  // in-progress edits on background refetches after this component has loaded).
+  useEffect(() => {
+    if (!isLoading && !initialized) {
+      setValues(buildAttendanceValues(configs));
+      setInitialized(true);
+    }
+  }, [isLoading, initialized, configs]);
+
+  const getByName = (name: string) =>
+    (configs ?? []).find((c) => c.name === name);
+
+  const handleSave = async () => {
+    if (!user?.organization_id) {
+      toast.error("No organization ID found");
+      return;
+    }
+
+    setSaving(true);
+    const orgId = user.organization_id;
+    const failures: string[] = [];
+
+    try {
+      // Save the 6 value_text-based settings
+      for (const field of ATTENDANCE_TEXT_FIELDS) {
+        const rawValue = values[field as AttendanceTextField];
+        const value_text =
+          field === "work_start_time" || field === "work_end_time"
+            ? toDbTimeValue(rawValue)
+            : rawValue;
+
+        const existing = getByName(field);
+        const response = existing
+          ? await organizationConfigAPI.updateConfig(orgId, existing.id, {
+              value_text,
+            })
+          : await organizationConfigAPI.createConfig(orgId, {
+              config_type: "attendance",
+              name: field,
+              value_text,
+              is_active: 1,
+            });
+
+        if (!response.success) {
+          failures.push(field);
+        }
+      }
+
+      // Save Overtime Rate (fixed_amount, not value_text)
+      if (values.overtime_rate.trim() !== "") {
+        const rateValue = parseFloat(values.overtime_rate);
+        if (!Number.isNaN(rateValue) && rateValue > 0) {
+          const existingRate = getByName("Overtime Rate");
+          const response = existingRate
+            ? await organizationConfigAPI.updateConfig(
+                orgId,
+                existingRate.id,
+                { fixed_amount: rateValue },
+              )
+            : await organizationConfigAPI.createConfig(orgId, {
+                config_type: "attendance",
+                name: "Overtime Rate",
+                fixed_amount: rateValue,
+                is_active: 1,
+              });
+
+          if (!response.success) {
+            failures.push("Overtime Rate");
+          }
+        } else {
+          failures.push("Overtime Rate (invalid amount)");
+        }
+      }
+
+      await fetchConfigs();
+
+      if (failures.length > 0) {
+        toast.error(`Failed to save: ${failures.join(", ")}`);
+      } else {
+        toast.success("Attendance settings saved");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading && !initialized) {
+    return <ConfigSkeleton />;
+  }
+
+  return (
+    <div className="p-6 space-y-10">
+      <div>
+        <h2 className="text-lg font-semibold mb-1">Attendance</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Configure working hours, overtime rules, and public holiday
+          handling for your organisation.
+        </p>
+        <Separator className="mb-6" />
+
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          Working Hours
+        </h3>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Work Start Time</p>
+              <p className="text-xs text-muted-foreground">
+                The official start of the working day
+              </p>
+            </div>
+            <Input
+              type="time"
+              className="w-36"
+              value={values.work_start_time}
+              onChange={(e) =>
+                setValues({ ...values, work_start_time: e.target.value })
+              }
+            />
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Work End Time</p>
+              <p className="text-xs text-muted-foreground">
+                The official end of the working day
+              </p>
+            </div>
+            <Input
+              type="time"
+              className="w-36"
+              value={values.work_end_time}
+              onChange={(e) =>
+                setValues({ ...values, work_end_time: e.target.value })
+              }
+            />
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Grace Period</p>
+              <p className="text-xs text-muted-foreground">
+                Minutes an employee may clock in late without being marked
+                late
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min="0"
+                className="w-24"
+                value={values.grace_minutes}
+                onChange={(e) =>
+                  setValues({ ...values, grace_minutes: e.target.value })
+                }
+              />
+              <span className="text-sm text-muted-foreground">min</span>
+            </div>
+          </div>
+          <Separator />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          Overtime
+        </h3>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Overtime Policy</p>
+              <p className="text-xs text-muted-foreground">
+                How overtime hours are handled for this organisation
+              </p>
+            </div>
+            <Select
+              value={values.overtime_policy}
+              onValueChange={(v) =>
+                setValues({ ...values, overtime_policy: v })
+              }
+            >
+              <SelectTrigger className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="approval_required">
+                  Approval Required
+                </SelectItem>
+                <SelectItem value="automatic">
+                  Automatic (No Approval)
+                </SelectItem>
+                <SelectItem value="disabled">Disabled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Overtime After</p>
+              <p className="text-xs text-muted-foreground">
+                Minutes past end time before overtime starts accruing
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min="0"
+                className="w-24"
+                value={values.overtime_after_minutes}
+                onChange={(e) =>
+                  setValues({
+                    ...values,
+                    overtime_after_minutes: e.target.value,
+                  })
+                }
+              />
+              <span className="text-sm text-muted-foreground">min</span>
+            </div>
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Overtime Rate</p>
+              <p className="text-xs text-muted-foreground">
+                Flat hourly rate paid for approved overtime
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">KES</span>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                className="w-28"
+                placeholder="0.00"
+                value={values.overtime_rate}
+                onChange={(e) =>
+                  setValues({ ...values, overtime_rate: e.target.value })
+                }
+              />
+              <span className="text-sm text-muted-foreground">/ hr</span>
+            </div>
+          </div>
+          <Separator />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          Public Holidays
+        </h3>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Public Holiday Handling</p>
+              <p className="text-xs text-muted-foreground">
+                How attendance is treated on public holidays
+              </p>
+            </div>
+            <Select
+              value={values.public_holiday_handling}
+              onValueChange={(v) =>
+                setValues({ ...values, public_holiday_handling: v })
+              }
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="unpaid">Unpaid</SelectItem>
+                <SelectItem value="off">Day Off</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-2">
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Save Attendance Settings"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 // Billing Section Component
 function BillingSection() {
   return (
@@ -1020,10 +1402,11 @@ export default function OrganizationConfigPage() {
       advance: "advance",
       refund: "refund",
       leave: "leave",
+      attendance: "attendance",
     };
 
     const configType = configTypeMap[activeSection];
-    return configType ? configs[configType] : [];
+    return configType ? (configs[configType] ?? []) : [];
   };
 
   const activeConfigs = getActiveConfigs();
@@ -1095,6 +1478,12 @@ export default function OrganizationConfigPage() {
                       <LeaveSettingsSection
                         configs={activeConfigs}
                         isLoading={configsLoading}
+                      />
+                    ) : activeSection === "attendance" ? (
+                      <AttendanceSettingsSection
+                        configs={activeConfigs}
+                        isLoading={configsLoading}
+                        fetchConfigs={fetchConfigs}
                       />
                     ) : configsLoading ? (
                       // ) : configsLoading ? (
