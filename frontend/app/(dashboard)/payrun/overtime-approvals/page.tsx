@@ -32,6 +32,7 @@ import {
   MatchedPayrunSummary,
 } from "@/services/api/overtime-approval";
 import { payrunAPI } from "@/services/api/payrun";
+import { organizationConfigAPI } from "@/services/api/organization-config";
 
 const STATUS_TABS: OvertimeApprovalStatus[] = ["pending", "approved", "rejected"];
 
@@ -104,6 +105,7 @@ export default function OvertimeApprovalsPage() {
     "off_cycle" | "carry_forward" | null
   >(null);
   const [resolveLoading, setResolveLoading] = useState(false);
+  const [defaultOvertimeRate, setDefaultOvertimeRate] = useState<string>("");
 
   const fetchApprovals = async (status: OvertimeApprovalStatus) => {
     if (!user?.organization_id) return;
@@ -129,6 +131,20 @@ export default function OvertimeApprovalsPage() {
   };
 
   useEffect(() => {
+    if (!user?.organization_id) return;
+    organizationConfigAPI.getOrganizationConfigs(user.organization_id).then((res) => {
+      if (res.success && res.data) {
+        const rate = res.data.find(
+          (c) => c.config_type === "attendance" && c.name === "Overtime Rate",
+        );
+        if (rate?.fixed_amount != null) {
+          setDefaultOvertimeRate(rate.fixed_amount.toString());
+        }
+      }
+    });
+  }, [user?.organization_id]);
+
+  useEffect(() => {
     fetchApprovals(statusFilter);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.organization_id, statusFilter]);
@@ -136,7 +152,7 @@ export default function OvertimeApprovalsPage() {
   // ---- Approve flow ----
   const openApproveDialog = (item: OvertimeApprovalType) => {
     setApproveTarget(item);
-    setOvertimeRateInput("");
+    setOvertimeRateInput(defaultOvertimeRate); // was: ""
     setApprovalNotesInput("");
     setApproveDialogOpen(true);
   };
@@ -295,9 +311,8 @@ export default function OvertimeApprovalsPage() {
       cell: (item) => (
         <div className="flex flex-col gap-1 items-start">
           <span
-            className={`px-2 py-0.5 rounded-full border text-xs capitalize ${
-              STATUS_BADGE_CLASS[item.status] || "bg-gray-50 text-gray-700 border-gray-200"
-            }`}
+            className={`px-2 py-0.5 rounded-full border text-xs capitalize ${STATUS_BADGE_CLASS[item.status] || "bg-gray-50 text-gray-700 border-gray-200"
+              }`}
           >
             {item.status.replace("_", " ")}
           </span>
@@ -397,11 +412,10 @@ export default function OvertimeApprovalsPage() {
                         <button
                           key={s}
                           onClick={() => setStatusFilter(s)}
-                          className={`px-3 py-1.5 rounded-md text-xs border capitalize transition-colors ${
-                            statusFilter === s
+                          className={`px-3 py-1.5 rounded-md text-xs border capitalize transition-colors ${statusFilter === s
                               ? "bg-blue-600 text-white border-blue-600"
                               : "text-gray-600 border-gray-300 hover:bg-gray-50"
-                          }`}
+                            }`}
                         >
                           {s}
                         </button>
@@ -571,11 +585,10 @@ export default function OvertimeApprovalsPage() {
                 type="button"
                 disabled={!offCycleAvailable}
                 onClick={() => setSelectedResolution("off_cycle")}
-                className={`w-full text-left rounded-md border p-3 text-sm transition-colors ${
-                  selectedResolution === "off_cycle"
+                className={`w-full text-left rounded-md border p-3 text-sm transition-colors ${selectedResolution === "off_cycle"
                     ? "border-blue-600 bg-blue-50"
                     : "border-gray-200 hover:bg-gray-50"
-                } ${!offCycleAvailable ? "opacity-50 cursor-not-allowed" : ""}`}
+                  } ${!offCycleAvailable ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 <p className="font-medium text-gray-900">Off-cycle adjustment</p>
                 <p className="text-xs text-gray-500 mt-0.5">
@@ -588,11 +601,10 @@ export default function OvertimeApprovalsPage() {
               <button
                 type="button"
                 onClick={() => setSelectedResolution("carry_forward")}
-                className={`w-full text-left rounded-md border p-3 text-sm transition-colors ${
-                  selectedResolution === "carry_forward"
+                className={`w-full text-left rounded-md border p-3 text-sm transition-colors ${selectedResolution === "carry_forward"
                     ? "border-blue-600 bg-blue-50"
                     : "border-gray-200 hover:bg-gray-50"
-                }`}
+                  }`}
               >
                 <p className="font-medium text-gray-900">Carry forward to next payrun</p>
                 <p className="text-xs text-gray-500 mt-0.5">
