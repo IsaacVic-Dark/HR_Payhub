@@ -101,10 +101,23 @@ class OvertimeApprovalController
             }
 
             // ---- Which payrun period does this attendance date belong to? ----
+            // NOTE: more than one payrun can cover the same dates (e.g. a regular
+            // payrun plus an off-cycle/adjustment payrun), so we fetch all of them
+            // rather than assuming there's a single match.
             $attendanceDate = $this->getAttendanceDate($id);
-            $periodPayrun   = $attendanceDate ? $this->findPayrunForPeriod($orgId, $attendanceDate) : null;
+            $periodPayruns  = $attendanceDate ? $this->findPayrunsForPeriod($orgId, $attendanceDate) : [];
 
-            if ($periodPayrun && in_array($periodPayrun->status, ['reviewed', 'finalized'])) {
+            // A locked payrun always wins, regardless of what other draft/off-cycle
+            // payruns also happen to cover the same dates.
+            $periodPayrun = null;
+            foreach ($periodPayruns as $p) {
+                if (in_array($p->status, ['reviewed', 'finalized'])) {
+                    $periodPayrun = $p;
+                    break;
+                }
+            }
+
+            if ($periodPayrun) {
                 // Period is locked. Do NOT auto-push. Flag for officer resolution.
                 DB::raw(
                     "UPDATE overtime_approvals
@@ -144,7 +157,14 @@ class OvertimeApprovalController
             }
 
             // Period is open (draft) or has no payrun yet — safe to push straight in.
-            $preferredPayrunId = ($periodPayrun && $periodPayrun->status === 'draft') ? $periodPayrun->id : null;
+            $draftPayrun = null;
+            foreach ($periodPayruns as $p) {
+                if ($p->status === 'draft') {
+                    $draftPayrun = $p;
+                    break;
+                }
+            }
+            $preferredPayrunId = $draftPayrun->id ?? null;
             $payrollPushed = $this->pushToDraftPayrun($orgId, $approvedRow, $preferredPayrunId);
 
             return responseJson(
@@ -703,20 +723,20 @@ class OvertimeApprovalController
     }
 
     /**
-     * Find the payrun (any status) whose pay period covers the given date,
-     * for this organisation. Most recent match wins if periods overlap.
+     * Find all payruns (any status) whose pay period covers the given date,
+     * for this organisation. Off-cycle/adjustment payruns commonly overlap a
+     * regular payrun's dates, so this can legitimately return more than one
+     * row — callers must not assume a single match.
      */
-    private function findPayrunForPeriod($orgId, string $date)
+    private function findPayrunsForPeriod($orgId, string $date)
     {
-        $rows = DB::raw(
+        return DB::raw(
             "SELECT * FROM payruns
              WHERE organization_id = :org_id AND deleted_at IS NULL
                AND :att_date BETWEEN pay_period_start AND pay_period_end
-             ORDER BY pay_period_start DESC LIMIT 1",
+             ORDER BY pay_period_start DESC",
             [':org_id' => $orgId, ':att_date' => $date]
         );
-
-        return $rows[0] ?? null;
     }
 
     /**
