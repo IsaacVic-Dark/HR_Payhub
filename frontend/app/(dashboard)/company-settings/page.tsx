@@ -42,6 +42,7 @@ import {
 } from "@/components/ui/select";
 import {
   UIConfigItem,
+  OfficeHoursSettings,
   organizationConfigAPI,
 } from "@/services/api/organization-config";
 import { toast } from "sonner";
@@ -688,16 +689,20 @@ interface AttendanceSettingsSectionProps {
   fetchConfigs: () => Promise<void>;
 }
 
-// value_text-based fields. "Overtime Rate" is handled separately since it's fixed_amount.
+// value_text-based fields that are NOT part of Office Hours.
+// "Overtime Rate" is handled separately since it's fixed_amount.
 const ATTENDANCE_TEXT_FIELDS = [
-  "work_start_time",
-  "work_end_time",
-  "grace_minutes",
   "overtime_policy",
   "overtime_after_minutes",
   "public_holiday_handling",
 ] as const;
 type AttendanceTextField = (typeof ATTENDANCE_TEXT_FIELDS)[number];
+
+// Work Start Time, Work End Time, and Grace Period are consolidated into a
+// single organization_configs row: config_type="attendance", name="Office Hours",
+// with everything stored in the JSON `settings` column, e.g.
+// {"start_time":"08:00:00","end_time":"17:00:00","grace_minutes":15,"workdays":[1,2,3,4,5]}
+const OFFICE_HOURS_CONFIG_NAME = "Office Hours";
 
 interface AttendanceValues {
   work_start_time: string; // "HH:MM" for <input type="time">
@@ -728,16 +733,22 @@ const toDbTimeValue = (inputTime: string) =>
 const buildAttendanceValues = (configs: UIConfigItem[]): AttendanceValues => {
   const getByName = (name: string) =>
     (configs ?? []).find((c) => c.name === name);
+
+  const officeHoursSettings = getByName(OFFICE_HOURS_CONFIG_NAME)
+    ?.settings as OfficeHoursSettings | null | undefined;
+
   return {
     work_start_time:
-      toTimeInputValue(getByName("work_start_time")?.value_text) ??
+      toTimeInputValue(officeHoursSettings?.start_time) ??
       DEFAULT_ATTENDANCE_VALUES.work_start_time,
     work_end_time:
-      toTimeInputValue(getByName("work_end_time")?.value_text) ??
+      toTimeInputValue(officeHoursSettings?.end_time) ??
       DEFAULT_ATTENDANCE_VALUES.work_end_time,
     grace_minutes:
-      getByName("grace_minutes")?.value_text ??
-      DEFAULT_ATTENDANCE_VALUES.grace_minutes,
+      officeHoursSettings?.grace_minutes !== undefined &&
+      officeHoursSettings?.grace_minutes !== null
+        ? String(officeHoursSettings.grace_minutes)
+        : DEFAULT_ATTENDANCE_VALUES.grace_minutes,
     overtime_policy:
       getByName("overtime_policy")?.value_text ??
       DEFAULT_ATTENDANCE_VALUES.overtime_policy,
@@ -788,13 +799,44 @@ function AttendanceSettingsSection({
     const failures: string[] = [];
 
     try {
-      // Save the 6 value_text-based settings
+      // Save Office Hours (Work Start Time, Work End Time, Grace Period) as
+      // a single row, merging on top of whatever else is already in its
+      // settings JSON (e.g. workdays) so this form never clobbers keys it
+      // doesn't expose.
+      const existingOfficeHours = getByName(OFFICE_HOURS_CONFIG_NAME);
+      const existingSettings =
+        (existingOfficeHours?.settings as OfficeHoursSettings | null) ?? {};
+
+      const graceMinutesNum = Number(values.grace_minutes);
+      if (values.grace_minutes.trim() === "" || Number.isNaN(graceMinutesNum) || graceMinutesNum < 0) {
+        failures.push("Grace Period (must be a non-negative number)");
+      } else {
+        const mergedSettings: OfficeHoursSettings = {
+          ...existingSettings,
+          start_time: toDbTimeValue(values.work_start_time),
+          end_time: toDbTimeValue(values.work_end_time),
+          grace_minutes: graceMinutesNum,
+        };
+
+        const officeHoursResponse = existingOfficeHours
+          ? await organizationConfigAPI.updateConfig(orgId, existingOfficeHours.id, {
+              settings: mergedSettings,
+            })
+          : await organizationConfigAPI.createConfig(orgId, {
+              config_type: "attendance",
+              name: OFFICE_HOURS_CONFIG_NAME,
+              settings: mergedSettings,
+              is_active: 1,
+            });
+
+        if (!officeHoursResponse.success) {
+          failures.push("Office Hours");
+        }
+      }
+
+      // Save the remaining value_text-based settings
       for (const field of ATTENDANCE_TEXT_FIELDS) {
-        const rawValue = values[field as AttendanceTextField];
-        const value_text =
-          field === "work_start_time" || field === "work_end_time"
-            ? toDbTimeValue(rawValue)
-            : rawValue;
+        const value_text = values[field as AttendanceTextField];
 
         const existing = getByName(field);
         const response = existing
