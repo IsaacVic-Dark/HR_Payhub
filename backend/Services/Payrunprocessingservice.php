@@ -201,6 +201,15 @@ class PayrunProcessingService
         $periodEnd   = $payrun->pay_period_end;
         $employeeId  = $employee->id;
 
+        // Fetched early (not just at upsert time) so getAttendanceDeductionsTotal()
+        // can safely re-include rows already tied to *this* draft/reviewed payrun
+        // when it's reprocessed, without picking up rows tied to any other payrun.
+        $existingDetail   = DB::raw(
+            "SELECT id FROM payrun_details WHERE payrun_id = :pr AND employee_id = :emp",
+            [':pr' => $payrun->id, ':emp' => $employeeId]
+        );
+        $existingDetailId = !empty($existingDetail) ? (int) $existingDetail[0]->id : null;
+
         // --- Earnings ---
         $basicSalary     = (float) $employee->base_salary;
         $overtimeAmount  = $this->getOvertimeAmount($employeeId, $periodStart, $periodEnd);
@@ -212,36 +221,32 @@ class PayrunProcessingService
         $perDiemAmount   = $this->getApprovedPerDiemsTotal($employeeId, $periodStart, $periodEnd);
 
         $grossPay = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount
-                  + $benefitsAmount + $perDiemAmount;
+            + $benefitsAmount + $perDiemAmount;
 
         // --- Voluntary/org deductions ---
-        $loanDeductions    = $this->getLoanInstalment($employeeId, $periodStart, $periodEnd, $deductionConfigs);
-        $advanceDeductions = $this->getAdvanceDeduction($employeeId, $periodStart, $periodEnd, $deductionConfigs);
-        $extraDeductions   = $loanDeductions['total'] + $advanceDeductions['total'];
+        $loanDeductions       = $this->getLoanInstalment($employeeId, $periodStart, $periodEnd, $deductionConfigs);
+        $advanceDeductions    = $this->getAdvanceDeduction($employeeId, $periodStart, $periodEnd, $deductionConfigs);
+        $attendanceDeductions = $this->getAttendanceDeductionsTotal($employeeId, $periodStart, $periodEnd, $existingDetailId, $orgId);
+        $extraDeductions      = $loanDeductions['total'] + $advanceDeductions['total'] + $attendanceDeductions['total'];
 
         // --- Statutory calculations ---
         $calc = calculateNetPay($basicSalary, $grossPay, $taxConfig, $extraDeductions);
 
         // --- Upsert payrun_details ---
-        $existingDetail = DB::raw(
-            "SELECT id FROM payrun_details WHERE payrun_id = :pr AND employee_id = :emp",
-            [':pr' => $payrun->id, ':emp' => $employeeId]
-        );
-
         $detailData = [
             'payrun_id'        => $payrun->id,
             'employee_id'      => $employeeId,
             'basic_salary'     => $calc['basic_salary'],
             'overtime_amount'  => round($overtimeAmount, 2),
             'bonus_amount'     => round($bonusAmount + $benefitsAmount + $perDiemAmount, 2),
-            'commission_amount'=> round($commissionAmount, 2),
+            'commission_amount' => round($commissionAmount, 2),
             'gross_pay'        => $calc['gross_pay'],
             'total_deductions' => $calc['total_deductions'],
             'net_pay'          => $calc['net_pay'],
         ];
 
-        if (!empty($existingDetail)) {
-            $detailId = $existingDetail[0]->id;
+        if ($existingDetailId) {
+            $detailId = $existingDetailId;
             DB::table('payrun_details')->update($detailData, 'id', $detailId);
 
             // Remove old deduction lines so we can re-insert cleanly
@@ -258,6 +263,7 @@ class PayrunProcessingService
         $this->insertStatutoryDeductions($detailId, $calc, $orgId);
         $this->insertVoluntaryDeductions($detailId, $loanDeductions['items']);
         $this->insertVoluntaryDeductions($detailId, $advanceDeductions['items']);
+        $this->insertAttendanceDeductions($detailId, $attendanceDeductions);
 
         return $calc;
     }
@@ -420,9 +426,81 @@ class PayrunProcessingService
         return ['total' => $total, 'items' => $items];
     }
 
-    // -------------------------------------------------------------------------
-    // payrun_deductions helpers
-    // -------------------------------------------------------------------------
+    /**
+     * Cash lateness/early-leave deductions (per_minute or daily_rate policy)
+     * computed in real time by AttendanceService::calculateAttendanceDeduction()
+     * for each attendance day, still sitting 'pending'.
+     *
+     * $existingDetailId lets a reprocess of an already-drafted payrun safely
+     * re-include rows that were already marked 'applied' against *this*
+     * payrun_detail on a prior run of the same payrun, without touching rows
+     * belonging to any other payrun (NULL-safe: when $existingDetailId is
+     * null, the `payrun_detail_id = :existing_id` branch simply matches
+     * nothing, which is the correct behaviour for a brand-new detail).
+     *
+     * All attendance_deductions rows resolve to one bucket config
+     * ('Lateness & Early-Leave Deduction', config_type='deduction') so they
+     * show up as a single line item, same as loans/advances.
+     */
+    private function getAttendanceDeductionsTotal(
+        int    $employeeId,
+        string $start,
+        string $end,
+        ?int   $existingDetailId,
+        int    $orgId
+    ): array {
+        $rows = DB::raw(
+            "SELECT id, cash_amount
+               FROM attendance_deductions
+              WHERE employee_id = :emp
+                AND deduction_date BETWEEN :start AND :end
+                AND policy_applied IN ('per_minute', 'daily_rate')
+                AND (
+                     status = 'pending'
+                     OR (status = 'applied' AND payrun_detail_id = :existing_id)
+                )",
+            [
+                ':emp'         => $employeeId,
+                ':start'       => $start,
+                ':end'         => $end,
+                ':existing_id' => $existingDetailId,
+            ]
+        );
+
+        $total = 0.0;
+        $ids   = [];
+        foreach ($rows as $row) {
+            $total += (float) $row->cash_amount;
+            $ids[]  = (int) $row->id;
+        }
+
+        if ($total <= 0 || empty($ids)) {
+            return ['total' => 0.0, 'items' => [], 'ids' => []];
+        }
+
+        $config = DB::raw(
+            "SELECT id FROM organization_configs
+              WHERE organization_id = :org
+                AND config_type = 'deduction'
+                AND name = 'Lateness & Early-Leave Deduction'
+                AND is_active = 1
+              LIMIT 1",
+            [':org' => $orgId]
+        );
+
+        if (empty($config)) {
+            // Misconfigured org — don't lose the amount silently from total_deductions,
+            // but there's nowhere to write a payrun_deductions line for it.
+            error_log("Org #{$orgId}: 'Lateness & Early-Leave Deduction' config missing — attendance deductions excluded from this payrun.");
+            return ['total' => 0.0, 'items' => [], 'ids' => []];
+        }
+
+        return [
+            'total' => $total,
+            'items' => [['config_id' => $config[0]->id, 'amount' => round($total, 2)]],
+            'ids'   => $ids,
+        ];
+    }
 
     /**
      * Write the 5 statutory deduction rows (NSSF, SHIF, Housing Levy, PAYE, Personal Relief offset)
@@ -490,6 +568,37 @@ class PayrunProcessingService
                 'amount'           => $item['amount'],
             ]);
         }
+    }
+
+    /**
+     * Write the attendance-deduction payrun_deductions line (from
+     * getAttendanceDeductionsTotal()'s pre-resolved items) and lock the
+     * source attendance_deductions rows to this payrun_detail so they won't
+     * be picked up again by another payrun and won't be silently rewritten
+     * by a future attendance recompute.
+     */
+    private function insertAttendanceDeductions(int $detailId, array $attendanceDeductions): void
+    {
+        if (empty($attendanceDeductions['ids'])) {
+            return;
+        }
+
+        $this->insertVoluntaryDeductions($detailId, $attendanceDeductions['items']);
+
+        $params = [':detail_id' => $detailId];
+        $placeholders = [];
+        foreach ($attendanceDeductions['ids'] as $i => $id) {
+            $key = ":id{$i}";
+            $placeholders[] = $key;
+            $params[$key] = $id;
+        }
+
+        DB::raw(
+            "UPDATE attendance_deductions
+                SET status = 'applied', payrun_detail_id = :detail_id, updated_at = NOW()
+              WHERE id IN (" . implode(',', $placeholders) . ")",
+            $params
+        );
     }
 
     // -------------------------------------------------------------------------
