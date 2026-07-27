@@ -13,6 +13,16 @@ type ConfigType =
   | "leave"
   | "attendance";
 
+// Shape of the settings JSON used by the consolidated "Office Hours"
+// attendance config row.
+interface OfficeHoursSettings {
+  start_time: string; // "HH:MM:SS"
+  end_time: string; // "HH:MM:SS"
+  grace_minutes: number;
+  workdays?: number[]; // ISO weekday numbers, 1=Monday .. 7=Sunday
+  [key: string]: unknown;
+}
+
 // Shape returned by the PHP backend for a single config row
 type RawConfigItem = {
   id: number;
@@ -22,12 +32,13 @@ type RawConfigItem = {
   percentage: number | null;
   fixed_amount: number | null;
   value_text: string | null;
+  settings: string | null; // raw JSON string from the DB, e.g. Office Hours
   is_active: 0 | 1;
   created_at?: string;
   updated_at?: string;
 };
 
-// Shape the UI works with (is_active normalized to boolean)
+// Shape the UI works with (is_active normalized to boolean, settings parsed)
 type UIConfigItem = {
   id: number;
   organization_id: number;
@@ -36,6 +47,7 @@ type UIConfigItem = {
   percentage: number | null;
   fixed_amount: number | null;
   value_text: string | null;
+  settings: OfficeHoursSettings | Record<string, unknown> | null;
   is_active: boolean;
   created_at?: string;
   updated_at?: string;
@@ -59,6 +71,7 @@ interface CreateConfigPayload {
   percentage?: number | null;
   fixed_amount?: number | null;
   value_text?: string | null;
+  settings?: OfficeHoursSettings | Record<string, unknown> | null;
   is_active?: number;
 }
 
@@ -68,6 +81,7 @@ interface UpdateConfigPayload {
   percentage?: number | null;
   fixed_amount?: number | null;
   value_text?: string | null;
+  settings?: OfficeHoursSettings | Record<string, unknown> | null;
   is_active?: number;
 }
 
@@ -168,7 +182,22 @@ class OrganizationConfigAPI {
     }, {} as ConfigsByType);
 
     for (const raw of data) {
-      const uiItem: UIConfigItem = { ...raw, is_active: Boolean(raw.is_active) };
+      let parsedSettings: OfficeHoursSettings | Record<string, unknown> | null = null;
+      if (raw.settings) {
+        try {
+          parsedSettings = JSON.parse(raw.settings);
+        } catch {
+          // Malformed settings JSON shouldn't crash the whole config list;
+          // surface it as null and let the UI fall back to defaults.
+          parsedSettings = null;
+        }
+      }
+
+      const uiItem: UIConfigItem = {
+        ...raw,
+        settings: parsedSettings,
+        is_active: Boolean(raw.is_active),
+      };
       if (!grouped[uiItem.config_type]) {
         grouped[uiItem.config_type] = [];
       }
@@ -260,4 +289,5 @@ export type {
   ApiResponse,
   CreateConfigPayload,
   UpdateConfigPayload,
+  OfficeHoursSettings,
 };
