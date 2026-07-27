@@ -19,6 +19,106 @@
 CREATE DATABASE IF NOT EXISTS `payhub` /*!40100 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci */ /*!80016 DEFAULT ENCRYPTION='N' */;
 USE `payhub`;
 
+-- Dumping structure for table payhub.countries
+CREATE TABLE IF NOT EXISTS `countries` (
+  `id`              INT           NOT NULL AUTO_INCREMENT,
+  `name`            VARCHAR(100)  NOT NULL,
+  `iso2`            CHAR(2)       NOT NULL COMMENT 'ISO 3166-1 alpha-2, e.g. KE',
+  `iso3`            CHAR(3)       NOT NULL COMMENT 'ISO 3166-1 alpha-3, e.g. KEN',
+  `phone_code`      VARCHAR(6)    DEFAULT NULL COMMENT 'Calling code, e.g. +254',
+  `currency_code`   CHAR(3)       DEFAULT NULL COMMENT 'ISO 4217, e.g. KES',
+  `currency_symbol` VARCHAR(5)    DEFAULT NULL,
+  `timezone`        VARCHAR(50)   DEFAULT NULL COMMENT 'Default IANA timezone, e.g. Africa/Nairobi',
+  `is_active`       TINYINT(1)    NOT NULL DEFAULT 1,
+  `created_at`      TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`      TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_country_iso2` (`iso2`),
+  UNIQUE KEY `unique_country_iso3` (`iso3`)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+-- Dumping structure for table payhub.counties
+CREATE TABLE IF NOT EXISTS `counties` (
+  `id`          INT           NOT NULL AUTO_INCREMENT,
+  `country_id`  INT           NOT NULL,
+  `name`        VARCHAR(100)  NOT NULL,
+  `code`        VARCHAR(10)   DEFAULT NULL COMMENT 'Official county/region code, e.g. 001',
+  `is_active`   TINYINT(1)    NOT NULL DEFAULT 1,
+  `created_at`  TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_county_per_country` (`country_id`, `name`),
+  KEY `idx_counties_country_id` (`country_id`),
+
+  CONSTRAINT `counties_country_fk`
+    FOREIGN KEY (`country_id`) REFERENCES `countries` (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+-- Dumping structure for table payhub.organizations
+CREATE TABLE IF NOT EXISTS `organizations` (
+  `id`                        INT           NOT NULL AUTO_INCREMENT,
+  `name`                      VARCHAR(100)  NOT NULL,
+  `payroll_number_prefix`     VARCHAR(10)   DEFAULT 'EMP',
+  `kra_pin`                   VARCHAR(11)   DEFAULT NULL,
+  `nssf_number`               VARCHAR(15)   DEFAULT NULL,
+  `nhif_number`               VARCHAR(15)   DEFAULT NULL,
+  `legal_type`                ENUM('LTD','PLC','Sole_Proprietor','Partnership','NGO','Government','School','Other') DEFAULT NULL,
+  `registration_number`       VARCHAR(50)   DEFAULT NULL,
+  `physical_address`          VARCHAR(255)  DEFAULT NULL,
+  `postal_address`            VARCHAR(255)  DEFAULT NULL,
+  `postal_code_id`            INT           DEFAULT NULL,
+  `county_id`                 INT           DEFAULT NULL,
+  `country_id`                INT           DEFAULT NULL,
+  `primary_phone`             VARCHAR(20)   DEFAULT NULL,
+  `secondary_phone`           VARCHAR(20)   DEFAULT NULL,
+  `official_email`            VARCHAR(255)  DEFAULT NULL,
+  `location`                  VARCHAR(255)  DEFAULT NULL,
+  `logo_url`                  VARCHAR(255)  DEFAULT NULL,
+  `currency`                  VARCHAR(10)   DEFAULT 'KES',
+  `payroll_schedule`          ENUM('Monthly','Bi-Monthly','Weekly') DEFAULT 'Monthly',
+  `payroll_lock_date`         DATE          DEFAULT NULL,
+  `default_payday`            INT           DEFAULT NULL,
+  `bank_id`                   INT           DEFAULT NULL,
+  `bank_account_name`         VARCHAR(255)  DEFAULT NULL,
+  `bank_account_number`       VARCHAR(255)  DEFAULT NULL,
+  `bank_branch`                VARCHAR(255)  DEFAULT NULL,
+  `swift_code`                VARCHAR(11)   DEFAULT NULL,
+  `nssf_branch_code`          VARCHAR(50)   DEFAULT NULL,
+  `nhif_branch_code`          VARCHAR(50)   DEFAULT NULL,
+  `primary_administrator_id`  INT           DEFAULT NULL,
+  `is_active`                 TINYINT(1)    DEFAULT 1,
+  `setup_completed`           TINYINT(1)    NOT NULL DEFAULT 0,
+  `setup_completed_at`        TIMESTAMP     NULL DEFAULT NULL,
+  `created_at`                TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`                TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `domain`                    VARCHAR(100)  DEFAULT NULL,
+
+  PRIMARY KEY (`id`),
+  KEY `idx_org_kra_pin` (`kra_pin`),
+  KEY `idx_org_county_id` (`county_id`),
+  KEY `idx_org_country_id` (`country_id`),
+  KEY `idx_org_primary_administrator_id` (`primary_administrator_id`),
+
+  CONSTRAINT `org_county_fk`
+    FOREIGN KEY (`county_id`) REFERENCES `counties` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `org_country_fk`
+    FOREIGN KEY (`country_id`) REFERENCES `countries` (`id`) ON DELETE SET NULL
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Backfill organization 221 — Kenya, county_id 47.
+UPDATE `organizations`
+SET `county_id` = 47,
+    `country_id` = 1
+WHERE `id` = 221;
+
+
 -- Dumping structure for table payhub.employees
 CREATE TABLE IF NOT EXISTS `employees` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -1162,40 +1262,6 @@ CREATE TABLE IF NOT EXISTS `attendance_adjustments` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 
-CREATE TABLE IF NOT EXISTS `public_holidays` (
-  `id`                INT NOT NULL AUTO_INCREMENT,
-  `organization_id`    INT NOT NULL,
-  `holiday_date`      DATE NOT NULL,
-  `name`              VARCHAR(150) NOT NULL,
-  `is_recurring`      TINYINT(1) NOT NULL DEFAULT 0,
-  `applies_to_all`    TINYINT(1) NOT NULL DEFAULT 1,
-  `notes`             TEXT DEFAULT NULL,
-  `status`            ENUM('pending','approved','rejected','deleted_pending') NOT NULL DEFAULT 'approved',
-  `created_by`        INT DEFAULT NULL,
-  `approved_by`       INT DEFAULT NULL,
-  `rejected_by`       INT DEFAULT NULL,
-  `approved_at`       TIMESTAMP NULL,
-  `rejected_at`       TIMESTAMP NULL,
-  `rejection_reason`  TEXT NULL,
-  `is_active`         TINYINT(1) DEFAULT '1',
-  `created_at`        TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at`        TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_public_holiday` (`organization_id`, `holiday_date`, `name`),
-  KEY `idx_public_holidays_org_date` (`organization_id`, `holiday_date`),
-
-  CONSTRAINT `public_holidays_ibfk_1`
-    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `public_holidays_created_by_fk`
-    FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `public_holidays_approved_by_fk`
-    FOREIGN KEY (`approved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `public_holidays_rejected_by_fk`
-    FOREIGN KEY (`rejected_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-
 CREATE TABLE IF NOT EXISTS `overtime_approvals` (
   `id`                INT NOT NULL AUTO_INCREMENT,
   `organization_id`    INT NOT NULL,
@@ -1243,6 +1309,113 @@ CREATE TABLE IF NOT EXISTS `overtime_approvals` (
     FOREIGN KEY (`resolved_payrun_id`) REFERENCES `payruns` (`id`) ON DELETE SET NULL,
   CONSTRAINT `overtime_resolved_by_fk`
     FOREIGN KEY (`resolved_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- -----------------------------------------------------------------------------
+-- attendance_deductions
+--   One row per employee_attendance_days record where lateness/early-leave
+--   crosses the grace period. Written in real time by
+--   AttendanceService::recomputeDay(). Cash-type rows (per_minute/daily_rate)
+--   stay 'pending' until a payrun pulls them in; leave_balance rows are
+--   applied immediately since they touch leave_balances, not payroll cash.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `attendance_deductions` (
+  `id`                  INT NOT NULL AUTO_INCREMENT,
+  `organization_id`     INT NOT NULL,
+  `employee_id`         INT NOT NULL,
+  `attendance_day_id`   INT NOT NULL,
+  `deduction_date`      DATE NOT NULL COMMENT 'Copy of attendance_date, avoids a join for payrun-period lookups',
+
+  `late_minutes`        INT NOT NULL DEFAULT 0,
+  `early_leave_minutes` INT NOT NULL DEFAULT 0,
+  `billable_minutes`    INT NOT NULL DEFAULT 0 COMMENT 'Minutes actually attracting a deduction, after grace period',
+
+  `policy_applied`      ENUM('none','per_minute','daily_rate','leave_balance') NOT NULL DEFAULT 'none'
+                         COMMENT 'Snapshot of the org policy active at calculation time',
+
+  `cash_amount`         DECIMAL(15,2) NOT NULL DEFAULT 0.00 COMMENT 'Set only when policy_applied = per_minute or daily_rate',
+
+  `leave_type_id`       INT DEFAULT NULL COMMENT 'Set only when policy_applied = leave_balance',
+  `leave_days_deducted` DECIMAL(5,2) NOT NULL DEFAULT 0.00 COMMENT 'Set only when policy_applied = leave_balance',
+
+  `rate_snapshot`       JSON DEFAULT NULL
+                        COMMENT 'daily_rate, hourly_rate, minute_rate, grace_minutes, working_days_in_month used at calc time — kept for audit even if salary/policy changes later',
+
+  `status`              ENUM('pending','applied','waived','reversed') NOT NULL DEFAULT 'pending'
+                        COMMENT 'pending = cash computed, not yet pulled into a payrun. applied = leave already debited OR cash pulled into payrun_deductions. waived = HR excused it. reversed = a later attendance correction invalidated an already-applied row, needs manual reconciliation',
+
+  `payrun_detail_id`    INT DEFAULT NULL COMMENT 'Set once a per_minute/daily_rate amount is pulled into a specific payrun',
+
+  `waived_by`           INT DEFAULT NULL,
+  `waived_reason`       TEXT DEFAULT NULL,
+  `created_by`          INT DEFAULT NULL,
+  `is_active`           TINYINT(1) DEFAULT '1',
+  `created_at`          TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`          TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_attendance_deduction_per_day` (`organization_id`, `attendance_day_id`),
+  KEY `idx_attendance_deductions_emp_date` (`employee_id`, `deduction_date`),
+  KEY `idx_attendance_deductions_status`   (`organization_id`, `status`),
+  KEY `idx_attendance_deductions_payrun`   (`payrun_detail_id`),
+
+  CONSTRAINT `attendance_deductions_org_fk`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `attendance_deductions_emp_fk`
+    FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `attendance_deductions_day_fk`
+    FOREIGN KEY (`attendance_day_id`) REFERENCES `employee_attendance_days` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `attendance_deductions_leave_type_fk`
+    FOREIGN KEY (`leave_type_id`) REFERENCES `leave_types` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `attendance_deductions_payrun_detail_fk`
+    FOREIGN KEY (`payrun_detail_id`) REFERENCES `payrun_details` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `attendance_deductions_waived_by_fk`
+    FOREIGN KEY (`waived_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `attendance_deductions_created_by_fk`
+    FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE public_holidays_master (
+    id              BIGINT PRIMARY KEY AUTO_INCREMENT,
+    country_code    CHAR(2) NOT NULL,
+    holiday_date    DATE NOT NULL,
+    name            VARCHAR(150) NOT NULL,
+    type            ENUM('national','regional','religious','bank','observance') NULL,
+    is_active       TINYINT(1) NOT NULL DEFAULT 1,
+    source          ENUM('api_mansa','api_abstract','manual') NOT NULL DEFAULT 'manual',
+    source_id       VARCHAR(100) NULL,
+    created_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at      TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_country_date_name (country_code, holiday_date, name),
+    INDEX idx_country_year (country_code, holiday_date)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE org_public_holidays (
+    id                BIGINT PRIMARY KEY AUTO_INCREMENT,
+    organization_id   INT NOT NULL,
+    country_code      CHAR(2) NOT NULL,          -- for which country’s master list
+    master_holiday_id BIGINT NULL,               -- link to public_holidays_master.id (nullable for custom org holidays)
+    holiday_date      DATE NOT NULL,
+    name              VARCHAR(150) NOT NULL,
+    source            ENUM('override','custom') NOT NULL,
+    is_paid           TINYINT(1) NOT NULL DEFAULT 1,
+    is_active         TINYINT(1) NOT NULL DEFAULT 1,
+    notes             TEXT NULL,
+    created_by        INT NULL,
+    created_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at        TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    UNIQUE KEY uq_org_date (organization_id, holiday_date, name),
+    UNIQUE KEY uq_org_master_override (organization_id, master_holiday_id),
+    INDEX idx_org_date (organization_id, holiday_date),
+
+    CONSTRAINT fk_org_public_holidays_org
+        FOREIGN KEY (organization_id) REFERENCES organizations(id) ON DELETE CASCADE,
+    CONSTRAINT fk_org_public_holidays_master
+        FOREIGN KEY (master_holiday_id) REFERENCES public_holidays_master(id) ON DELETE SET NULL,
+    CONSTRAINT fk_org_public_holidays_created_by
+        FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
  
 -- Optional: auto-purge expired rows every hour (requires MySQL Event Scheduler)
@@ -1357,4 +1530,99 @@ VALUES
 -- Send a notification to the employee when their request is approved or rejected: true | false.
 (221, 'leave', 'Notify Employee on Approval/Rejection',
   NULL, NULL, 'true', NULL,
+  'approved', 1);\-- ============================================================
+-- Lateness / Early-Leave Deduction Policy
+-- organization_id : 221
+-- config_type     : attendance
+-- ============================================================
+
+-- The single source of truth for which model is active.
+-- value_text is one of: 'no_deduction' | 'per_minute' | 'daily_rate' | 'leave_balance'
+INSERT INTO `organization_configs`
+  (`organization_id`, `config_type`, `name`, `percentage`, `fixed_amount`, `value_text`, `settings`, `status`, `is_active`)
+VALUES
+(221, 'attendance', 'Lateness Deduction Policy',
+  NULL, NULL, 'no_deduction', NULL,
+  'approved', 1),
+
+-- Leave type to debit when policy = leave_balance. Stored as the leave_types.code
+-- (not the numeric id) so it survives leave_types being re-seeded per org.
+(221, 'attendance', 'Lateness Deduction Leave Type',
+  NULL, NULL, 'ANNUAL', NULL,
+  'approved', 1),
+
+-- Minute-to-leave-day conversion tiers for the leave_balance policy.
+-- Read top-down, take the highest threshold the billable minutes clear.
+(221, 'attendance', 'Lateness Leave Conversion Tiers',
+  NULL, NULL, NULL,
+  JSON_ARRAY(
+    JSON_OBJECT('min_minutes', 60,  'leave_days', 0.5),
+    JSON_OBJECT('min_minutes', 120, 'leave_days', 1.0)
+  ),
+  'approved', 1),
+
+-- Bucket config row so cash-type deductions (per_minute / daily_rate) have
+-- something to attach to in payrun_deductions (its config_id FK is NOT NULL).
+(221, 'deduction', 'Lateness & Early-Leave Deduction',
+  NULL, NULL, NULL, NULL,
   'approved', 1);
+
+-- ============================================================
+-- Country + Counties seed data: Kenya
+-- ============================================================
+
+INSERT INTO `countries`
+  (`name`, `iso2`, `iso3`, `phone_code`, `currency_code`, `currency_symbol`, `timezone`, `is_active`)
+VALUES
+  ('Kenya', 'KE', 'KEN', '+254', 'KES', 'KSh', 'Africa/Nairobi', 1);
+
+INSERT INTO `counties`
+  (`country_id`, `name`, `code`, `is_active`)
+VALUES
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Mombasa', '001', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kwale', '002', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kilifi', '003', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Tana River', '004', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Lamu', '005', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Taita-Taveta', '006', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Garissa', '007', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Wajir', '008', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Mandera', '009', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Marsabit', '010', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Isiolo', '011', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Meru', '012', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Tharaka-Nithi', '013', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Embu', '014', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kitui', '015', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Machakos', '016', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Makueni', '017', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Nyandarua', '018', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Nyeri', '019', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kirinyaga', '020', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Murang''a', '021', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kiambu', '022', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Turkana', '023', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'West Pokot', '024', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Samburu', '025', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Trans Nzoia', '026', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Uasin Gishu', '027', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Elgeyo-Marakwet', '028', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Nandi', '029', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Baringo', '030', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Laikipia', '031', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Nakuru', '032', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Narok', '033', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kajiado', '034', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kericho', '035', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Bomet', '036', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kakamega', '037', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Vihiga', '038', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Bungoma', '039', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Busia', '040', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Siaya', '041', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kisumu', '042', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Homa Bay', '043', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Migori', '044', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kisii', '045', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Nyamira', '046', 1),
+  ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Nairobi City', '047', 1);
