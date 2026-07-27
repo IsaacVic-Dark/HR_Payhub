@@ -14,6 +14,17 @@ class OrganizationConfigController
     private const OVERTIME_RATE_CONFIG_NAME = 'Overtime Rate';
 
     /**
+     * config_type/name that identifies the single, consolidated Office Hours
+     * setting inside the generic organization_configs table. Like Overtime
+     * Rate, this is an operational setting (not a policy change) so it's
+     * applied immediately rather than going through the pending-approval
+     * workflow. Stored entirely in the `settings` JSON column, e.g.
+     * {"start_time":"08:00:00","end_time":"17:00:00","grace_minutes":15,"workdays":[1,2,3,4,5]}
+     */
+    private const OFFICE_HOURS_CONFIG_TYPE = 'attendance';
+    private const OFFICE_HOURS_CONFIG_NAME = 'Office Hours';
+
+    /**
      * Get all organization configurations
      */
     public function index($org_id)
@@ -59,7 +70,7 @@ class OrganizationConfigController
 
             // Apply filters
             // AFTER
-            $validConfigTypes = ['tax', 'deduction', 'loan', 'benefit', 'per_diem', 'advance', 'refund', 'leave'];
+            $validConfigTypes = ['tax', 'deduction', 'loan', 'benefit', 'per_diem', 'advance', 'refund', 'leave', 'attendance'];
 
             if ($configType !== null && $configType !== '') {
                 if (!in_array($configType, $validConfigTypes)) {
@@ -105,6 +116,7 @@ class OrganizationConfigController
                     SUM(CASE WHEN config_type = 'advance' THEN 1 ELSE 0 END) as advance_configs,
                     SUM(CASE WHEN config_type = 'refund' THEN 1 ELSE 0 END) as refund_configs,
                     SUM(CASE WHEN config_type = 'leave'  THEN 1 ELSE 0 END) as leave_configs,
+                    SUM(CASE WHEN config_type = 'attendance' THEN 1 ELSE 0 END) as attendance_configs,
                     SUM(CASE WHEN is_active = 1 THEN 1 ELSE 0 END) as active_configs
                 FROM organization_configs
                 $whereClause
@@ -129,7 +141,8 @@ class OrganizationConfigController
                             'per_diem'  => (int) ($stats->per_diem_configs ?? 0),
                             'advance'   => (int) ($stats->advance_configs ?? 0),
                             'refund'    => (int) ($stats->refund_configs ?? 0),
-                            'leave'     => (int) ($stats->leave_configs ?? 0)
+                            'leave'     => (int) ($stats->leave_configs ?? 0),
+                            'attendance' => (int) ($stats->attendance_configs ?? 0)
                         ],
                         'active_configs' => (int) ($stats->active_configs ?? 0),
                         'inactive_configs' => (int) ($stats->total_configs ?? 0) - (int) ($stats->active_configs ?? 0)
@@ -289,6 +302,9 @@ class OrganizationConfigController
                 'percentage' => $data['percentage'] ?? null,
                 'fixed_amount' => $data['fixed_amount'] ?? null,
                 'value_text' => $data['value_text'] ?? null,
+                'settings' => isset($data['settings']) && is_array($data['settings'])
+                    ? json_encode($data['settings'])
+                    : null,
                 'is_active' => isset($data['is_active']) ? (int)$data['is_active'] : 1,
                 'status' => 'pending' // New field for approval workflow
             ];
@@ -312,6 +328,25 @@ class OrganizationConfigController
                         success: false,
                         data: null,
                         message: $overtimeError,
+                        code: 400
+                    );
+                }
+
+                $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
+                $insertData['status'] = 'approved';
+                $insertData['approved_by'] = $currentUser['id'] ?? null;
+                $insertData['approved_at'] = date('Y-m-d H:i:s');
+            }
+
+            // Office Hours is an operational setting, not a policy that
+            // needs approval - apply it immediately.
+            if ($this->isOfficeHoursConfig($insertData['config_type'], $insertData['name'])) {
+                $officeHoursError = $this->validateOfficeHoursPayload($data['settings'] ?? null);
+                if ($officeHoursError) {
+                    return responseJson(
+                        success: false,
+                        data: null,
+                        message: $officeHoursError,
                         code: 400
                     );
                 }
@@ -376,7 +411,7 @@ class OrganizationConfigController
             $updateData = [];
 
             // Build update data
-            $allowedFields = ['config_type', 'name', 'percentage', 'fixed_amount', 'value_text', 'is_active'];
+            $allowedFields = ['config_type', 'name', 'percentage', 'fixed_amount', 'value_text', 'settings', 'is_active'];
             foreach ($allowedFields as $field) {
                 if (isset($data[$field])) {
                     $updateData[$field] = $data[$field];
@@ -440,6 +475,10 @@ class OrganizationConfigController
             // validate it as a flat hourly amount and apply the change immediately.
             $isOvertimeRate = $this->isOvertimeRateConfig($newType, $newName);
 
+            // Work Start Time / Work End Time / Grace Period (Office Hours) are also
+            // operational settings, not policies that need approval - apply immediately.
+            $isOfficeHours = $this->isOfficeHoursConfig($newType, $newName);
+
             if ($isOvertimeRate) {
                 $overtimeError = $this->validateOvertimeRatePayload($newPercentage, $newFixedAmount);
                 if ($overtimeError) {
@@ -455,9 +494,49 @@ class OrganizationConfigController
                 $updateData['status'] = 'approved';
                 $updateData['approved_by'] = $currentUser['id'] ?? null;
                 $updateData['approved_at'] = date('Y-m-d H:i:s');
+            } elseif ($isOfficeHours) {
+                // Merge incoming settings on top of whatever is already stored so a
+                // partial payload (e.g. just grace_minutes) never wipes out keys
+                // like 'workdays' that this endpoint isn't sending.
+                $existingSettings = [];
+                if (!empty($config->settings)) {
+                    $decoded = json_decode($config->settings, true);
+                    if (is_array($decoded)) {
+                        $existingSettings = $decoded;
+                    }
+                }
+
+                $incomingSettings = array_key_exists('settings', $updateData) && is_array($updateData['settings'])
+                    ? $updateData['settings']
+                    : [];
+
+                $mergedSettings = array_merge($existingSettings, $incomingSettings);
+
+                $officeHoursError = $this->validateOfficeHoursPayload($mergedSettings);
+                if ($officeHoursError) {
+                    return responseJson(
+                        success: false,
+                        data: null,
+                        message: $officeHoursError,
+                        code: 400
+                    );
+                }
+
+                $updateData['settings'] = json_encode($mergedSettings);
+
+                $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
+                $updateData['status'] = 'approved';
+                $updateData['approved_by'] = $currentUser['id'] ?? null;
+                $updateData['approved_at'] = date('Y-m-d H:i:s');
             } else {
                 // Add status for approval workflow
                 $updateData['status'] = 'pending';
+
+                // Non-Office-Hours updates: if a caller somehow sends 'settings',
+                // still make sure it's stored as a JSON string, not a raw array.
+                if (isset($updateData['settings']) && is_array($updateData['settings'])) {
+                    $updateData['settings'] = json_encode($updateData['settings']);
+                }
             }
 
             DB::table('organization_configs')->update($updateData, 'id', $id);
@@ -470,7 +549,9 @@ class OrganizationConfigController
                 data: null,
                 message: $isOvertimeRate
                     ? "Overtime rate updated successfully"
-                    : "Configuration updated successfully (pending approval)"
+                    : ($isOfficeHours
+                        ? "Office hours updated successfully"
+                        : "Configuration updated successfully (pending approval)")
             );
         } catch (\Exception $e) {
             return responseJson(
@@ -798,6 +879,57 @@ class OrganizationConfigController
     {
         return strtolower(trim((string)$configType)) === self::OVERTIME_RATE_CONFIG_TYPE
             && strtolower(trim((string)$name)) === strtolower(self::OVERTIME_RATE_CONFIG_NAME);
+    }
+
+    /**
+     * Determine whether a given config_type/name pair refers to the
+     * org-wide Office Hours setting inside the generic organization_configs
+     * table.
+     */
+    private function isOfficeHoursConfig($configType, $name)
+    {
+        return strtolower(trim((string)$configType)) === self::OFFICE_HOURS_CONFIG_TYPE
+            && strtolower(trim((string)$name)) === strtolower(self::OFFICE_HOURS_CONFIG_NAME);
+    }
+
+    /**
+     * Validate the `settings` payload for an Office Hours create/update.
+     * Expects an associative array (already json_decode'd) with at least
+     * start_time, end_time, and grace_minutes. workdays is optional.
+     *
+     * Returns an error message string on failure, or null if valid.
+     */
+    private function validateOfficeHoursPayload($settings)
+    {
+        if (!is_array($settings) || empty($settings)) {
+            return "'settings' is required for 'Office Hours' and must be an object with start_time, end_time, and grace_minutes";
+        }
+
+        foreach (['start_time', 'end_time'] as $timeField) {
+            if (!isset($settings[$timeField]) || trim((string)$settings[$timeField]) === '') {
+                return "'settings.$timeField' is required";
+            }
+            if (!preg_match('/^([01]\d|2[0-3]):([0-5]\d)(:([0-5]\d))?$/', trim((string)$settings[$timeField]))) {
+                return "'settings.$timeField' must be a valid time in HH:MM or HH:MM:SS format";
+            }
+        }
+
+        if (!isset($settings['grace_minutes']) || !is_numeric($settings['grace_minutes']) || (int)$settings['grace_minutes'] < 0) {
+            return "'settings.grace_minutes' must be a non-negative number";
+        }
+
+        if (isset($settings['workdays'])) {
+            if (!is_array($settings['workdays'])) {
+                return "'settings.workdays' must be an array of ISO weekday numbers (1=Monday .. 7=Sunday)";
+            }
+            foreach ($settings['workdays'] as $day) {
+                if (!is_numeric($day) || (int)$day < 1 || (int)$day > 7) {
+                    return "'settings.workdays' must only contain numbers 1-7";
+                }
+            }
+        }
+
+        return null;
     }
 
     /**
