@@ -3,173 +3,312 @@
 namespace App\Controllers;
 
 use App\Services\DB;
-use App\Middleware\AuthMiddleware;
+use App\Services\HolidayImportService;
+use App\Services\HolidayLookupService;
 
+/**
+ * Public holidays.
+ *
+ * Replaces the old org-only public_holidays CRUD. New model:
+ *   - public_holidays_master : global, per-country calendar (imported from Mansa)
+ *   - org_public_holidays    : ONLY override + custom rows (never inherited rows)
+ *
+ * See HolidayLookupService for the merge logic and HolidayImportService for
+ * the Mansa sync logic.
+ */
 class PublicHolidayController
 {
-    /**
-     * GET /api/v1/organizations/{org_id}/public-holidays
-     */
-    public function index($orgId)
+    private HolidayImportService $importService;
+    private HolidayLookupService $lookupService;
+
+    public function __construct()
+    {
+        $this->importService = new HolidayImportService();
+        $this->lookupService = new HolidayLookupService();
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/v1/holidays/import
+    // Body: { country_code?: "KE", year?: 2026 }  (country_code defaults to KE)
+    // Admin only.
+    // TODO: replace this manual trigger with a scheduled cron job.
+    // -------------------------------------------------------------------------
+    public function import(): mixed
     {
         try {
-            $year = $_GET['year'] ?? null;
+            $data = json_decode(file_get_contents('php://input'), true) ?? [];
 
-            $query  = "SELECT * FROM public_holidays WHERE organization_id = :org_id AND is_active = 1";
-            $params = [':org_id' => $orgId];
+            $countryCode = strtoupper(trim($data['country_code'] ?? 'KE'));
+            $year        = (int) ($data['year'] ?? date('Y'));
 
-            if (!empty($year)) {
-                $query .= " AND (YEAR(holiday_date) = :year OR is_recurring = 1)";
-                $params[':year'] = $year;
+            if (!preg_match('/^[A-Z]{2}$/', $countryCode)) {
+                return responseJson(success: false, data: null, message: "country_code must be a 2-letter ISO code", code: 400);
             }
 
-            $query .= " ORDER BY holiday_date ASC";
+            if ($year < 2000 || $year > 2100) {
+                return responseJson(success: false, data: null, message: "year must be between 2000 and 2100", code: 400);
+            }
 
-            $holidays = DB::raw($query, $params);
+            $country = DB::raw(
+                "SELECT id FROM countries WHERE iso2 = :cc AND is_active = 1 LIMIT 1",
+                [':cc' => $countryCode]
+            );
 
-            return responseJson(success: true, data: $holidays, message: "Fetched " . count($holidays) . " holiday(s)", code: 200);
+            if (empty($country)) {
+                return responseJson(success: false, data: null, message: "Unknown or inactive country_code: {$countryCode}", code: 404);
+            }
+
+            $result = $this->importService->import($countryCode, $year);
+
+            if (!$result['success']) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: $result['message'],
+                    code: 502,
+                    errors: isset($result['debug']) ? ['debug' => $result['debug']] : null // TEMP DEBUG ONLY
+                );
+            }
+
+            return responseJson(
+                success: true,
+                data: $result['data'],
+                message: "Public holidays imported successfully.",
+                metadata: ['warnings' => $result['warnings']]
+            );
         } catch (\Exception $e) {
-            error_log("Public holiday index error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to fetch holidays: " . $e->getMessage(), code: 500);
+            error_log("Holiday import error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: "Failed to import public holidays: " . $e->getMessage(), code: 500);
         }
     }
 
-    /**
-     * POST /api/v1/organizations/{org_id}/public-holidays
-     * HR/admin create holidays directly as approved (matches organization_configs
-     * convention of created-by-privileged-role rows defaulting to approved).
-     */
-    public function store($orgId)
+    // -------------------------------------------------------------------------
+    // GET /api/v1/organizations/{org_id}/holidays?year=
+    // Merged view: master (inherited) + org overrides + org customs.
+    // -------------------------------------------------------------------------
+    public function index(int $orgId): mixed
     {
         try {
-            $user = AuthMiddleware::getCurrentUser();
-
-            $data = validate([
-                'holiday_date'   => 'required,string',
-                'name'           => 'required,string',
-                'is_recurring'   => 'boolean',
-                'applies_to_all' => 'boolean',
-                'notes'          => 'string',
-            ]);
-
-            $holidayDate = date('Y-m-d', strtotime($data['holiday_date']));
-
-            $existing = DB::raw(
-                "SELECT id FROM public_holidays
-                 WHERE organization_id = :org_id AND holiday_date = :date AND name = :name LIMIT 1",
-                [':org_id' => $orgId, ':date' => $holidayDate, ':name' => $data['name']]
-            );
-
-            if (!empty($existing)) {
-                return responseJson(success: false, message: "This holiday already exists for that date", code: 400);
+            $orgCheck = DB::table('organizations')->where(['id' => $orgId])->get();
+            if (empty($orgCheck)) {
+                return responseJson(success: false, data: null, message: "Organization not found", code: 404);
             }
 
-            DB::raw(
-                "INSERT INTO public_holidays
-                    (organization_id, holiday_date, name, is_recurring, applies_to_all, notes, status, created_by, approved_by, approved_at)
-                 VALUES
-                    (:org_id, :date, :name, :is_recurring, :applies_to_all, :notes, 'approved', :created_by, :approved_by, NOW())",
-                [
-                    ':org_id'         => $orgId,
-                    ':date'           => $holidayDate,
-                    ':name'           => $data['name'],
-                    ':is_recurring'   => !empty($data['is_recurring']) ? 1 : 0,
-                    ':applies_to_all' => isset($data['applies_to_all']) ? (int) $data['applies_to_all'] : 1,
-                    ':notes'          => $data['notes'] ?? null,
-                    ':created_by'     => $user['id'],
-                    ':approved_by'    => $user['id'],
-                ]
+            $year = (int) ($_GET['year'] ?? date('Y'));
+
+            $result = $this->lookupService->getOrgHolidays($orgId, $year);
+
+            return responseJson(
+                success: true,
+                data: $result['holidays'],
+                message: "Holidays fetched successfully",
+                metadata: ['country_code' => $result['country_code'], 'year' => $year]
             );
-
-            $created = DB::raw("SELECT * FROM public_holidays WHERE id = LAST_INSERT_ID()");
-
-            return responseJson(success: true, data: $created[0] ?? null, message: "Public holiday created", code: 201);
         } catch (\Exception $e) {
-            error_log("Public holiday store error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to create holiday: " . $e->getMessage(), code: 500);
+            error_log("Holiday index error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: $e->getMessage(), code: 400);
         }
     }
 
-    /**
-     * PUT /api/v1/organizations/{org_id}/public-holidays/{id}
-     */
-    public function update($orgId, $id)
+    // -------------------------------------------------------------------------
+    // GET /api/v1/organizations/{org_id}/holidays/check?date=YYYY-MM-DD
+    // -------------------------------------------------------------------------
+    public function check(int $orgId): mixed
     {
         try {
-            $existing = DB::raw(
-                "SELECT * FROM public_holidays WHERE id = :id AND organization_id = :org_id LIMIT 1",
-                [':id' => $id, ':org_id' => $orgId]
-            );
-
-            if (empty($existing)) {
-                return responseJson(success: false, message: "Holiday not found", code: 404);
+            $date = $_GET['date'] ?? null;
+            if (!$date || !\DateTime::createFromFormat('Y-m-d', $date)) {
+                return responseJson(success: false, data: null, message: "A valid 'date' query param (YYYY-MM-DD) is required", code: 400);
             }
 
-            $data = validate([
-                'holiday_date'   => 'string',
-                'name'           => 'string',
-                'is_recurring'   => 'boolean',
-                'applies_to_all' => 'boolean',
-                'notes'          => 'string',
-            ]);
+            $orgCheck = DB::table('organizations')->where(['id' => $orgId])->get();
+            if (empty($orgCheck)) {
+                return responseJson(success: false, data: null, message: "Organization not found", code: 404);
+            }
 
-            $fields = [];
-            $params = [':id' => $id];
+            $result = $this->lookupService->isHoliday($orgId, $date);
 
-            $map = [
-                'holiday_date'   => 'holiday_date',
-                'name'           => 'name',
-                'is_recurring'   => 'is_recurring',
-                'applies_to_all' => 'applies_to_all',
-                'notes'          => 'notes',
+            return responseJson(success: true, data: $result, message: "Holiday check complete");
+        } catch (\Exception $e) {
+            error_log("Holiday check error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: $e->getMessage(), code: 400);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/v1/organizations/{org_id}/holidays/override
+    // Body: { master_holiday_id, is_paid?, is_active?, holiday_date?, name?, notes? }
+    // Upserted on (organization_id, master_holiday_id) — one override per
+    // master holiday per org.
+    // -------------------------------------------------------------------------
+    public function storeOverride(int $orgId): mixed
+    {
+        try {
+            $data = json_decode(file_get_contents('php://input'), true);
+
+            if (empty($data['master_holiday_id'])) {
+                return responseJson(success: false, data: null, message: "master_holiday_id is required", code: 400);
+            }
+
+            $master = DB::table('public_holidays_master')
+                ->where(['id' => $data['master_holiday_id']])
+                ->get();
+
+            if (empty($master)) {
+                return responseJson(success: false, data: null, message: "Master holiday not found", code: 404);
+            }
+            $master = $master[0];
+
+            $countryCode = $this->lookupService->resolveOrgCountryCode($orgId);
+            if (!$countryCode) {
+                return responseJson(success: false, data: null, message: "Organization has no active country assigned", code: 422);
+            }
+
+            $params = [
+                ':org_id'     => $orgId,
+                ':cc'         => $countryCode,
+                ':master_id'  => $master->id,
+                ':date'       => $data['holiday_date'] ?? $master->holiday_date,
+                ':name'       => $data['name'] ?? $master->name,
+                ':is_paid'    => isset($data['is_paid']) ? (int) (bool) $data['is_paid'] : 1,
+                ':is_active'  => isset($data['is_active']) ? (int) (bool) $data['is_active'] : 1,
+                ':notes'      => $data['notes'] ?? null,
+                ':created_by' => $_SERVER['AUTH_USER_ID'] ?? null, // set upstream by AuthMiddleware
             ];
 
-            foreach ($map as $inputKey => $column) {
-                if (isset($data[$inputKey])) {
-                    $value = $inputKey === 'holiday_date' ? date('Y-m-d', strtotime($data[$inputKey])) : $data[$inputKey];
-                    $fields[] = "{$column} = :{$column}";
-                    $params[":{$column}"] = $value;
+            DB::raw(
+                "INSERT INTO org_public_holidays
+                    (organization_id, country_code, master_holiday_id, holiday_date, name, source, is_paid, is_active, notes, created_by, created_at, updated_at)
+                 VALUES
+                    (:org_id, :cc, :master_id, :date, :name, 'override', :is_paid, :is_active, :notes, :created_by, NOW(), NOW())
+                 ON DUPLICATE KEY UPDATE
+                    holiday_date = VALUES(holiday_date),
+                    name         = VALUES(name),
+                    is_paid      = VALUES(is_paid),
+                    is_active    = VALUES(is_active),
+                    notes        = VALUES(notes),
+                    updated_at   = NOW()",
+                $params
+            );
+
+            return responseJson(success: true, data: null, message: "Holiday override saved successfully", code: 201);
+        } catch (\Exception $e) {
+            error_log("Store holiday override error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: "Failed to save override: " . $e->getMessage(), code: 500);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/v1/organizations/{org_id}/holidays/custom
+    // Body: { holiday_date, name, is_paid?, notes? }
+    // -------------------------------------------------------------------------
+    public function storeCustom(int $orgId): mixed
+    {
+        try {
+            $data = json_decode(file_get_contents('php://input'), true);
+
+            foreach (['holiday_date', 'name'] as $f) {
+                if (empty($data[$f])) {
+                    return responseJson(success: false, data: null, message: "Field '$f' is required", code: 400);
                 }
             }
 
-            if (empty($fields)) {
-                return responseJson(success: false, message: "No fields provided to update", code: 400);
+            $countryCode = $this->lookupService->resolveOrgCountryCode($orgId);
+            if (!$countryCode) {
+                return responseJson(success: false, data: null, message: "Organization has no active country assigned", code: 422);
             }
 
-            $query = "UPDATE public_holidays SET " . implode(', ', $fields) . ", updated_at = NOW() WHERE id = :id";
-            DB::raw($query, $params);
+            $existing = DB::raw(
+                "SELECT id FROM org_public_holidays
+                 WHERE organization_id = :org_id AND holiday_date = :date AND name = :name
+                 LIMIT 1",
+                [':org_id' => $orgId, ':date' => $data['holiday_date'], ':name' => $data['name']]
+            );
 
-            $updated = DB::raw("SELECT * FROM public_holidays WHERE id = :id", [':id' => $id]);
+            if (!empty($existing)) {
+                return responseJson(success: false, data: null, message: "A holiday with that date and name already exists for this organization", code: 409);
+            }
 
-            return responseJson(success: true, data: $updated[0] ?? null, message: "Holiday updated", code: 200);
+            DB::table('org_public_holidays')->insert([
+                'organization_id'   => $orgId,
+                'country_code'      => $countryCode,
+                'master_holiday_id' => null,
+                'holiday_date'      => $data['holiday_date'],
+                'name'              => $data['name'],
+                'source'            => 'custom',
+                'is_paid'           => isset($data['is_paid']) ? (int) (bool) $data['is_paid'] : 1,
+                'is_active'         => 1,
+                'notes'             => $data['notes'] ?? null,
+                'created_by'        => $_SERVER['AUTH_USER_ID'] ?? null,
+                'created_at'        => date('Y-m-d H:i:s'),
+            ]);
+
+            return responseJson(success: true, data: null, message: "Custom holiday created successfully", code: 201);
         } catch (\Exception $e) {
-            error_log("Public holiday update error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to update holiday: " . $e->getMessage(), code: 500);
+            error_log("Store custom holiday error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: "Failed to create custom holiday: " . $e->getMessage(), code: 500);
         }
     }
 
-    /**
-     * DELETE /api/v1/organizations/{org_id}/public-holidays/{id}
-     * Soft delete — preserves history for any attendance days already tied to it.
-     */
-    public function destroy($orgId, $id)
+    // -------------------------------------------------------------------------
+    // PUT /api/v1/organizations/{org_id}/holidays/{id}
+    // Updates an override or custom row only — never touches master data.
+    // -------------------------------------------------------------------------
+    public function update(int $orgId, int $id): mixed
     {
         try {
-            $existing = DB::raw(
-                "SELECT id FROM public_holidays WHERE id = :id AND organization_id = :org_id LIMIT 1",
-                [':id' => $id, ':org_id' => $orgId]
-            );
+            $existing = DB::table('org_public_holidays')
+                ->where(['id' => $id, 'organization_id' => $orgId])
+                ->get();
 
             if (empty($existing)) {
-                return responseJson(success: false, message: "Holiday not found", code: 404);
+                return responseJson(success: false, data: null, message: "Holiday record not found", code: 404);
             }
 
-            DB::raw("UPDATE public_holidays SET is_active = 0, updated_at = NOW() WHERE id = :id", [':id' => $id]);
+            $data = json_decode(file_get_contents('php://input'), true);
+            $updateData = [];
 
-            return responseJson(success: true, message: "Holiday removed", code: 200);
+            foreach (['is_paid', 'is_active'] as $f) {
+                if (isset($data[$f])) $updateData[$f] = (int) (bool) $data[$f];
+            }
+            if (isset($data['notes'])) $updateData['notes'] = $data['notes'];
+            if (isset($data['holiday_date'])) $updateData['holiday_date'] = $data['holiday_date'];
+            if (isset($data['name'])) $updateData['name'] = $data['name'];
+
+            if (empty($updateData)) {
+                return responseJson(success: false, data: null, message: "No fields to update", code: 400);
+            }
+
+            DB::table('org_public_holidays')->update($updateData, 'id', $id);
+
+            return responseJson(success: true, data: null, message: "Holiday updated successfully");
         } catch (\Exception $e) {
-            error_log("Public holiday destroy error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to remove holiday: " . $e->getMessage(), code: 500);
+            error_log("Update holiday error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: "Failed to update holiday: " . $e->getMessage(), code: 500);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // DELETE /api/v1/organizations/{org_id}/holidays/{id}
+    // Soft-delete only — sets is_active = 0. Never hard-deletes (audit trail).
+    // -------------------------------------------------------------------------
+    public function destroy(int $orgId, int $id): mixed
+    {
+        try {
+            $existing = DB::table('org_public_holidays')
+                ->where(['id' => $id, 'organization_id' => $orgId])
+                ->get();
+
+            if (empty($existing)) {
+                return responseJson(success: false, data: null, message: "Holiday record not found", code: 404);
+            }
+
+            DB::table('org_public_holidays')->update(['is_active' => 0], 'id', $id);
+
+            return responseJson(success: true, data: null, message: "Holiday deactivated successfully");
+        } catch (\Exception $e) {
+            error_log("Destroy holiday error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: "Failed to deactivate holiday: " . $e->getMessage(), code: 500);
         }
     }
 }
