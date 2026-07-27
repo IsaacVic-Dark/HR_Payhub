@@ -21,6 +21,8 @@ use App\Controllers\RegistrationController;
 use App\Controllers\AttendanceController;
 use App\Controllers\PublicHolidayController;
 use App\Controllers\OvertimeApprovalController;
+use App\Controllers\CountryController;
+use App\Controllers\CountyController;
 
 // Authentication routes - NO authentication required
 Router::post('/api/v1/auth/login', [AuthController::getInstance(), 'login']);
@@ -111,6 +113,83 @@ Router::post('api/v1/organizations/{org_id}/configs/bulk-import', OrganizationCo
 
 // User routes with authentication
 Router::resource('api/v1/users', UserController::class, ['AuthMiddleware']);
+
+// =============================================================================
+// COUNTRY & COUNTY MODULE (Global reference data — not organization-scoped)
+// Roles: super_admin only, enforced inline on AuthMiddleware.
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Countries
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/countries?search=&is_active=&page=&per_page=
+Router::get('api/v1/countries', CountryController::class . '@index', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// GET /api/v1/countries/{id}
+Router::get('api/v1/countries/{id}', CountryController::class . '@show', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// POST /api/v1/countries
+// Body: { name, iso2, iso3, phone_code?, currency_code?, currency_symbol?, timezone?, is_active? }
+Router::post('api/v1/countries', CountryController::class . '@store', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// PUT /api/v1/countries/{id}
+Router::put('api/v1/countries/{id}', CountryController::class . '@update', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// PATCH /api/v1/countries/{id}
+Router::patch('api/v1/countries/{id}', CountryController::class . '@update', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// DELETE /api/v1/countries/{id}
+// Soft-delete (is_active = 0) — see CountryController::destroy()
+Router::delete('api/v1/countries/{id}', CountryController::class . '@destroy', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// ---------------------------------------------------------------------------
+// Counties (nested under a country for listing/creation, flat for detail ops)
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/countries/{country_id}/counties?search=&is_active=&page=&per_page=
+Router::get('api/v1/countries/{country_id}/counties', CountyController::class . '@index', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// GET /api/v1/counties/{id}
+Router::get('api/v1/counties/{id}', CountyController::class . '@show', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// POST /api/v1/countries/{country_id}/counties
+// Body: { name, code?, is_active? }
+Router::post('api/v1/countries/{country_id}/counties', CountyController::class . '@store', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// PUT /api/v1/counties/{id}
+Router::put('api/v1/counties/{id}', CountyController::class . '@update', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// PATCH /api/v1/counties/{id}
+Router::patch('api/v1/counties/{id}', CountyController::class . '@update', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// DELETE /api/v1/counties/{id}
+// Soft-delete (is_active = 0) — see CountyController::destroy()
+Router::delete('api/v1/counties/{id}', CountyController::class . '@destroy', [
+    ['AuthMiddleware', ['super_admin']],
+]);
 
 // Employee routes with comprehensive authentication and authorization
 Router::get('api/v1/organizations/{org_id}/employees', EmployeeController::class . '@index', [
@@ -1150,29 +1229,48 @@ Router::get('api/v1/organizations/{org_id}/attendance/payroll-summary', Attendan
 ]);
 
 // ---------------------------------------------------------------------------
-// Public holidays (HR-managed)
+// Public holidays — global master calendar + org overrides/customs
+// (Replaces the old org-only public_holidays CRUD above. New model:
+//  public_holidays_master = country calendar, org_public_holidays =
+//  override/custom rows only. See PublicHolidayController.)
 // ---------------------------------------------------------------------------
 
-// GET /api/v1/organizations/{org_id}/public-holidays?year=
-Router::get('api/v1/organizations/{org_id}/public-holidays', PublicHolidayController::class . '@index', [
-    'AuthMiddleware',
-    ['AttendanceAuthorizationMiddleware', 'read'],
+// POST /api/v1/holidays/import  (global, not org-scoped)
+// super_admin only — this writes to public_holidays_master, which is
+// global data shared across all orgs (same tier as countries/counties).
+// Manual for now — TODO: replace with a scheduled cron job.
+Router::post('api/v1/holidays/import', PublicHolidayController::class . '@import', [
+    ['AuthMiddleware', ['super_admin']],
 ]);
 
-// POST /api/v1/organizations/{org_id}/public-holidays
-// Roles: admin, hr_manager
-Router::post('api/v1/organizations/{org_id}/public-holidays', PublicHolidayController::class . '@store', [
-    ['AuthMiddleware', ['admin', 'hr_manager']],
+// GET /api/v1/organizations/{org_id}/holidays?year=
+Router::get('api/v1/organizations/{org_id}/holidays', PublicHolidayController::class . '@index', [
+    ['AuthMiddleware', ['admin', 'super_admin']],
 ]);
 
-// PUT /api/v1/organizations/{org_id}/public-holidays/{id}
-Router::put('api/v1/organizations/{org_id}/public-holidays/{id}', PublicHolidayController::class . '@update', [
-    ['AuthMiddleware', ['admin', 'hr_manager']],
+// GET /api/v1/organizations/{org_id}/holidays/check?date=YYYY-MM-DD
+Router::get('api/v1/organizations/{org_id}/holidays/check', PublicHolidayController::class . '@check', [
+    ['AuthMiddleware', ['admin', 'super_admin']],
 ]);
 
-// DELETE /api/v1/organizations/{org_id}/public-holidays/{id}
-Router::delete('api/v1/organizations/{org_id}/public-holidays/{id}', PublicHolidayController::class . '@destroy', [
-    ['AuthMiddleware', ['admin', 'hr_manager']],
+// POST /api/v1/organizations/{org_id}/holidays/override
+Router::post('api/v1/organizations/{org_id}/holidays/override', PublicHolidayController::class . '@storeOverride', [
+    ['AuthMiddleware', ['admin', 'super_admin']],
+]);
+
+// POST /api/v1/organizations/{org_id}/holidays/custom
+Router::post('api/v1/organizations/{org_id}/holidays/custom', PublicHolidayController::class . '@storeCustom', [
+    ['AuthMiddleware', ['admin', 'super_admin']],
+]);
+
+// PUT /api/v1/organizations/{org_id}/holidays/{id}
+Router::put('api/v1/organizations/{org_id}/holidays/{id}', PublicHolidayController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'super_admin']],
+]);
+
+// DELETE /api/v1/organizations/{org_id}/holidays/{id}
+Router::delete('api/v1/organizations/{org_id}/holidays/{id}', PublicHolidayController::class . '@destroy', [
+    ['AuthMiddleware', ['admin', 'super_admin']],
 ]);
 
 // ---------------------------------------------------------------------------
