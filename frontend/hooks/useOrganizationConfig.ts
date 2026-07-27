@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { organizationConfigAPI, UIConfigItem, ConfigsByType } from '@/services/api/organization-config';
+import { organizationConfigAPI, UIConfigItem, ConfigsByType, OfficeHoursSettings } from '@/services/api/organization-config';
 import { toast } from 'sonner';
 
 export const useOrganizationConfig = () => {
@@ -60,6 +60,7 @@ export const useOrganizationConfig = () => {
     percentage?: number | null;
     fixed_amount?: number | null;
     value_text?: string | null;
+    settings?: OfficeHoursSettings | Record<string, unknown> | null;
     is_active?: number;
   }) => {
     if (!user?.organization_id) {
@@ -94,6 +95,7 @@ export const useOrganizationConfig = () => {
     percentage?: number | null;
     fixed_amount?: number | null;
     value_text?: string | null;
+    settings?: OfficeHoursSettings | Record<string, unknown> | null;
     is_active?: number;
   }) => {
     if (!user?.organization_id) {
