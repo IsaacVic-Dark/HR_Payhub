@@ -19,6 +19,7 @@ use App\Controllers\P9Controller;
 use App\Controllers\SubscriptionController;
 use App\Controllers\RegistrationController;
 use App\Controllers\AttendanceController;
+use App\Controllers\AttendanceDeductionController;
 use App\Controllers\PublicHolidayController;
 use App\Controllers\OvertimeApprovalController;
 use App\Controllers\CountryController;
@@ -235,6 +236,12 @@ Router::get('api/v1/organizations/{org_id}/employees/{id}/financial-data', Emplo
 
 // Payrun routes with comprehensive authentication and authorization
 Router::post('api/v1/organizations/{org_id}/payruns', PayrunController::class . '@store', [
+    'AuthMiddleware',
+    'PayrunAuthorizationMiddleware'
+]);
+
+// One-time: create + immediately process the first payrun for a brand-new org
+Router::post('api/v1/organizations/{org_id}/payruns/bootstrap', PayrunController::class . '@bootstrap', [
     'AuthMiddleware',
     'PayrunAuthorizationMiddleware'
 ]);
@@ -1226,6 +1233,46 @@ Router::post('api/v1/organizations/{org_id}/employees/{employee_id}/attendance/{
 Router::get('api/v1/organizations/{org_id}/attendance/payroll-summary', AttendanceController::class . '@payrollSummary', [
     ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager', 'payroll_officer', 'finance_manager']],
     ['AttendanceAuthorizationMiddleware', 'read'],
+]);
+
+
+// ---------------------------------------------------------------------------
+// Attendance deductions — read-mostly. Rows are auto-created/kept in sync by
+// AttendanceService::calculateAttendanceDeduction() on every recomputeDay().
+// No store/destroy here on purpose — see AttendanceDeductionController.
+// Structured like the Leave module's routes (AuthMiddleware + a resource
+// authorization middleware doing per-row scoping for managers/employees).
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/attendance-deductions?employee_id=&status=&policy_applied=&date_from=&date_to=&name=&page=&per_page=
+// Roles: admin, hr_manager, hr_officer, payroll_manager, payroll_officer, finance_manager, auditor, compliance_officer (full org)
+//        department_manager (own team only), employee (own records only)
+Router::get('api/v1/organizations/{org_id}/attendance-deductions', AttendanceDeductionController::class . '@index', [
+    'AuthMiddleware',
+    'AttendanceDeductionAuthorizationMiddleware'
+]);
+
+// GET /api/v1/organizations/{org_id}/attendance-deductions/{id}
+Router::get('api/v1/organizations/{org_id}/attendance-deductions/{id}', AttendanceDeductionController::class . '@show', [
+    'AuthMiddleware',
+    'AttendanceDeductionAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/attendance-deductions/{id}/waive
+// Body: { waived_reason }. Only a still-'pending' cash row can be waived.
+// Roles: admin, hr_manager only.
+Router::post('api/v1/organizations/{org_id}/attendance-deductions/{id}/waive', AttendanceDeductionController::class . '@waive', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'AttendanceDeductionAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/attendance-deductions/{id}/reverse
+// Body: { reversal_reason }. Only an 'applied' row can be reversed; cash
+// rows already pulled into a payrun are blocked (handle via payroll adjustment).
+// Roles: admin, hr_manager only.
+Router::post('api/v1/organizations/{org_id}/attendance-deductions/{id}/reverse', AttendanceDeductionController::class . '@reverse', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'AttendanceDeductionAuthorizationMiddleware'
 ]);
 
 // ---------------------------------------------------------------------------
