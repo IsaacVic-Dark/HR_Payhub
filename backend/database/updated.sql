@@ -704,7 +704,11 @@ CREATE TABLE IF NOT EXISTS `organization_configs` (
   CONSTRAINT `organization_configs_approved_by_fk`
     FOREIGN KEY (`approved_by`)     REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `organization_configs_rejected_by_fk`
-    FOREIGN KEY (`rejected_by`)     REFERENCES `users` (`id`) ON DELETE SET NULL
+    FOREIGN KEY (`rejected_by`)     REFERENCES `users` (`id`) ON DELETE SET NULL,
+
+  CONSTRAINT `chk_lateness_deduction_policy`
+    CHECK (`name` <> 'Lateness Deduction Policy'
+      OR `value_text` IN ('no_deduction','per_minute','daily_rate','leave_balance'))
  
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -1538,11 +1542,14 @@ VALUES
 
 -- The single source of truth for which model is active.
 -- value_text is one of: 'no_deduction' | 'per_minute' | 'daily_rate' | 'leave_balance'
+-- settings.options lists the selectable values for the admin UI dropdown;
+-- enforced at the DB level by chk_lateness_deduction_policy (see organization_configs table above).
 INSERT INTO `organization_configs`
   (`organization_id`, `config_type`, `name`, `percentage`, `fixed_amount`, `value_text`, `settings`, `status`, `is_active`)
 VALUES
 (221, 'attendance', 'Lateness Deduction Policy',
-  NULL, NULL, 'no_deduction', NULL,
+  NULL, NULL, 'no_deduction',
+  JSON_OBJECT('options', JSON_ARRAY('no_deduction', 'per_minute', 'daily_rate', 'leave_balance')),
   'approved', 1),
 
 -- Leave type to debit when policy = leave_balance. Stored as the leave_types.code
