@@ -335,6 +335,100 @@ class PayrunDetailController
     }
 
     /**
+     * Get the itemized deductions breakdown for a single payrun detail.
+     *
+     * payrun_details.total_deductions is a single rolled-up figure; this
+     * endpoint returns the individual payrun_deductions rows behind it
+     * (PAYE, NSSF, SHIF, Housing Levy, loans, advances, and the lateness/
+     * early-leave attendance bucket), each labelled by its source
+     * organization_configs row so the frontend can render a line-item
+     * breakdown instead of just the total.
+     *
+     * When a line is the 'Lateness & Early-Leave Deduction' bucket, the
+     * underlying attendance_deductions rows locked to this payrun_detail
+     * are nested under it too, so the UI can show exactly which days and
+     * how many late/early minutes produced that amount.
+     */
+    public function deductions($org_id, $payrunId, $id)
+    {
+        try {
+            // Confirms the detail belongs to this payrun AND organization —
+            // same guard show()/update()/delete() apply, kept consistent here.
+            $detail = DB::raw(
+                "SELECT payrun_details.id
+                   FROM payrun_details
+                   INNER JOIN payruns ON payrun_details.payrun_id = payruns.id
+                  WHERE payrun_details.id = :id
+                    AND payrun_details.payrun_id = :payrun_id
+                    AND payruns.organization_id = :org_id",
+                [':id' => $id, ':payrun_id' => $payrunId, ':org_id' => $org_id]
+            );
+
+            if (empty($detail)) {
+                return responseJson(
+                    success: false,
+                    data: null,
+                    message: "Payrun detail not found",
+                    code: 404
+                );
+            }
+
+            $lines = DB::raw(
+                "SELECT
+                    payrun_deductions.id,
+                    payrun_deductions.config_id,
+                    payrun_deductions.amount,
+                    organization_configs.name         AS config_name,
+                    organization_configs.config_type   AS config_type
+                 FROM payrun_deductions
+                 INNER JOIN organization_configs
+                    ON payrun_deductions.config_id = organization_configs.id
+                 WHERE payrun_deductions.payrun_detail_id = :id
+                 ORDER BY organization_configs.config_type, organization_configs.name",
+                [':id' => $id]
+            );
+
+            // Nest the underlying attendance_deductions rows under the
+            // 'Lateness & Early-Leave Deduction' line, if present, so the
+            // frontend can show per-day late/early minutes behind the total.
+            $attendanceRows = DB::raw(
+                "SELECT
+                    id, deduction_date, late_minutes, early_leave_minutes,
+                    billable_minutes, policy_applied, cash_amount
+                 FROM attendance_deductions
+                 WHERE payrun_detail_id = :id
+                   AND policy_applied IN ('per_minute', 'daily_rate')
+                 ORDER BY deduction_date",
+                [':id' => $id]
+            );
+
+            $result = array_map(function ($line) use ($attendanceRows) {
+                $line->amount = (float) $line->amount;
+                $line->attendance_breakdown = ($line->config_name === 'Lateness & Early-Leave Deduction')
+                    ? array_map(function ($row) {
+                        $row->cash_amount = (float) $row->cash_amount;
+                        return $row;
+                    }, $attendanceRows)
+                    : null;
+                return $line;
+            }, $lines);
+
+            return responseJson(
+                success: true,
+                data: $result,
+                message: "Payrun detail deductions fetched successfully"
+            );
+        } catch (\Exception $e) {
+            return responseJson(
+                success: false,
+                data: null,
+                message: "Failed to fetch payrun detail deductions: " . $e->getMessage(),
+                code: 500
+            );
+        }
+    }
+
+    /**
      * Update a payrun detail
      */
     public function update($org_id, $payrunId, $id)
