@@ -432,6 +432,7 @@ class AttendanceService
         $existing = DB::raw(
             "SELECT id, status FROM attendance_deductions
              WHERE organization_id = :org_id AND attendance_day_id = :day_id
+             
              LIMIT 1",
             [':org_id' => $orgId, ':day_id' => $attendanceDayId]
         );
