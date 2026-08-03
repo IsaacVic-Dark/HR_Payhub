@@ -119,6 +119,63 @@ class PayrunProcessingService
         return $summary;
     }
 
+    /**
+     * Seed baseline Kenyan statutory 'tax' configs for an organisation that
+     * has none yet. Used by the new-org bootstrap flow so a first payrun can
+     * be processed immediately without a manual config-setup step.
+     *
+     * Idempotent: relies on the `unique_config` (organization_id, config_type,
+     * name) key, so re-running this for an org that already has some (but not
+     * all) of these rows will only insert the missing ones.
+     *
+     * IMPORTANT: these are simple flat-rate placeholders, not the real
+     * banded/tiered NSSF or PAYE tax bracket schedules. They exist so a brand
+     * new org isn't blocked from running its first payrun — a payroll admin
+     * should review and correct them in Organization Settings afterwards.
+     *
+     * @return int number of config rows actually inserted
+     */
+    public function seedDefaultStatutoryConfig(int $orgId, ?int $userId = null): int
+    {
+        $existing = DB::raw(
+            "SELECT name FROM organization_configs
+              WHERE organization_id = :org AND config_type = 'tax'",
+            [':org' => $orgId]
+        );
+        $existingNames = array_map(fn($r) => $r->name, $existing);
+
+        // name => [percentage, fixed_amount]
+        $defaults = [
+            'NSSF Rate'         => [6.00, null],
+            'SHIF Rate'         => [2.75, null],
+            'Housing Levy Rate' => [1.50, null],
+            'Personal Relief'   => [null, 2400.00],
+        ];
+
+        $inserted = 0;
+        foreach ($defaults as $name => [$percentage, $fixedAmount]) {
+            if (in_array($name, $existingNames, true)) {
+                continue;
+            }
+
+            DB::table('organization_configs')->insert([
+                'organization_id' => $orgId,
+                'config_type'     => 'tax',
+                'name'            => $name,
+                'percentage'      => $percentage,
+                'fixed_amount'    => $fixedAmount,
+                'status'          => 'approved',
+                'created_by'      => $userId,
+                'approved_by'     => $userId,
+                'approved_at'     => date('Y-m-d H:i:s'),
+                'is_active'       => 1,
+            ]);
+            $inserted++;
+        }
+
+        return $inserted;
+    }
+
     // -------------------------------------------------------------------------
     // Private helpers
     // -------------------------------------------------------------------------
@@ -135,27 +192,32 @@ class PayrunProcessingService
 
     private function getActiveEmployees(int $orgId): array
     {
+        // NOTE: employee_number, hire_date, base_salary, name and email fields
+        // all live on `employees` itself (job_title/department are FK ids —
+        // job_title_id/department_id — not free-text columns), and user_id is
+        // optional (see employees.has_user), so this must be a LEFT JOIN on
+        // users, not an INNER JOIN, or employees without a login account are
+        // silently dropped from every payrun.
         return DB::raw(
             "SELECT 
                 e.id,
                 e.employee_number,
                 e.base_salary,
                 e.hire_date,
-                e.job_title,
-                e.department,
+                e.job_title_id,
+                e.department_id,
                 e.bank_account_number,
                 e.tax_id,
                 e.employment_type,
-                u.first_name,
-                u.middle_name,
-                u.surname,
-                u.email,
+                e.firstname AS first_name,
+                e.middlename AS middle_name,
+                e.surname,
+                COALESCE(e.workemail, e.personalemail) AS email,
                 ep.national_id,
                 ep.kra_pin,
                 ep.nssf_number,
                 ep.shif_number
              FROM employees e
-             INNER JOIN users u ON e.user_id = u.id
              LEFT JOIN employee_profiles ep ON ep.employee_id = e.id
              WHERE e.organization_id = :org_id
                AND e.status IN ('active', 'on_probation')",
