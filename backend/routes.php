@@ -240,12 +240,10 @@ Router::post('api/v1/organizations/{org_id}/payruns', PayrunController::class . 
     'PayrunAuthorizationMiddleware'
 ]);
 
-// One-time: create + immediately process the first payrun for a brand-new org
-Router::post('api/v1/organizations/{org_id}/payruns/bootstrap', PayrunController::class . '@bootstrap', [
-    'AuthMiddleware',
-    'PayrunAuthorizationMiddleware'
-]);
-
+// NOTE: the old POST /payruns/bootstrap endpoint has been removed.
+// GET /payruns below now auto-creates + processes the first payrun for a
+// brand-new org itself (see PayrunController::index()), so no separate
+// bootstrap round-trip is needed from the frontend.
 Router::get('api/v1/organizations/{org_id}/payruns', PayrunController::class . '@index', [
     'AuthMiddleware',
     'PayrunAuthorizationMiddleware'
@@ -323,6 +321,15 @@ Router::post('api/v1/organizations/{org_id}/payrun/{payrun_id}/details', PayrunD
 ]);
 
 Router::get('api/v1/organizations/{org_id}/payrun/{payrun_id}/details/{id}', PayrunDetailController::class . '@show', [
+    'AuthMiddleware',
+    'PayrunDetailAuthorizationMiddleware'
+]);
+
+// GET /api/v1/organizations/{org_id}/payrun/{payrun_id}/details/{id}/deductions
+// Itemized breakdown of the payrun_deductions rows behind a detail's
+// total_deductions figure (PAYE, NSSF, SHIF, Housing Levy, loans, advances,
+// and the lateness/early-leave attendance bucket with its per-day rows nested).
+Router::get('api/v1/organizations/{org_id}/payrun/{payrun_id}/details/{id}/deductions', PayrunDetailController::class . '@deductions', [
     'AuthMiddleware',
     'PayrunDetailAuthorizationMiddleware'
 ]);
