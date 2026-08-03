@@ -44,6 +44,39 @@ class PayrunController
                 );
             }
 
+            // ---- Auto-bootstrap ----
+            // If this organization has never had a payrun, create + process
+            // the first one automatically instead of returning an empty list
+            // with a suggested follow-up request. Silently skipped (falls
+            // through to the normal empty-list response) if the current
+            // user isn't allowed to create payruns or if there are no
+            // active employees to process yet.
+            $everHadPayrun = DB::raw(
+                "SELECT COUNT(*) as cnt FROM payruns WHERE organization_id = :org_id",
+                [':org_id' => $org_id]
+            );
+            $needsBootstrap = empty($everHadPayrun) || (int) $everHadPayrun[0]->cnt === 0;
+
+            if ($needsBootstrap) {
+                $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
+                $allowedRoles = ['admin', 'super_admin', 'payroll_manager', 'payroll_officer'];
+
+                if ($currentUser && in_array($currentUser['user_type'], $allowedRoles)) {
+                    try {
+                        $this->createAndProcessFirstPayrun((int) $org_id, $currentUser, []);
+                    } catch (\RuntimeException $e) {
+                        // e.g. "No active employees found for organisation #X" —
+                        // nothing to bootstrap yet, fall through to empty list.
+                        error_log("Payrun auto-bootstrap skipped for org {$org_id}: " . $e->getMessage());
+                    } catch (\Exception $e) {
+                        // Non-fatal: log and still return the (empty) list
+                        // rather than failing the whole GET request.
+                        error_log("Payrun auto-bootstrap failed for org {$org_id}: " . $e->getMessage());
+                        error_log($e->getTraceAsString());
+                    }
+                }
+            }
+
             // Get pagination parameters with validation
             $page = isset($_GET['page']) ? max(1, (int) $_GET['page']) : 1;
             $perPage = isset($_GET['per_page']) ? max(1, min(100, (int) $_GET['per_page'])) : 10;
@@ -448,6 +481,68 @@ class PayrunController
                 code: 500
             );
         }
+    }
+
+    /**
+     * Create + immediately process the very first payrun for an organization
+     * that has none yet. Used internally by index() so a GET request on a
+     * brand-new org transparently produces a payrun instead of an empty list.
+     *
+     * Combines what used to be the standalone POST /payruns/bootstrap endpoint:
+     *  1. Creates a draft payrun for the current calendar month (or the
+     *     org's most recently configured pay_frequency defaults, if passed in).
+     *  2. Auto-seeds baseline statutory 'tax' configs if the org doesn't have any yet.
+     *  3. Runs PayrunProcessingService::process() immediately, pulling every
+     *     active employee's basic_salary + statutory deductions into
+     *     payrun_details and moving status to 'reviewed'.
+     *
+     * @throws \RuntimeException   e.g. "No active employees found for organisation #X"
+     * @throws \InvalidArgumentException  bad pay period dates
+     */
+    private function createAndProcessFirstPayrun(int $org_id, array $currentUser, array $data = []): array
+    {
+        $insertData = [
+            'organization_id'  => $org_id,
+            'payrun_name'      => $data['payrun_name'] ?? (date('F Y') . ' Payrun'),
+            'pay_period_start' => $data['pay_period_start'] ?? date('Y-m-01'),
+            'pay_period_end'   => $data['pay_period_end'] ?? date('Y-m-t'),
+            'pay_frequency'    => $data['pay_frequency'] ?? 'monthly',
+            'status'           => 'draft',
+            'created_by'       => $currentUser['id'],
+        ];
+
+        if (strtotime($insertData['pay_period_start']) > strtotime($insertData['pay_period_end'])) {
+            throw new \InvalidArgumentException("Pay period start date must be before end date");
+        }
+
+        $service = new PayrunProcessingService();
+
+        // Ensure statutory tax config exists before processing, so a
+        // brand-new org isn't blocked on a manual setup step.
+        $taxConfigCheck = DB::raw(
+            "SELECT COUNT(*) as cnt FROM organization_configs
+              WHERE organization_id = :org_id AND config_type = 'tax' AND is_active = 1 AND status = 'approved'",
+            [':org_id' => $org_id]
+        );
+        $seededConfigCount = 0;
+        if (empty($taxConfigCheck) || (int) $taxConfigCheck[0]->cnt === 0) {
+            $seededConfigCount = $service->seedDefaultStatutoryConfig($org_id, (int) $currentUser['id']);
+        }
+
+        DB::table('payruns')->insert($insertData);
+        $payrunId = (int) DB::lastInsertId();
+
+        $this->createAuditLog($org_id, $currentUser['id'], 'payruns', $payrunId, 'bootstrap_create', $insertData);
+
+        // Immediately process: pulls in every active employee's basic_salary
+        // + statutory deductions and writes payrun_details, moving status → 'reviewed'.
+        $summary = $service->process($org_id, $payrunId, (int) $currentUser['id']);
+
+        return [
+            'payrun_id'           => $payrunId,
+            'seeded_config_count' => $seededConfigCount,
+            'summary'             => $summary,
+        ];
     }
 
     /**
