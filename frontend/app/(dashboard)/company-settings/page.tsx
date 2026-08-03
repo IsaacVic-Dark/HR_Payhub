@@ -56,15 +56,15 @@ const sidebarItems = [
   { key: "tax", label: "Tax Configuration", icon: IconReceipt },
   { key: "deduction", label: "Deductions", icon: IconPercentage },
   { key: "loan", label: "Loans", icon: IconCurrencyDollar },
-  { key: "benefit", label: "Benefits", icon: IconGift },
-  { key: "per_diem", label: "Per Diem", icon: IconPlane },
+  // { key: "benefit", label: "Benefits", icon: IconGift },
+  // { key: "per_diem", label: "Per Diem", icon: IconPlane },
   { key: "leave", label: "Leave Settings", icon: IconCalendarTime },
   { key: "attendance", label: "Attendance", icon: IconClock },
-  { key: "advance", label: "Advances", icon: IconArrowForward },
-  { key: "refund", label: "Refunds", icon: IconCreditCard },
+  // { key: "advance", label: "Advances", icon: IconArrowForward },
+  // { key: "refund", label: "Refunds", icon: IconCreditCard },
   { key: "notifications", label: "Notifications", icon: IconBell },
   { key: "billing", label: "Billing", icon: IconCreditCard },
-  { key: "export", label: "Data Export", icon: IconDownload },
+  // { key: "export", label: "Data Export", icon: IconDownload },
 ];
 
 // Loading Skeleton Component
@@ -704,6 +704,44 @@ type AttendanceTextField = (typeof ATTENDANCE_TEXT_FIELDS)[number];
 // {"start_time":"08:00:00","end_time":"17:00:00","grace_minutes":15,"workdays":[1,2,3,4,5]}
 const OFFICE_HOURS_CONFIG_NAME = "Office Hours";
 
+// Lateness / Early-Leave Deduction Policy — three related organization_configs
+// rows (config_type="attendance"), matching the seed data:
+//   - "Lateness Deduction Policy"        value_text: no_deduction | per_minute | daily_rate | leave_balance
+//   - "Lateness Deduction Leave Type"    value_text: leave_types.code, only meaningful when policy = leave_balance
+//   - "Lateness Leave Conversion Tiers"  settings: JSON array of {min_minutes, leave_days}, only meaningful when policy = leave_balance
+const LATENESS_POLICY_CONFIG_NAME = "Lateness Deduction Policy";
+const LATENESS_LEAVE_TYPE_CONFIG_NAME = "Lateness Deduction Leave Type";
+const LATENESS_TIERS_CONFIG_NAME = "Lateness Leave Conversion Tiers";
+
+const LATENESS_POLICY_OPTIONS = [
+  { value: "no_deduction", label: "No Deduction" },
+  { value: "per_minute", label: "Per Minute" },
+  { value: "daily_rate", label: "Daily Rate" },
+  { value: "leave_balance", label: "Leave Balance" },
+] as const;
+
+// TODO: replace with a real leave-types fetch once a leave-types endpoint is
+// wired into this page — the Leave Settings section currently only has local
+// mock data with no `code` field to reuse here.
+const LATENESS_LEAVE_TYPE_OPTIONS = [
+  { value: "ANNUAL", label: "Annual Leave" },
+  { value: "SICK", label: "Sick Leave" },
+  { value: "MATERNITY", label: "Maternity Leave" },
+  { value: "PATERNITY", label: "Paternity Leave" },
+  { value: "COMPASSIONATE", label: "Compassionate Leave" },
+  { value: "STUDY", label: "Study Leave" },
+];
+
+interface ConversionTier {
+  min_minutes: number;
+  leave_days: number;
+}
+
+const DEFAULT_CONVERSION_TIERS: ConversionTier[] = [
+  { min_minutes: 60, leave_days: 0.5 },
+  { min_minutes: 120, leave_days: 1 },
+];
+
 interface AttendanceValues {
   work_start_time: string; // "HH:MM" for <input type="time">
   work_end_time: string;
@@ -712,6 +750,9 @@ interface AttendanceValues {
   overtime_after_minutes: string;
   public_holiday_handling: string;
   overtime_rate: string; // KES per hour
+  lateness_deduction_policy: string;
+  lateness_deduction_leave_type: string;
+  lateness_leave_conversion_tiers: ConversionTier[];
 }
 
 const DEFAULT_ATTENDANCE_VALUES: AttendanceValues = {
@@ -722,6 +763,9 @@ const DEFAULT_ATTENDANCE_VALUES: AttendanceValues = {
   overtime_after_minutes: "30",
   public_holiday_handling: "paid",
   overtime_rate: "",
+  lateness_deduction_policy: "no_deduction",
+  lateness_deduction_leave_type: "ANNUAL",
+  lateness_leave_conversion_tiers: DEFAULT_CONVERSION_TIERS,
 };
 
 // "08:00:00" (DB) <-> "08:00" (<input type="time">)
@@ -761,6 +805,21 @@ const buildAttendanceValues = (configs: UIConfigItem[]): AttendanceValues => {
     overtime_rate:
       getByName("Overtime Rate")?.fixed_amount?.toString() ??
       DEFAULT_ATTENDANCE_VALUES.overtime_rate,
+    lateness_deduction_policy:
+      getByName(LATENESS_POLICY_CONFIG_NAME)?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.lateness_deduction_policy,
+    lateness_deduction_leave_type:
+      getByName(LATENESS_LEAVE_TYPE_CONFIG_NAME)?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.lateness_deduction_leave_type,
+    lateness_leave_conversion_tiers: (() => {
+      // settings is a JSON *array* for this row (not an object like Office
+      // Hours), so it doesn't match the OfficeHoursSettings/Record shape the
+      // UIConfigItem type expects — cast defensively and fall back safely.
+      const raw = getByName(LATENESS_TIERS_CONFIG_NAME)?.settings;
+      return Array.isArray(raw) && raw.length > 0
+        ? (raw as unknown as ConversionTier[])
+        : DEFAULT_ATTENDANCE_VALUES.lateness_leave_conversion_tiers;
+    })(),
   };
 };
 
@@ -787,6 +846,41 @@ function AttendanceSettingsSection({
 
   const getByName = (name: string) =>
     (configs ?? []).find((c) => c.name === name);
+
+  const addTier = () => {
+    setValues({
+      ...values,
+      lateness_leave_conversion_tiers: [
+        ...values.lateness_leave_conversion_tiers,
+        { min_minutes: 0, leave_days: 0 },
+      ],
+    });
+  };
+
+  const updateTier = (
+    index: number,
+    field: keyof ConversionTier,
+    rawValue: string,
+  ) => {
+    const numValue = Number(rawValue);
+    setValues({
+      ...values,
+      lateness_leave_conversion_tiers: values.lateness_leave_conversion_tiers.map(
+        (tier, i) =>
+          i === index
+            ? { ...tier, [field]: Number.isNaN(numValue) ? 0 : numValue }
+            : tier,
+      ),
+    });
+  };
+
+  const removeTier = (index: number) => {
+    setValues({
+      ...values,
+      lateness_leave_conversion_tiers:
+        values.lateness_leave_conversion_tiers.filter((_, i) => i !== index),
+    });
+  };
 
   const handleSave = async () => {
     if (!user?.organization_id) {
@@ -878,6 +972,85 @@ function AttendanceSettingsSection({
           }
         } else {
           failures.push("Overtime Rate (invalid amount)");
+        }
+      }
+
+      // Save Lateness Deduction Policy (always saved, regardless of which
+      // option is selected — no_deduction is a valid, explicit choice).
+      const existingPolicy = getByName(LATENESS_POLICY_CONFIG_NAME);
+      const policyResponse = existingPolicy
+        ? await organizationConfigAPI.updateConfig(orgId, existingPolicy.id, {
+            value_text: values.lateness_deduction_policy,
+          })
+        : await organizationConfigAPI.createConfig(orgId, {
+            config_type: "attendance",
+            name: LATENESS_POLICY_CONFIG_NAME,
+            value_text: values.lateness_deduction_policy,
+            is_active: 1,
+          });
+
+      if (!policyResponse.success) {
+        failures.push("Lateness Deduction Policy");
+      }
+
+      // Leave Type + Conversion Tiers only matter when policy = leave_balance,
+      // but we still persist whatever was last selected so switching back to
+      // leave_balance later doesn't lose the previous configuration.
+      const existingLeaveType = getByName(LATENESS_LEAVE_TYPE_CONFIG_NAME);
+      const leaveTypeResponse = existingLeaveType
+        ? await organizationConfigAPI.updateConfig(
+            orgId,
+            existingLeaveType.id,
+            { value_text: values.lateness_deduction_leave_type },
+          )
+        : await organizationConfigAPI.createConfig(orgId, {
+            config_type: "attendance",
+            name: LATENESS_LEAVE_TYPE_CONFIG_NAME,
+            value_text: values.lateness_deduction_leave_type,
+            is_active: 1,
+          });
+
+      if (!leaveTypeResponse.success) {
+        failures.push("Lateness Deduction Leave Type");
+      }
+
+      if (values.lateness_deduction_policy === "leave_balance") {
+        const invalidTier = values.lateness_leave_conversion_tiers.some(
+          (t) => t.min_minutes < 0 || t.leave_days <= 0,
+        );
+        if (
+          values.lateness_leave_conversion_tiers.length === 0 ||
+          invalidTier
+        ) {
+          failures.push(
+            "Lateness Leave Conversion Tiers (each tier needs a non-negative minute threshold and a positive leave-day value)",
+          );
+        } else {
+          const existingTiers = getByName(LATENESS_TIERS_CONFIG_NAME);
+          // settings column stores a JSON array here, not an object — cast
+          // past the OfficeHoursSettings/Record<string, unknown> type used
+          // for every other settings row.
+          const tiersSettings = values.lateness_leave_conversion_tiers as unknown as Record<
+            string,
+            unknown
+          >;
+
+          const tiersResponse = existingTiers
+            ? await organizationConfigAPI.updateConfig(
+                orgId,
+                existingTiers.id,
+                { settings: tiersSettings },
+              )
+            : await organizationConfigAPI.createConfig(orgId, {
+                config_type: "attendance",
+                name: LATENESS_TIERS_CONFIG_NAME,
+                settings: tiersSettings,
+                is_active: 1,
+              });
+
+          if (!tiersResponse.success) {
+            failures.push("Lateness Leave Conversion Tiers");
+          }
         }
       }
 
@@ -1055,6 +1228,131 @@ function AttendanceSettingsSection({
             </div>
           </div>
           <Separator />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          Lateness Deduction
+        </h3>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Lateness Deduction Policy</p>
+              <p className="text-xs text-muted-foreground">
+                How late arrivals and early leaves are penalised
+              </p>
+            </div>
+            <Select
+              value={values.lateness_deduction_policy}
+              onValueChange={(v) =>
+                setValues({ ...values, lateness_deduction_policy: v })
+              }
+            >
+              <SelectTrigger className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LATENESS_POLICY_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {values.lateness_deduction_policy === "leave_balance" && (
+            <>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm">Leave Type to Debit</p>
+                  <p className="text-xs text-muted-foreground">
+                    Which leave balance is reduced when lateness is converted
+                    to leave
+                  </p>
+                </div>
+                <Select
+                  value={values.lateness_deduction_leave_type}
+                  onValueChange={(v) =>
+                    setValues({ ...values, lateness_deduction_leave_type: v })
+                  }
+                >
+                  <SelectTrigger className="w-52">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LATENESS_LEAVE_TYPE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Separator />
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="font-medium text-sm">
+                      Minute-to-Leave-Day Conversion Tiers
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Read top-down; the employee's billable late minutes get
+                      the highest threshold they clear
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={addTier}>
+                    <IconPlus size={14} className="mr-1" />
+                    Add Tier
+                  </Button>
+                </div>
+                <div className="space-y-3">
+                  {values.lateness_leave_conversion_tiers.map((tier, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        className="w-28"
+                        value={tier.min_minutes}
+                        onChange={(e) =>
+                          updateTier(i, "min_minutes", e.target.value)
+                        }
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        min →
+                      </span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        className="w-24"
+                        value={tier.leave_days}
+                        onChange={(e) =>
+                          updateTier(i, "leave_days", e.target.value)
+                        }
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        leave day(s)
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeTier(i)}
+                        disabled={
+                          values.lateness_leave_conversion_tiers.length === 1
+                        }
+                      >
+                        <IconTrash size={14} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       </div>
 
