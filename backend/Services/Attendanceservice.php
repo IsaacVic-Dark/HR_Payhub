@@ -432,7 +432,6 @@ class AttendanceService
         $existing = DB::raw(
             "SELECT id, status FROM attendance_deductions
              WHERE organization_id = :org_id AND attendance_day_id = :day_id
-             
              LIMIT 1",
             [':org_id' => $orgId, ':day_id' => $attendanceDayId]
         );
@@ -567,6 +566,25 @@ class AttendanceService
         ];
 
         if (!empty($existing)) {
+            // Deliberately NOT reusing $params here — it carries :org_id,
+            // :employee_id, :day_id, :date, :created_by, none of which this
+            // UPDATE's SQL text references. With real (non-emulated) PDO
+            // prepared statements, binding a named param that isn't present
+            // in the query throws SQLSTATE[HY093]: Invalid parameter number.
+            $updateParams = [
+                ':late'          => $params[':late'],
+                ':early'         => $params[':early'],
+                ':billable'      => $params[':billable'],
+                ':policy'        => $params[':policy'],
+                ':cash'          => $params[':cash'],
+                ':leave_type'    => $params[':leave_type'],
+                ':leave_days'    => $params[':leave_days'],
+                ':snapshot'      => $params[':snapshot'],
+                ':status'        => $params[':status'],
+                ':waived_reason' => $params[':waived_reason'],
+                ':id'            => $existing[0]->id,
+            ];
+
             DB::raw(
                 "UPDATE attendance_deductions SET
                     late_minutes = :late, early_leave_minutes = :early, billable_minutes = :billable,
@@ -574,7 +592,7 @@ class AttendanceService
                     leave_days_deducted = :leave_days, rate_snapshot = :snapshot, status = :status,
                     waived_reason = :waived_reason, updated_at = NOW()
                  WHERE id = :id",
-                array_merge($params, [':id' => $existing[0]->id])
+                $updateParams
             );
         } else {
             DB::raw(
