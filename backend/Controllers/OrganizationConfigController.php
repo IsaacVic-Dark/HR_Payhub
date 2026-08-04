@@ -25,6 +25,24 @@ class OrganizationConfigController
     private const OFFICE_HOURS_CONFIG_NAME = 'Office Hours';
 
     /**
+     * config_type/names for the Lateness/Early-Leave Deduction policy set.
+     * These three rows are always saved together from the attendance
+     * settings page (Policy, Leave Type, Conversion Tiers) and only work
+     * correctly as a matched set - AttendanceService::getAttendanceDeductionPolicy()
+     * reads all three in a single 'status = approved' query, so a partial
+     * approval (e.g. Policy approved but Tiers still pending) silently
+     * degrades the policy rather than erroring. Applied immediately, same
+     * as Overtime Rate/Office Hours - never enters the pending-approval
+     * workflow.
+     */
+    private const LATENESS_DEDUCTION_CONFIG_TYPE = 'attendance';
+    private const LATENESS_DEDUCTION_CONFIG_NAMES = [
+        'Lateness Deduction Policy',
+        'Lateness Deduction Leave Type',
+        'Lateness Leave Conversion Tiers',
+    ];
+
+    /**
      * Get all organization configurations
      */
     public function index($org_id)
@@ -357,6 +375,16 @@ class OrganizationConfigController
                 $insertData['approved_at'] = date('Y-m-d H:i:s');
             }
 
+            // Lateness/Early-Leave Deduction Policy set is an operational
+            // setting saved from the attendance settings page - apply
+            // immediately, no pending-approval state.
+            if ($this->isLatenessDeductionConfig($insertData['config_type'], $insertData['name'])) {
+                $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
+                $insertData['status'] = 'approved';
+                $insertData['approved_by'] = $currentUser['id'] ?? null;
+                $insertData['approved_at'] = date('Y-m-d H:i:s');
+            }
+
             DB::table('organization_configs')->insert($insertData);
             $configId = DB::lastInsertId();
 
@@ -479,6 +507,11 @@ class OrganizationConfigController
             // operational settings, not policies that need approval - apply immediately.
             $isOfficeHours = $this->isOfficeHoursConfig($newType, $newName);
 
+            // Lateness/Early-Leave Deduction Policy set (Policy, Leave Type,
+            // Conversion Tiers) - saved together from the attendance settings
+            // page, apply immediately like Overtime Rate/Office Hours.
+            $isLatenessDeduction = $this->isLatenessDeductionConfig($newType, $newName);
+
             if ($isOvertimeRate) {
                 $overtimeError = $this->validateOvertimeRatePayload($newPercentage, $newFixedAmount);
                 if ($overtimeError) {
@@ -528,6 +561,18 @@ class OrganizationConfigController
                 $updateData['status'] = 'approved';
                 $updateData['approved_by'] = $currentUser['id'] ?? null;
                 $updateData['approved_at'] = date('Y-m-d H:i:s');
+            } elseif ($isLatenessDeduction) {
+                // Conversion Tiers ships its config value in 'settings' (a JSON
+                // array); the others use 'value_text'. Only settings needs
+                // encoding here - value_text passes through allowedFields as-is.
+                if (isset($updateData['settings']) && is_array($updateData['settings'])) {
+                    $updateData['settings'] = json_encode($updateData['settings']);
+                }
+
+                $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
+                $updateData['status'] = 'approved';
+                $updateData['approved_by'] = $currentUser['id'] ?? null;
+                $updateData['approved_at'] = date('Y-m-d H:i:s');
             } else {
                 // Add status for approval workflow
                 $updateData['status'] = 'pending';
@@ -551,7 +596,9 @@ class OrganizationConfigController
                     ? "Overtime rate updated successfully"
                     : ($isOfficeHours
                         ? "Office hours updated successfully"
-                        : "Configuration updated successfully (pending approval)")
+                        : ($isLatenessDeduction
+                            ? "Lateness deduction settings updated successfully"
+                            : "Configuration updated successfully (pending approval)"))
             );
         } catch (\Exception $e) {
             return responseJson(
@@ -890,6 +937,27 @@ class OrganizationConfigController
     {
         return strtolower(trim((string)$configType)) === self::OFFICE_HOURS_CONFIG_TYPE
             && strtolower(trim((string)$name)) === strtolower(self::OFFICE_HOURS_CONFIG_NAME);
+    }
+
+    /**
+     * Determine whether a given config_type/name pair refers to one of the
+     * three Lateness/Early-Leave Deduction configs (Policy, Leave Type,
+     * Conversion Tiers).
+     */
+    private function isLatenessDeductionConfig($configType, $name)
+    {
+        if (strtolower(trim((string)$configType)) !== self::LATENESS_DEDUCTION_CONFIG_TYPE) {
+            return false;
+        }
+
+        $normalizedName = strtolower(trim((string)$name));
+        foreach (self::LATENESS_DEDUCTION_CONFIG_NAMES as $latenessName) {
+            if ($normalizedName === strtolower($latenessName)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
