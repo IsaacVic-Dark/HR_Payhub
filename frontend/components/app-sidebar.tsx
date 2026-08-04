@@ -100,11 +100,6 @@ const data = {
           url: "/payrun/employees",
           roles: ["super_admin", "admin", "payroll_manager"],
         },
-        {
-          title: "Overtime Approvals",
-          url: "/payrun/overtime-approvals",
-          roles: ["super_admin", "admin", "payroll_manager"],
-        },
       ],
     },
     // {
@@ -167,6 +162,28 @@ const data = {
     // },
   ],
 
+  // Finances section
+  financeSection: [
+    {
+      title: "Loans",
+      url: "/loans",
+      icon: IconBriefcase,
+      roles: ["super_admin", "admin", "hr_manager", "department_manager"],
+    },
+    {
+      title: "Overtime Approvals",
+      url: "/payrun/overtime-approvals",
+      icon: IconClipboardList,
+      roles: ["super_admin", "admin", "payroll_manager"],
+    },
+    {
+      title: "Reimbursements",
+      url: "/reimbursements",
+      icon: IconReportMoney,
+      roles: ["super_admin", "admin", "hr_manager", "finance_manager"],
+    },
+  ],
+
   // Employee Management section
   employeeSection: [
     {
@@ -193,15 +210,10 @@ const data = {
       ]
     },
     {
-      title: "Loans",
-      url: "/loans",
-      icon: IconBriefcase,
-      roles: [
-        "super_admin",
-        "admin",
-        "hr_manager",
-        "department_manager"
-      ]
+      title: "Departments",
+      url: "/employees/departments",
+      icon: IconBuilding,
+      roles: ["super_admin", "admin", "hr_manager"],
     },
     {
       title: "My Leaves",
@@ -291,38 +303,10 @@ const data = {
   // Configuration section
   configSection: [
     {
-      title: "Company Settings",
+      title: "Settings",
       url: "/company-settings",
       icon: IconSettings,
       roles: ["super_admin", "admin"],
-      hasDropdown: true,
-      items: [
-        {
-          title: "All Settings",
-          url: "/company-settings",
-          roles: ["super_admin", "admin"],
-        },
-        {
-          title: "Departments",
-          url: "/employees/departments",
-          roles: ["super_admin", "admin", "hr_manager"]
-        },
-        // {
-        //   title: "Salary Structures",
-        //   url: "/salary-structures",
-        //   roles: ["super_admin", "admin"],
-        // },
-        // {
-        //   title: "Allowances & Deductions",
-        //   url: "/allowances",
-        //   roles: ["super_admin", "admin"],
-        // },
-        // {
-        //   title: "Payroll Cycles",
-        //   url: "/payroll-cycles",
-        //   roles: ["super_admin", "admin"],
-        // },
-      ],
     },
     {
       title: "User Management",
@@ -452,6 +436,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const [openDropdowns, setOpenDropdowns] = React.useState<string[]>(() => {
     const allSections = [
       ...data.payrollSection,
+      ...data.financeSection,
       ...data.employeeSection,
       ...data.configSection,
       ...data.systemSection,
@@ -559,6 +544,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
   const filteredCoreNav = coreNavItems;
   const filteredPayrollSection = filterNavItems(data.payrollSection);
+  const filteredFinanceSection = filterNavItems(data.financeSection);
   const filteredEmployeeSection = filterNavItems(data.employeeSection);
   const filteredSelfServiceSection = filterNavItems(data.selfServiceSection);
   const filteredConfigSection = filterNavItems(data.configSection);
@@ -672,6 +658,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <SidebarGroupContent>
               <SidebarMenu>
                 {filteredPayrollSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Finances */}
+        {filteredFinanceSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Finances
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredFinanceSection.map((item) => renderNavItem(item))}
               </SidebarMenu>
             </SidebarGroupContent>
           </SidebarGroup>
