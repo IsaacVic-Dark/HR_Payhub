@@ -317,10 +317,34 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   `entity_type` varchar(50) NOT NULL,
   `entity_id` int NOT NULL,
   `action` enum(
-    'create','update','delete',
-    'review','finalize','reopen','auto_create',
-    'locked_period_detected','off_cycle_adjustment_linked',
-    'carry_forward_applied','carry_forward_queued'
+    'create',
+    'update',
+    'delete',
+    'review',
+    'finalize',
+    'reopen',
+
+    'auto_create',
+    'locked_period_detected',
+    'off_cycle_adjustment_linked',
+    'carry_forward_applied',
+    'carry_forward_queued',
+
+    'submit',
+    'policy_validated',
+    'policy_failed',
+    'manager_approved',
+    'hr_approved',
+    'finance_approved',
+    'partially_approved',
+    'rejected',
+    'scheduled',
+    'payment_initiated',
+    'paid',
+    'payment_failed',
+    'disputed',
+    'reversed',
+    'cancelled'
   ) NOT NULL,
   `details` json DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -675,7 +699,7 @@ CREATE TABLE IF NOT EXISTS `notifications` (
 CREATE TABLE IF NOT EXISTS `organization_configs` (
   `id`                INT           NOT NULL AUTO_INCREMENT,
   `organization_id`   INT           NOT NULL,
-  `config_type`       ENUM('tax','deduction','loan','benefit','per_diem','advance','refund','leave','attendance') NOT NULL,
+  `config_type`       ENUM('tax','deduction','loan','benefit','per_diem','advance','refund','leave','attendance','reimbursement') NOT NULL,
   `name`              VARCHAR(100)  NOT NULL,
   `percentage`        DECIMAL(5,2)  DEFAULT NULL,
   `fixed_amount`      DECIMAL(15,2) DEFAULT NULL,
@@ -827,29 +851,55 @@ CREATE TABLE IF NOT EXISTS `payrun_details` (
   `payrun_id` int NOT NULL,
   `organization_id` int NOT NULL,
   `employee_id` int NOT NULL,
+
   `basic_salary` decimal(15,2) NOT NULL,
+
   `overtime_amount` decimal(15,2) DEFAULT '0.00',
   `bonus_amount` decimal(15,2) DEFAULT '0.00',
   `commission_amount` decimal(15,2) DEFAULT '0.00',
+
+  `taxable_reimbursement` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `nontaxable_reimbursement` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `reimbursement_metadata` json DEFAULT NULL,
+
   `nssf` decimal(15,2) DEFAULT '0.00',
   `shif` decimal(15,2) DEFAULT '0.00',
   `housing_levy` decimal(15,2) DEFAULT '0.00',
+
   `taxable_income` decimal(15,2) DEFAULT '0.00',
   `tax_before_relief` decimal(15,2) DEFAULT '0.00',
   `personal_relief` decimal(15,2) DEFAULT '0.00',
   `paye` decimal(15,2) DEFAULT '0.00',
+
   `gross_pay` decimal(15,2) NOT NULL,
   `total_deductions` decimal(15,2) NOT NULL,
   `net_pay` decimal(15,2) NOT NULL,
+
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
+    ON UPDATE CURRENT_TIMESTAMP,
+
   PRIMARY KEY (`id`),
-  UNIQUE KEY `unique_payrun_employee` (`payrun_id`,`employee_id`),
+
+  UNIQUE KEY `unique_payrun_employee` (`payrun_id`, `employee_id`),
+
   KEY `employee_id` (`employee_id`),
   KEY `idx_payrundetails_org` (`organization_id`),
-  CONSTRAINT `payrun_details_ibfk_1` FOREIGN KEY (`payrun_id`) REFERENCES `payruns` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `payrun_details_ibfk_2` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `payrun_details_org_fk` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE
+
+  CONSTRAINT `payrun_details_ibfk_1`
+    FOREIGN KEY (`payrun_id`)
+    REFERENCES `payruns` (`id`)
+    ON DELETE CASCADE,
+
+  CONSTRAINT `payrun_details_ibfk_2`
+    FOREIGN KEY (`employee_id`)
+    REFERENCES `employees` (`id`)
+    ON DELETE CASCADE,
+
+  CONSTRAINT `payrun_details_org_fk`
+    FOREIGN KEY (`organization_id`)
+    REFERENCES `organizations` (`id`)
+    ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
@@ -1421,7 +1471,91 @@ CREATE TABLE org_public_holidays (
     CONSTRAINT fk_org_public_holidays_created_by
         FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
- 
+
+CREATE TABLE `reimbursements` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `organization_id` int NOT NULL,
+  `employee_id` int NOT NULL,
+  `payrun_id` int DEFAULT NULL,
+  `payment_transaction_id` int DEFAULT NULL,
+  `reimbursement_number` varchar(50) NOT NULL,
+  `reimbursement_type` enum('expense','travel','medical','training','transport','other') NOT NULL DEFAULT 'expense',
+  `payout_method` enum('payroll','banktransfer','mpesa','cash','check','wallet') NOT NULL DEFAULT 'payroll',
+  `amount_requested` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `amount_approved` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `amount_paid` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `currency` varchar(10) NOT NULL DEFAULT 'KES',
+  `request_date` date NOT NULL,
+  `expense_date` date DEFAULT NULL,
+  `approver_id` int DEFAULT NULL,
+  `approved_at` timestamp NULL DEFAULT NULL,
+  `paid_at` timestamp NULL DEFAULT NULL,
+  `status` enum('draft','pending','managerapproved','hrapproved','financeapproved','rejected','scheduled','paid','partpaid','cancelled','failed','reversed') NOT NULL DEFAULT 'pending',
+  `description` text,
+  `rejection_reason` text,
+  `payment_reference` varchar(100) DEFAULT NULL,
+  `external_reference` varchar(100) DEFAULT NULL,
+  `metadata` json DEFAULT NULL,
+  `created_by` int DEFAULT NULL,
+  `updated_by` int DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  `policy_config_id` int DEFAULT NULL,
+  `original_currency` varchar(10) NOT NULL DEFAULT 'KES',
+  `currency_rate` decimal(15,6) NOT NULL DEFAULT '1.000000',
+  `scheduled_payment_date` date DEFAULT NULL,
+  `policy_validated` tinyint(1) NOT NULL DEFAULT '0',
+  `policy_validation_errors` json DEFAULT NULL,
+  `receipt_count` int NOT NULL DEFAULT '0',
+  `receipts_validated` tinyint(1) NOT NULL DEFAULT '0',
+  `is_taxable` tinyint(1) NOT NULL DEFAULT '0',
+  `payslip_inclusion` enum('current','next','none') NOT NULL DEFAULT 'none',
+  `partial_approval_amount` decimal(15,2) DEFAULT NULL,
+  `is_disputed` tinyint(1) NOT NULL DEFAULT '0',
+  `disputed_reason` text,
+  `disputed_at` timestamp NULL DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniqreimbursenumber` (`organization_id`,`reimbursement_number`),
+  KEY `idxreimborg` (`organization_id`),
+  KEY `idxreimbeemp` (`employee_id`),
+  KEY `idxreimbstatus` (`status`),
+  KEY `idxreimbpayrun` (`payrun_id`),
+  KEY `idxreimbpaymenttxn` (`payment_transaction_id`),
+  KEY `reimbapproverfk` (`approver_id`),
+  KEY `reimbcreatedbyfk` (`created_by`),
+  KEY `reimbupdatedbyfk` (`updated_by`),
+  KEY `reimbpolicyfk` (`policy_config_id`),
+  CONSTRAINT `reimbapproverfk` FOREIGN KEY (`approver_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `reimbcreatedbyfk` FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `reimbempfk` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `reimborgfk` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `reimbpaymenttxnfk` FOREIGN KEY (`payment_transaction_id`) REFERENCES `payment_transactions` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `reimbpayrunfk` FOREIGN KEY (`payrun_id`) REFERENCES `payruns` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `reimbpolicyfk` FOREIGN KEY (`policy_config_id`) REFERENCES `organization_configs` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `reimbupdatedbyfk` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+CREATE TABLE `reimbursementitems` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `reimbursement_id` int NOT NULL,
+  `expense_category` varchar(100) NOT NULL,
+  `expense_item` varchar(150) DEFAULT NULL,
+  `receipt_number` varchar(100) DEFAULT NULL,
+  `amount` decimal(15,2) NOT NULL,
+  `tax_amount` decimal(15,2) DEFAULT '0.00',
+  `currency` varchar(10) NOT NULL DEFAULT 'KES',
+  `expense_date` date NOT NULL,
+  `vendor_name` varchar(150) DEFAULT NULL,
+  `notes` text,
+  `receipt_path` varchar(500) DEFAULT NULL,
+  `metadata` json DEFAULT NULL,
+  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (`id`),
+  KEY `idxreimbitemreimb` (`reimbursement_id`),
+  CONSTRAINT `reimbitemreimbfk` FOREIGN KEY (`reimbursement_id`) REFERENCES `reimbursements` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
 -- Optional: auto-purge expired rows every hour (requires MySQL Event Scheduler)
 -- SET GLOBAL event_scheduler = ON;
 -- CREATE EVENT IF NOT EXISTS purge_expired_pending_tokens

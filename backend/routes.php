@@ -18,6 +18,8 @@ use App\Controllers\LoanController;
 use App\Controllers\P9Controller;
 use App\Controllers\SubscriptionController;
 use App\Controllers\RegistrationController;
+use App\Controllers\ReimbursementController;
+use App\Controllers\ReimbursementItemController;
 use App\Controllers\AttendanceController;
 use App\Controllers\AttendanceDeductionController;
 use App\Controllers\PublicHolidayController;
@@ -302,6 +304,116 @@ Router::get('api/v1/organizations/{org_id}/audit-logs', AuditLogController::clas
 Router::get('api/v1/organizations/{org_id}/audit-logs/{id}', AuditLogController::class . '@show', [
     'AuthMiddleware',
     'AuditLogAuthorizationMiddleware'
+]);
+
+// =============================================================================
+// Reimbursement routes
+// =============================================================================
+
+// ---- Claims (master record) ------------------------------------------------
+Router::get('api/v1/organizations/{org_id}/reimbursements', ReimbursementController::class . '@index', [
+    'AuthMiddleware',
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/reimbursements', ReimbursementController::class . '@store', [
+    'AuthMiddleware',
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::get('api/v1/organizations/{org_id}/reimbursement/{id}', ReimbursementController::class . '@show', [
+    'AuthMiddleware',
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::put('api/v1/organizations/{org_id}/reimbursement/{id}', ReimbursementController::class . '@update', [
+    'AuthMiddleware',
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/cancel', ReimbursementController::class . '@cancel', [
+    'AuthMiddleware',
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+// ---- Line items (receipts) --------------------------------------------------
+Router::get('api/v1/organizations/{org_id}/reimbursement/{reimbursement_id}/items', ReimbursementItemController::class . '@index', [
+    'AuthMiddleware',
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/reimbursement/{reimbursement_id}/items', ReimbursementItemController::class . '@store', [
+    'AuthMiddleware',
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::put('api/v1/organizations/{org_id}/reimbursement/{reimbursement_id}/items/{item_id}', ReimbursementItemController::class . '@update', [
+    'AuthMiddleware',
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::delete('api/v1/organizations/{org_id}/reimbursement/{reimbursement_id}/items/{item_id}', ReimbursementItemController::class . '@destroy', [
+    'AuthMiddleware',
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+// ---- Approval workflow (manager -> HR -> finance, auto-skips as configured) -
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/approve', ReimbursementController::class . '@approve', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'hr_manager', 'finance_manager', 'department_manager']],
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/reject', ReimbursementController::class . '@reject', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'hr_manager', 'finance_manager', 'department_manager']],
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/request-clarification', ReimbursementController::class . '@requestClarification', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'hr_manager', 'finance_manager', 'department_manager']],
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+// ---- Disputes ----------------------------------------------------------------
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/dispute', ReimbursementController::class . '@dispute', [
+    'AuthMiddleware',
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/resolve-dispute', ReimbursementController::class . '@resolveDispute', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+// ---- Payment processing -------------------------------------------------------
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/process-payment', ReimbursementController::class . '@processPayment', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager', 'accountant']],
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/confirm-payment', ReimbursementController::class . '@confirmPayment', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager', 'accountant']],
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/fail-payment', ReimbursementController::class . '@failPayment', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager', 'accountant']],
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/reverse', ReimbursementController::class . '@reverse', [
+    ['AuthMiddleware', ['admin', 'finance_manager']],
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+// ---- Payroll attachment --------------------------------------------------------
+Router::post('api/v1/organizations/{org_id}/reimbursement/{id}/attach-payrun', ReimbursementController::class . '@attachToPayrun', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager']],
+    'ReimbursementAuthorizationMiddleware'
+]);
+
+Router::post('api/v1/organizations/{org_id}/reimbursement/payrun/{payrun_id}/mark-paid', ReimbursementController::class . '@markPayrollReimbursementsPaid', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager']],
+    'ReimbursementAuthorizationMiddleware'
 ]);
 
 // Payrun Details routes with comprehensive authentication and authorization
