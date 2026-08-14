@@ -1,14 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { toast } from 'sonner';
-import { CheckCircle2, ChevronRight, ChevronLeft, Loader2, Building2 } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/lib/AuthContext';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
@@ -137,11 +136,34 @@ const COUNTIES = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function SetupPage() {
+function clampStep(raw: string | null): StepIndex {
+    const n = parseInt(raw ?? '0', 10);
+    if (isNaN(n) || n < 0 || n > 5) return 0;
+    return n as StepIndex;
+}
+
+function SetupWizard() {
     const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const { markSetupComplete } = useAuth();
 
-    const [currentStep, setCurrentStep] = useState<StepIndex>(0);
+    // The URL (`?step=`) is the source of truth so the sidebar can read and
+    // link directly to a step. `currentStep` mirrors it in state for renders.
+    const [currentStep, setCurrentStepState] = useState<StepIndex>(() => clampStep(searchParams.get('step')));
+
+    useEffect(() => {
+        setCurrentStepState(clampStep(searchParams.get('step')));
+    }, [searchParams]);
+
+    const setCurrentStep = (updater: StepIndex | ((s: StepIndex) => StepIndex)) => {
+        setCurrentStepState(prev => {
+            const next = typeof updater === 'function' ? (updater as (s: StepIndex) => StepIndex)(prev) : updater;
+            router.replace(`${pathname}?step=${next}`, { scroll: false });
+            return next;
+        });
+    };
+
     const [data, setData] = useState<WizardData>(EMPTY);
     const [errors, setErrors] = useState<FieldErrors>({});
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -212,53 +234,10 @@ export default function SetupPage() {
         }
     };
 
-    // ── Step indicator ──────────────────────────────────────────────────────────
-    const StepIndicator = () => (
-        <div className="flex items-center gap-1 mb-6">
-            {STEPS.map((label, i) => {
-                const done = i < currentStep;
-                const active = i === currentStep;
-                return (
-                    <div key={label} className="flex items-center gap-1 flex-1 min-w-0">
-                        <div className="flex flex-col items-center gap-1 flex-1 min-w-0">
-                            <div
-                                className={[
-                                    'flex items-center justify-center rounded-full text-xs font-semibold transition-colors',
-                                    'h-7 w-7 shrink-0',
-                                    done ? 'bg-[#be2ed6] text-white' : '',
-                                    active ? 'border-2 border-[#be2ed6] text-[#be2ed6]' : '',
-                                    !done && !active ? 'border-2 border-muted-foreground/30 text-muted-foreground/50' : '',
-                                ].join(' ')}
-                            >
-                                {done ? <CheckCircle2 className="h-4 w-4" /> : i + 1}
-                            </div>
-                            <span
-                                className={[
-                                    'text-[10px] text-center leading-tight truncate w-full text-center hidden sm:block',
-                                    active ? 'text-[#be2ed6] font-medium' : 'text-muted-foreground',
-                                ].join(' ')}
-                            >
-                                {label}
-                            </span>
-                        </div>
-                        {i < STEPS.length - 1 && (
-                            <div
-                                className={[
-                                    'h-[2px] flex-1 rounded transition-colors mb-4',
-                                    done ? 'bg-[#be2ed6]' : 'bg-muted-foreground/20',
-                                ].join(' ')}
-                            />
-                        )}
-                    </div>
-                );
-            })}
-        </div>
-    );
-
     // ── Render steps ────────────────────────────────────────────────────────────
     const renderStep = () => {
         if (currentStep === 0) return (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div className="space-y-1">
                     <Label>KRA PIN *</Label>
                     <Input {...field('kra_pin')} placeholder="A000000000A" />
@@ -272,7 +251,7 @@ export default function SetupPage() {
                     </Select>
                     {errors.legal_type && <p className="text-xs text-destructive">{errors.legal_type}</p>}
                 </div>
-                <div className="space-y-1">
+                <div className="space-y-1 md:col-span-2">
                     <Label>Registration Number</Label>
                     <Input {...field('registration_number')} placeholder="CPR/2024/XXXXX (optional)" />
                 </div>
@@ -280,8 +259,8 @@ export default function SetupPage() {
         );
 
         if (currentStep === 1) return (
-            <div className="space-y-4">
-                <div className="space-y-1">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                <div className="space-y-1 md:col-span-2">
                     <Label>Physical Address *</Label>
                     <Input {...field('physical_address')} placeholder="123 Moi Avenue, Nairobi" />
                     {errors.physical_address && <p className="text-xs text-destructive">{errors.physical_address}</p>}
@@ -290,10 +269,6 @@ export default function SetupPage() {
                     <Label>Location / City *</Label>
                     <Input {...field('location')} placeholder="Nairobi" />
                     {errors.location && <p className="text-xs text-destructive">{errors.location}</p>}
-                </div>
-                <div className="space-y-1">
-                    <Label>Postal Address</Label>
-                    <Input {...field('postal_address')} placeholder="P.O. Box 1234-00100 Nairobi (optional)" />
                 </div>
                 <div className="space-y-1">
                     <Label>County *</Label>
@@ -305,11 +280,15 @@ export default function SetupPage() {
                     </Select>
                     {errors.county_id && <p className="text-xs text-destructive">{errors.county_id}</p>}
                 </div>
+                <div className="space-y-1 md:col-span-2">
+                    <Label>Postal Address</Label>
+                    <Input {...field('postal_address')} placeholder="P.O. Box 1234-00100 Nairobi (optional)" />
+                </div>
             </div>
         );
 
         if (currentStep === 2) return (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div className="space-y-1">
                     <Label>Payroll Schedule *</Label>
                     <Select value={data.payroll_schedule} onValueChange={v => set('payroll_schedule', v)}>
@@ -335,7 +314,7 @@ export default function SetupPage() {
         );
 
         if (currentStep === 3) return (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div className="space-y-1">
                     <Label>Account Name *</Label>
                     <Input {...field('bank_account_name')} placeholder="Acme Ltd" />
@@ -358,7 +337,7 @@ export default function SetupPage() {
         );
 
         if (currentStep === 4) return (
-            <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div>
                     <Label>First Name *</Label>
                     <Input {...field('admin_firstname')} placeholder="John" />
@@ -369,7 +348,7 @@ export default function SetupPage() {
                     <Input {...field('admin_surname')} placeholder="Doe" />
                     {errors.admin_surname && <p className="text-red-500 text-xs mt-1">{errors.admin_surname}</p>}
                 </div>
-                <div>
+                <div className="md:col-span-2">
                     <Label>Personal Email *</Label>
                     <Input {...field('admin_email')} type="email" placeholder="john@personal.com" />
                     {errors.admin_email && <p className="text-red-500 text-xs mt-1">{errors.admin_email}</p>}
@@ -421,11 +400,14 @@ export default function SetupPage() {
                 <p className="text-sm text-muted-foreground mb-2">
                     Please review your details before submitting. Click <strong>Back</strong> to make changes.
                 </p>
-                <div className="rounded-lg border divide-y text-sm">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 text-sm rounded-lg border overflow-hidden">
                     {reviewRows.map(r => (
-                        <div key={r.label} className="flex justify-between px-4 py-2">
+                        <div
+                            key={r.label}
+                            className="flex justify-between gap-4 px-4 py-2.5 border-b border-border last:border-b-0 md:[&:nth-last-child(-n+2)]:border-b-0"
+                        >
                             <span className="text-muted-foreground">{r.label}</span>
-                            <span className="font-medium text-right max-w-[55%]">{r.value}</span>
+                            <span className="font-medium text-right max-w-[60%] truncate">{r.value}</span>
                         </div>
                     ))}
                 </div>
@@ -435,74 +417,71 @@ export default function SetupPage() {
 
     // ── Full render ─────────────────────────────────────────────────────────────
     return (
-        <>
-            <div className="flex flex-1 flex-col">
-                <div className="@container/main flex flex-1 flex-col gap-2">
-                    <div className="mt-4 mx-6 space-y-2">
-                        <h1 className="text-2xl font-medium">Organisation Setup</h1>
-                        <p className="text-base text-muted-foreground">
-                            Complete your organisation profile to get started.
-                        </p>
-                    </div>
-                    <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 mx-6">
-                        <div className="w-full max-w-xl">
+        <div className="flex flex-1 flex-col">
+            <div className="@container/main flex flex-1 flex-col gap-2">
+                <div className="mt-4 px-6 space-y-2">
+                    <h1 className="text-2xl font-medium">Organisation Setup</h1>
+                    <p className="text-base text-muted-foreground">
+                        Complete your organisation profile to get started.
+                    </p>
+                </div>
 
-                            {/* Wizard card — constrained width, left-aligned like other detail pages */}
-                            <div className="max-w-2xl w-full">
-                                <Card className="shadow-sm">
-                                    <CardHeader className="pb-2">
-                                        <CardTitle className="text-base">
-                                            Step {currentStep + 1} of {STEPS.length} — {STEPS[currentStep]}
-                                        </CardTitle>
-                                        <CardDescription className="text-xs">
-                                            {currentStep < 5
-                                                ? 'Fill in the required fields, then click Next.'
-                                                : 'Review everything before submitting.'}
-                                        </CardDescription>
-                                    </CardHeader>
+                <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6 px-6">
+                    <div className="w-full">
+                        <div className="space-y-1 mb-6">
+                            <h2 className="text-base font-semibold">
+                                Step {currentStep + 1} of {STEPS.length} — {STEPS[currentStep]}
+                            </h2>
+                            <p className="text-xs text-muted-foreground">
+                                {currentStep < 5
+                                    ? 'Fill in the required fields, then click Next.'
+                                    : 'Review everything before submitting.'}
+                            </p>
+                        </div>
 
-                                    <CardContent>
-                                        <StepIndicator />
+                        <div className="min-h-[280px]">
+                            {renderStep()}
+                        </div>
 
-                                        <div className="min-h-[280px]">
-                                            {renderStep()}
-                                        </div>
-
-                                        <div className="mt-8 flex justify-between gap-3">
-                                            {currentStep > 0 && (
-                                                <Button variant="outline" onClick={goBack} disabled={isSubmitting}>
-                                                    <ChevronLeft className="mr-1 h-4 w-4" /> Back
-                                                </Button>
-                                            )}
-                                            <div className="ml-auto">
-                                                {currentStep < 5 && (
-                                                    <Button
-                                                        onClick={goNext}
-                                                        className="bg-[#be2ed6] hover:bg-[#a526bc] text-white"
-                                                    >
-                                                        Next <ChevronRight className="ml-1 h-4 w-4" />
-                                                    </Button>
-                                                )}
-                                                {currentStep === 5 && (
-                                                    <Button
-                                                        onClick={handleSubmit}
-                                                        disabled={isSubmitting}
-                                                        className="bg-[#be2ed6] hover:bg-[#a526bc] text-white"
-                                                    >
-                                                        {isSubmitting
-                                                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</>
-                                                            : 'Confirm & Finish Setup'}
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </CardContent>
-                                </Card>
+                        <div className="mt-8 flex justify-between gap-3">
+                            {currentStep > 0 && (
+                                <Button variant="outline" onClick={goBack} disabled={isSubmitting}>
+                                    <ChevronLeft className="mr-1 h-4 w-4" /> Back
+                                </Button>
+                            )}
+                            <div className="ml-auto">
+                                {currentStep < 5 && (
+                                    <Button
+                                        onClick={goNext}
+                                        className="bg-[#be2ed6] hover:bg-[#a526bc] text-white"
+                                    >
+                                        Next <ChevronRight className="ml-1 h-4 w-4" />
+                                    </Button>
+                                )}
+                                {currentStep === 5 && (
+                                    <Button
+                                        onClick={handleSubmit}
+                                        disabled={isSubmitting}
+                                        className="bg-[#be2ed6] hover:bg-[#a526bc] text-white"
+                                    >
+                                        {isSubmitting
+                                            ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</>
+                                            : 'Confirm & Finish Setup'}
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
-        </>
+        </div>
+    );
+}
+
+export default function SetupPage() {
+    return (
+        <Suspense fallback={<div className="px-6 py-6 text-sm text-muted-foreground">Loading…</div>}>
+            <SetupWizard />
+        </Suspense>
     );
 }
