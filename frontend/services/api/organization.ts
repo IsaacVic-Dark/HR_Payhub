@@ -12,6 +12,7 @@ type OrganizationType = {
   postal_address: string | null;
   postal_code_id: number | null;
   county_id: number | null;
+  country_id: number | null;  
   primary_phone: string | null;
   secondary_phone: string | null;
   official_email: string | null;
@@ -92,6 +93,28 @@ interface UpdateOrganizationData {
   domain?: string;
 }
 
+interface OrganizationFilters {
+  page?: number;
+  limit?: number;
+  name?: string;
+  location?: string;
+  status?: 'active' | 'inactive' | string;
+}
+
+interface PaginationMeta {
+  current_page: number;
+  per_page: number;
+  total: number;
+  total_pages: number;
+  has_next: boolean;
+  has_prev: boolean;
+}
+
+interface OrganizationListMetadata {
+  pagination: PaginationMeta;
+  filters_applied: { name: string | null; location: string | null; status: string | null };
+}
+
 class OrganizationAPI {
   private async handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
     try {
@@ -144,6 +167,40 @@ class OrganizationAPI {
     }
 
     return headers;
+  }
+
+  /**
+   * Platform-wide list of every tenant organization. super_admin only —
+   * backend excludes the platform's own placeholder org automatically,
+   * this is never org-scoped (no organization_id param, unlike every
+   * other method on this service).
+   */
+  async getOrganizations(
+    filters: OrganizationFilters = {}
+  ): Promise<ApiResponse<OrganizationType[]>> {
+    try {
+      const params = new URLSearchParams();
+      if (filters.page) params.set("page", String(filters.page));
+      if (filters.limit) params.set("limit", String(filters.limit));
+      if (filters.name) params.set("name", filters.name);
+      if (filters.location) params.set("location", filters.location);
+      if (filters.status) params.set("status", filters.status);
+
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations?${params.toString()}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<OrganizationType[]>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to fetch organizations",
+      };
+    }
   }
 
   async getOrganizationDetails(
@@ -199,6 +256,9 @@ class OrganizationAPI {
 
 export const organizationAPI = new OrganizationAPI();
 export type {
+  OrganizationFilters, 
+  PaginationMeta, 
+  OrganizationListMetadata,
   OrganizationType,
   OrganizationStatistics,
   OrganizationMetadata,
