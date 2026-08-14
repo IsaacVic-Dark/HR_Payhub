@@ -373,11 +373,15 @@ class OvertimeApprovalController
 
         DB::raw(
             "UPDATE payrun_details
-             SET overtime_amount = overtime_amount + :amount,
-                 gross_pay = gross_pay + :amount,
+             SET overtime_amount = overtime_amount + :amount1,
+                 gross_pay = gross_pay + :amount2,
                  updated_at = NOW()
              WHERE id = :id",
-            [':amount' => $overtimeApproval->overtime_amount, ':id' => $detail[0]->id]
+            [
+                ':amount1' => $overtimeApproval->overtime_amount,
+                ':amount2' => $overtimeApproval->overtime_amount,
+                ':id'      => $detail[0]->id,
+            ]
         );
 
         $this->markIncludedInPayroll($orgId, [$overtimeApproval->id]);
@@ -689,11 +693,15 @@ class OvertimeApprovalController
 
         DB::raw(
             "UPDATE payrun_details
-             SET overtime_amount = overtime_amount + :amount,
-                 gross_pay = gross_pay + :amount,
+             SET overtime_amount = overtime_amount + :amount1,
+                 gross_pay = gross_pay + :amount2,
                  updated_at = NOW()
              WHERE id = :id",
-            [':amount' => (float) $overtime->overtime_amount, ':id' => $detail[0]->id]
+            [
+                ':amount1' => (float) $overtime->overtime_amount,
+                ':amount2' => (float) $overtime->overtime_amount,
+                ':id'      => $detail[0]->id,
+            ]
         );
 
         DB::raw(
