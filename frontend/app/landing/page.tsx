@@ -10,7 +10,7 @@ const PayrollLanding = () => {
     window.location.href = "/login";
   };
   const navigateToPortal = () => {
-    window.location.href = "https://portal.payke.com/";
+    window.location.href = "http://localhost:3000/#contact";
   };
 
   const [form, setForm] = useState({
