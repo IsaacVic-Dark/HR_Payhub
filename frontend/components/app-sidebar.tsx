@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useSearchParams } from "next/navigation";
 
 import * as React from "react";
 import {
@@ -16,6 +16,7 @@ import {
   IconHelp,
   IconFileText,
   IconReceipt,
+  IconWorld,
   IconChevronDown,
   IconChevronRight,
   IconClipboardList,
@@ -48,6 +49,60 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { useAuth } from "@/lib/AuthContext";
+
+// Mirrors the STEPS array in app/(dashboard)/setup/page.tsx — keep in sync.
+const SETUP_STEPS = [
+  "Company Details",
+  "Location",
+  "Payroll Settings",
+  "Banking",
+  "Admin Profile",
+  "Review & Submit",
+];
+
+// Reads ?step= from the URL. Isolated in its own component + Suspense
+// boundary so useSearchParams() doesn't force dynamic rendering on every
+// route that mounts the sidebar — only this small subtree opts in.
+function SetupStepsSubNav({ pathname }: { pathname: string }) {
+  const searchParams = useSearchParams();
+  const isSetupActive = pathname === "/setup" || pathname.startsWith("/setup/");
+  const raw = parseInt(searchParams.get("step") || "0", 10);
+  const activeStep = isNaN(raw) || raw < 0 || raw > SETUP_STEPS.length - 1 ? 0 : raw;
+
+  return (
+    <SidebarMenuSub>
+      {SETUP_STEPS.map((label, idx) => {
+        const isCurrent = isSetupActive && idx === activeStep;
+        const isPast = isSetupActive && idx < activeStep;
+        return (
+          <SidebarMenuSubItem key={label}>
+            <SidebarMenuSubButton
+              asChild
+              isActive={isCurrent}
+              className="hover:bg-[#be2ed6] hover:text-[#feedff] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff]"
+            >
+              <Link href={`/setup?step=${idx}`} className="flex items-center gap-2">
+                <span
+                  className={[
+                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold",
+                    isCurrent
+                      ? "bg-white text-[#be2ed6]"
+                      : isPast
+                      ? "bg-[#be2ed6] text-white"
+                      : "border border-muted-foreground/40 text-muted-foreground",
+                  ].join(" ")}
+                >
+                  {isPast ? "✓" : idx + 1}
+                </span>
+                <span>{label}</span>
+              </Link>
+            </SidebarMenuSubButton>
+          </SidebarMenuSubItem>
+        );
+      })}
+    </SidebarMenuSub>
+  );
+}
 
 const data = {
   user: {
@@ -102,46 +157,6 @@ const data = {
         },
       ],
     },
-    // {
-    //   title: "Payroll",
-    //   url: "/payroll",
-    //   items: [
-    //     {
-    //       title: "Data Entry",
-    //       url: "/payroll/data-entry",
-    //       roles: ["payroll_officer"],
-    //     },
-    //     {
-    //       title: "Adjustments",
-    //       url: "/payroll/adjustments",
-    //       roles: ["super_admin", "admin", "payroll_manager"],
-    //     },
-    //   ],
-    // },
-    // {
-    //   title: "Payments",
-    //   url: "/payments",
-    //   icon: IconCash,
-    //   roles: ["super_admin", "admin", "finance_manager"],
-    //   hasDropdown: true,
-    //   items: [
-    //     {
-    //       title: "Payment Records",
-    //       url: "/payments/records",
-    //       roles: ["super_admin", "admin", "finance_manager"],
-    //     },
-    //     {
-    //       title: "Pending Payments",
-    //       url: "/payments/pending",
-    //       roles: ["super_admin", "admin", "finance_manager"],
-    //     },
-    //     {
-    //       title: "Process Payments",
-    //       url: "/payments/process",
-    //       roles: ["super_admin", "finance_manager"],
-    //     },
-    //   ],
-    // },
     {
       title: "Payslips",
       url: "/payslips",
@@ -318,12 +333,12 @@ const data = {
 
   // System section
   systemSection: [
-    {
-      title: "Organizations",
-      url: "/organizations",
-      icon: IconBuilding,
-      roles: ["super_admin"],
-    },
+    // {
+    //   title: "Organizations",
+    //   url: "/organizations",
+    //   icon: IconBuilding,
+    //   roles: ["super_admin"],
+    // },
     {
       title: "System Settings",
       url: "/system-settings",
@@ -408,6 +423,40 @@ const data = {
       ],
     },
   ],
+
+  // Platform Administration — cross-tenant, super_admin only
+platformSection: [
+  {
+    title: "Organizations",
+    url: "/platform/organizations",
+    icon: IconBuilding,
+    roles: ["super_admin"],
+  },
+  {
+    title: "Subscriptions",
+    url: "/platform/subscriptions",
+    icon: IconCash, // imported already, currently unused
+    roles: ["super_admin"],
+  },
+  {
+    title: "Subscription Plans",
+    url: "/platform/subscription-plans",
+    icon: IconReportMoney,
+    roles: ["super_admin"],
+  },
+  {
+    title: "Countries",
+    url: "/platform/countries",
+    icon: IconWorld, // new import needed
+    roles: ["super_admin"],
+  },
+  {
+    title: "Public Holidays",
+    url: "/platform/public-holidays",
+    icon: IconCalendar,
+    roles: ["super_admin"],
+  },
+],
 
   // Others section
   othersSection: [
@@ -550,11 +599,35 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const filteredConfigSection = filterNavItems(data.configSection);
   const filteredSystemSection = filterNavItems(data.systemSection);
   const filteredOthersSection = filterNavItems(data.othersSection);
+  const filteredPlatformSection = filterNavItems(data.platformSection);
 
   const renderNavItem = (item: any) => {
     const isActive =
       pathname === item.url || pathname.startsWith(item.url + "/");
     const isOpen = openDropdowns.includes(item.title);
+
+    // Setup wizard: show the step list under "Complete Setup", always expanded.
+    if (item.title === "Complete Setup" && !setupComplete) {
+      return (
+        <SidebarMenuItem key={item.title}>
+          <SidebarMenuButton
+            asChild
+            isActive={isActive}
+            className="hover:bg-[#be2ed6] hover:text-[#feedff] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff]"
+          >
+            <Link href={item.url}>
+              <item.icon className="h-4 w-4" />
+              <span>{item.title}</span>
+            </Link>
+          </SidebarMenuButton>
+          <div className="ml-4 pl-2 mt-1">
+            <React.Suspense fallback={null}>
+              <SetupStepsSubNav pathname={pathname} />
+            </React.Suspense>
+          </div>
+        </SidebarMenuItem>
+      );
+    }
 
     if (item.hasDropdown && item.items) {
       return (
@@ -732,6 +805,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             </SidebarGroupContent>
           </SidebarGroup>
         )}
+
+        {/* Platform Administration */}
+{filteredPlatformSection.length > 0 && (
+  <SidebarGroup>
+    <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+      Platform Administration
+    </SidebarGroupLabel>
+    <SidebarGroupContent>
+      <SidebarMenu>
+        {filteredPlatformSection.map((item) => renderNavItem(item))}
+      </SidebarMenu>
+    </SidebarGroupContent>
+  </SidebarGroup>
+)}
 
         {/* Others */}
         {filteredOthersSection.length > 0 && (
