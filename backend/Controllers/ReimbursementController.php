@@ -339,15 +339,15 @@ class ReimbursementController
 
             $receiptConfig = $configs['receipt_policy'] ?? null;
             $receiptRequiredAbove = $receiptConfig['settings']['receipt_required_above'] ?? 0;
-            if (($receiptConfig['settings']['receipt_required'] ?? false) && $amountRequested > $receiptRequiredAbove) {
-                foreach ($items as $item) {
-                    if (empty($item['receipt_path'])) {
-                        $policyErrors[] = "Receipt is required for this amount";
-                        $hardFail = true;
-                        break;
-                    }
-                }
-            }
+            // if (($receiptConfig['settings']['receipt_required'] ?? false) && $amountRequested > $receiptRequiredAbove) {
+            //     foreach ($items as $item) {
+            //         if (empty($item['receipt_path'])) {
+            //             $policyErrors[] = "Receipt is required for this amount";
+            //             $hardFail = true;
+            //             break;
+            //         }
+            //     }
+            // }
 
             $paymentConfig = $configs['payment_policy'] ?? null;
             $allowedMethods = $paymentConfig['settings']['allowed_methods'] ?? null;
