@@ -20,12 +20,9 @@ class CountyController
                 return responseJson(success: false, data: null, message: "Country not found", code: 404);
             }
 
-            $page    = max(1, (int) ($_GET['page'] ?? 1));
-            $perPage = max(1, min(200, (int) ($_GET['per_page'] ?? 50)));
-            $offset  = ($page - 1) * $perPage;
-
-            $search   = $_GET['search']    ?? null;
-            $isActive = $_GET['is_active'] ?? null;
+            $search      = $_GET['search']      ?? null;
+            $isActive    = $_GET['is_active']   ?? null;
+            $withMinimal = filter_var($_GET['with_minimal'] ?? false, FILTER_VALIDATE_BOOLEAN);
 
             $where  = ["country_id = :country_id"];
             $params = [':country_id' => $countryId];
@@ -41,6 +38,25 @@ class CountyController
             }
 
             $whereClause = "WHERE " . implode(" AND ", $where);
+
+            // Minimal payload for dropdowns/selects — no pagination.
+            if ($withMinimal) {
+                $counties = DB::raw(
+                    "SELECT id, country_id, name, code FROM counties $whereClause ORDER BY name ASC",
+                    $params
+                );
+
+                return responseJson(
+                    success: true,
+                    data: $counties,
+                    message: "Counties fetched successfully",
+                    code: 200
+                );
+            }
+
+            $page    = max(1, (int) ($_GET['page'] ?? 1));
+            $perPage = max(1, min(200, (int) ($_GET['per_page'] ?? 50)));
+            $offset  = ($page - 1) * $perPage;
 
             $total = DB::raw(
                 "SELECT COUNT(*) as total FROM counties $whereClause",

@@ -37,6 +37,22 @@ class CountryController
 
             $whereClause = "WHERE " . implode(" AND ", $where);
 
+            $withMinimal = filter_var($_GET['with_minimal'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+            if ($withMinimal) {
+                $countries = DB::raw(
+                    "SELECT id, name, iso2 FROM countries $whereClause ORDER BY name ASC",
+                    $params
+                );
+
+                return responseJson(
+                    success: true,
+                    data: $countries,
+                    message: "Countries fetched successfully",
+                    code: 200
+                );
+            }
+
             $total = DB::raw(
                 "SELECT COUNT(*) as total FROM countries $whereClause",
                 $params
