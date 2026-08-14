@@ -64,6 +64,7 @@ CREATE TABLE IF NOT EXISTS `counties` (
 CREATE TABLE IF NOT EXISTS `organizations` (
   `id`                        INT           NOT NULL AUTO_INCREMENT,
   `name`                      VARCHAR(100)  NOT NULL,
+  `account_type`              ENUM('tenant','platform') NOT NULL DEFAULT 'tenant',
   `payroll_number_prefix`     VARCHAR(10)   DEFAULT 'EMP',
   `kra_pin`                   VARCHAR(11)   DEFAULT NULL,
   `nssf_number`               VARCHAR(15)   DEFAULT NULL,
@@ -111,12 +112,6 @@ CREATE TABLE IF NOT EXISTS `organizations` (
     FOREIGN KEY (`country_id`) REFERENCES `countries` (`id`) ON DELETE SET NULL
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
--- Backfill organization 221 — Kenya, county_id 47.
-UPDATE `organizations`
-SET `county_id` = 47,
-    `country_id` = 1
-WHERE `id` = 221;
 
 
 -- Dumping structure for table payhub.employees
@@ -1767,3 +1762,10 @@ VALUES
   ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Kisii', '045', 1),
   ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Nyamira', '046', 1),
   ((SELECT id FROM `countries` WHERE iso2 = 'KE'), 'Nairobi City', '047', 1);
+
+INSERT INTO `subscription_plans` (`id`, `code`, `name`, `billing_cycle`, `base_price`, `price_per_employee`, `trial_days`, `requires_card`, `max_employees`, `features`, `is_active`, `created_at`, `updated_at`) VALUES (1, 'starter_monthly', 'Starter', 'monthly', 0.00, NULL, 20, 1, 30, '["Core payroll runs", "Payslip generation", "Single pay schedule", "Basic statutory calculations (PAYE/NSSF/NHIF or local equivalents)", "CSV employee import", "Email support"]', 1, '2026-05-14 10:32:53', '2026-05-14 10:32:53');
+INSERT INTO `subscription_plans` (`id`, `code`, `name`, `billing_cycle`, `base_price`, `price_per_employee`, `trial_days`, `requires_card`, `max_employees`, `features`, `is_active`, `created_at`, `updated_at`) VALUES (2, 'professional_monthly', 'Professional', 'monthly', 30.00, 3.00, NULL, 1, 250, '["Everything in Starter", "Multi-schedule payrolls", "Automated tax filings/remittances", "Direct deposit or payrun funding", "Time and leave integration", "Reporting and analytics", "API access", "Priority support"]', 1, '2026-05-14 10:32:53', '2026-05-14 10:32:53');
+INSERT INTO `subscription_plans` (`id`, `code`, `name`, `billing_cycle`, `base_price`, `price_per_employee`, `trial_days`, `requires_card`, `max_employees`, `features`, `is_active`, `created_at`, `updated_at`) VALUES (3, 'enterprise_monthly', 'Enterprise', 'monthly', 150.00, 6.00, NULL, 1, NULL, '["Everything in Professional", "SSO/SCIM", "Role-based access and audit logs", "Custom integrations and onboarding", "Higher uptime and SLAs", "Dedicated account manager", "Custom pricing", "Advanced compliance for multi-country payrolls"]', 1, '2026-05-14 10:32:53', '2026-05-14 10:32:53');
+INSERT INTO `subscription_plans` (`id`, `code`, `name`, `billing_cycle`, `base_price`, `price_per_employee`, `trial_days`, `requires_card`, `max_employees`, `features`, `is_active`, `created_at`, `updated_at`) VALUES (4, 'starter_annual', 'Starter', 'annual', 0.00, NULL, 20, 1, 30, '["Core payroll runs", "Payslip generation", "Single pay schedule", "Basic statutory calculations (PAYE/NSSF/NHIF or local equivalents)", "CSV employee import", "Email support"]', 1, '2026-05-14 10:32:53', '2026-05-14 10:32:53');
+INSERT INTO `subscription_plans` (`id`, `code`, `name`, `billing_cycle`, `base_price`, `price_per_employee`, `trial_days`, `requires_card`, `max_employees`, `features`, `is_active`, `created_at`, `updated_at`) VALUES (5, 'professional_annual', 'Professional', 'annual', 306.00, 30.60, NULL, 1, 250, '["Everything in Starter", "Multi-schedule payrolls", "Automated tax filings/remittances", "Direct deposit or payrun funding", "Time and leave integration", "Reporting and analytics", "API access", "Priority support"]', 1, '2026-05-14 10:32:53', '2026-05-14 10:32:53');
+INSERT INTO `subscription_plans` (`id`, `code`, `name`, `billing_cycle`, `base_price`, `price_per_employee`, `trial_days`, `requires_card`, `max_employees`, `features`, `is_active`, `created_at`, `updated_at`) VALUES (6, 'enterprise_annual', 'Enterprise', 'annual', 1530.00, 61.20, NULL, 1, NULL, '["Everything in Professional", "SSO/SCIM", "Role-based access and audit logs", "Custom integrations and onboarding", "Higher uptime and SLAs", "Dedicated account manager", "Custom pricing", "Advanced compliance for multi-country payrolls"]', 1, '2026-05-14 10:32:53', '2026-05-14 10:32:53');
