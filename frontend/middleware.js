@@ -21,11 +21,12 @@ import { NextResponse } from 'next/server'
 const protectedRoutes = [
   { path: '/dashboard',    roles: ['employee', 'admin', 'super_admin'] },
   { path: '/employees',    roles: ['admin', 'super_admin'] },
-  { path: '/organization', roles: ['admin', 'super_admin'] },
+  { path: '/organization', roles: ['admin']},
   { path: '/payrun',       roles: ['admin', 'super_admin'] },
   { path: '/payments',     roles: ['admin', 'super_admin'] },
   { path: '/leaves',       roles: ['employee', 'admin', 'super_admin'] },
   { path: '/setup',        roles: ['admin'] },
+  { path: '/platform', roles: ['super_admin'] },
 ]
 
 const publicRoutes = ['/login', '/register', '/']
@@ -80,6 +81,16 @@ export function middleware(request) {
     loginUrl.searchParams.set('from', pathname)
     return NextResponse.redirect(loginUrl)
   }
+
+  // ── 3b. Wrong-role access to platform-wide (cross-tenant) routes ───────────
+// Scoped to /platform only — see note above about why the existing
+// `roles` arrays on other protectedRoutes entries aren't enforced yet.
+if (isAuthed && (pathname === '/platform' || pathname.startsWith('/platform/'))) {
+  const userRole = String(jwtData.user_type ?? '')
+  if (userRole !== 'super_admin') {
+    return NextResponse.redirect(new URL('/unauthorized', request.url))
+  }
+}
 
   // ── 4. Setup guards (only for authenticated users) ─────────────────────────
   if (isAuthed) {
