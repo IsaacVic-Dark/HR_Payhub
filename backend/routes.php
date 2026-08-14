@@ -44,6 +44,11 @@ Router::get('api/v1/organizations/{org_id}/details', OrganizationController::cla
     'OrganizationAuthorizationMiddleware'
 ]);
 
+// This lists all organization for super_Admin managament
+Router::get('api/v1/organizations', OrganizationController::class . '@index', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
 // Also update the existing organization routes to use proper authentication
 Router::get('api/v1/organizations/{id}', OrganizationController::class . '@show', [
     'AuthMiddleware',
@@ -128,12 +133,12 @@ Router::resource('api/v1/users', UserController::class, ['AuthMiddleware']);
 
 // GET /api/v1/countries?search=&is_active=&page=&per_page=
 Router::get('api/v1/countries', CountryController::class . '@index', [
-    ['AuthMiddleware', ['super_admin']],
+    // ['AuthMiddleware', ['super_admin', 'admin']],
 ]);
 
 // GET /api/v1/countries/{id}
 Router::get('api/v1/countries/{id}', CountryController::class . '@show', [
-    ['AuthMiddleware', ['super_admin']],
+    // ['AuthMiddleware', ['super_admin', 'admin']],
 ]);
 
 // POST /api/v1/countries
@@ -164,12 +169,12 @@ Router::delete('api/v1/countries/{id}', CountryController::class . '@destroy', [
 
 // GET /api/v1/countries/{country_id}/counties?search=&is_active=&page=&per_page=
 Router::get('api/v1/countries/{country_id}/counties', CountyController::class . '@index', [
-    ['AuthMiddleware', ['super_admin']],
+    // ['AuthMiddleware', ['super_admin', 'admin']],
 ]);
 
 // GET /api/v1/counties/{id}
 Router::get('api/v1/counties/{id}', CountyController::class . '@show', [
-    ['AuthMiddleware', ['super_admin']],
+    // ['AuthMiddleware', ['super_admin', 'admin']],
 ]);
 
 // POST /api/v1/countries/{country_id}/counties
