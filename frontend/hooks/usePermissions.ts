@@ -12,11 +12,11 @@ export function usePermissions() {
     getAccessiblePages: () => getAccessiblePages(userRole),
 
     // Super Admin can do everything
-    canViewEverything: userRole === 'super_admin',
+    // canViewEverything: userRole === 'super_admin',
 
     // Organization Management
-    canManageOrganization: userRole === 'super_admin',
-    canViewOrganization: userRole === 'super_admin',
+    canManageOrganization: userRole === 'admin',
+    canViewOrganization: userRole === 'admin',
 
     // Employee Management
     canManageEmployees: ['super_admin', 'admin', 'hr_manager'].includes(userRole || ''),
