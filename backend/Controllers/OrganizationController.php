@@ -161,6 +161,8 @@ class OrganizationController
             $whereClauses = [];
             $bindings = [];
 
+            $whereClauses[] = "`account_type` = 'tenant'";
+
             if ($name) {
                 $whereClauses[] = "`name` LIKE :name";
                 $bindings[':name'] = "%{$name}%";
