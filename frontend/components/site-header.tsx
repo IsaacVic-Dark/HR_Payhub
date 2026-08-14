@@ -11,14 +11,17 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { NotificationModal } from "@/components/NotificationModal";
 import { notificationService } from "@/services/api/notification";
+import { useAuth } from "@/lib/AuthContext";
 
 export function SiteHeader() {
-  
-const pathname = usePathname();
-const endpoint = pathname.split("/").filter(Boolean).pop() || "Dashboard";
-const path = endpoint.charAt(0).toUpperCase() + endpoint.slice(1);
 
-// const NotificationButton: React.FC = () => {
+  const { user } = useAuth();
+  const isSuperAdmin = user?.user_type === 'super_admin';
+
+  const pathname = usePathname();
+  const endpoint = pathname.split("/").filter(Boolean).pop() || "Dashboard";
+  const path = endpoint.charAt(0).toUpperCase() + endpoint.slice(1);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -26,7 +29,7 @@ const path = endpoint.charAt(0).toUpperCase() + endpoint.slice(1);
   // Function to fetch notification count
   const fetchUnreadCount = async () => {
     if (loading) return;
-    
+
     setLoading(true);
     try {
       const response = await notificationService.getNotifications();
@@ -38,12 +41,14 @@ const path = endpoint.charAt(0).toUpperCase() + endpoint.slice(1);
       setLoading(false);
     }
   };
-  // }
 
-  // Fetch unread count on component mount
+  // Fetch unread count on component mount — skipped for super_admin, since
+  // notifications are organization-scoped and super_admin has no org
+  // context (OrganizationAuthorizationMiddleware rejects it by design).
   useEffect(() => {
+    if (isSuperAdmin) return;
     fetchUnreadCount();
-  }, []);
+  }, [isSuperAdmin]);
 
   // Handle notification read event
   const handleNotificationRead = () => {
@@ -81,35 +86,40 @@ const path = endpoint.charAt(0).toUpperCase() + endpoint.slice(1);
                 className="pl-10 pr-4 py-2 w-full bg-gray-50 border-gray-200 focus:bg-white focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
               />
             </div>
-            {/* BellDot Icon */}
-       <Button
-        variant="ghost"
-        size="icon"
-        className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 relative"
-        onClick={handleButtonClick}
-      >
-        {hasUnreadNotifications ? (
-          <BellDot className="h-5 w-5" />
-        ) : (
-          <Bell className="h-5 w-5" />
-        )}
-        
-        {/* Notification badge for unread count */}
-        {hasUnreadNotifications && (
-          <Badge
-            variant="destructive"
-            className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs flex items-center justify-center min-w-[20px]"
-          >
-            {unreadCount > 99 ? '99+' : unreadCount}
-          </Badge>
-        )}
-      </Button>
 
-            <NotificationModal
-        open={isModalOpen}
-        onOpenChange={setIsModalOpen}
-        onNotificationRead={handleNotificationRead}
-      />
+            {/* Notification bell — hidden for super_admin (no org-scoped notifications to show) */}
+            {!isSuperAdmin && (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 relative"
+                  onClick={handleButtonClick}
+                >
+                  {hasUnreadNotifications ? (
+                    <BellDot className="h-5 w-5" />
+                  ) : (
+                    <Bell className="h-5 w-5" />
+                  )}
+
+                  {/* Notification badge for unread count */}
+                  {hasUnreadNotifications && (
+                    <Badge
+                      variant="destructive"
+                      className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs flex items-center justify-center min-w-[20px]"
+                    >
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </Badge>
+                  )}
+                </Button>
+
+                <NotificationModal
+                  open={isModalOpen}
+                  onOpenChange={setIsModalOpen}
+                  onNotificationRead={handleNotificationRead}
+                />
+              </>
+            )}
 
             {/* External Link Icon */}
             <Button
@@ -164,11 +174,6 @@ const path = endpoint.charAt(0).toUpperCase() + endpoint.slice(1);
                   +10
                 </AvatarFallback>
               </Avatar>
-
-              {/* +10 Badge */}
-              {/* <div className="flex items-center justify-center h-8 w-8 bg-gray-100 border-2 border-white ring-1 ring-gray-200 rounded-full ml-1">
-                <span className="text-xs font-medium text-gray-600">+10</span>
-              </div> */}
             </div>
 
             {/* Invite Button */}
