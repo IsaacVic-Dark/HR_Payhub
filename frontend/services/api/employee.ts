@@ -10,7 +10,14 @@ type EmployeeType = {
   // email: string;
   phone: string;
   hire_date: string;
-  job_title: string;
+  start_date: string;
+  // GET /employees and GET /employees/{id} return job_title as a nested
+  // object (joined from job_titles) — see EmployeeController::mapEmployee().
+  job_title: {
+    id: number | null;
+    title: string | null;
+    grade: string | null;
+  };
   department_id?: number;
   reports_to: number | null;
   base_salary: string;
@@ -23,8 +30,8 @@ type EmployeeType = {
   work_location: WorkLocation;
   username: string;
   personal_email?: string;
-  first_name: string;
-  middle_name: string | null;
+  firstname: string;
+  middlename: string | null;
   surname: string;
   workemail?: string | null;
 };
@@ -59,7 +66,7 @@ interface EmployeesResponseData {
 
 interface EmployeeFilters {
   department_id?: number;
-  job_title?: string;
+  job_title_id?: number;
   status?: string;
   employment_type?: string;
   work_location?: string;
@@ -77,7 +84,9 @@ interface CreateEmployeeData {
   email: string;
   phone: string;
   hire_date: string;
-  job_title: string;
+  start_date: string;
+  role: string; 
+  job_title_id: number;
   department_id: number;
   reports_to?: number;
   base_salary: string;
@@ -98,7 +107,9 @@ interface UpdateEmployeeData {
   email?: string;
   phone?: string;
   hire_date?: string;
-  job_title?: string;
+  start_date?: string;
+  role?: string; 
+  job_title_id?: number;
   department_id?: number;
   reports_to?: number;
   base_salary?: string;
@@ -156,8 +167,8 @@ class EmployeeAPI {
     if (filters.department_id) {
       params.append("department_id", filters.department_id.toString());
     }
-    if (filters.job_title) {
-      params.append("job_title", filters.job_title);
+    if (filters.job_title_id) {
+      params.append("job_title_id", filters.job_title_id.toString());
     }
     if (filters.status) {
       params.append("status", filters.status);

@@ -29,7 +29,9 @@ import {
   EmployeeType as ApiEmployeeType,
 } from "@/services/api/employee";
 import { departmentAPI } from "@/services/api/department";
+import { jobTitleAPI } from "@/services/api/job-title";
 import { formatCurrency } from "@/utils/currency";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 type EmploymentType = "full_time" | "part_time" | "contract";
@@ -41,15 +43,16 @@ export type Employee = {
   img: React.ReactNode;
   salary: number;
   status:
-    | "active"
-    | "inactive"
-    | "on_leave"
-    | "terminated"
-    | "resigned"
-    | "suspended"
-    | "probation";
+  | "active"
+  | "inactive"
+  | "on_leave"
+  | "terminated"
+  | "resigned"
+  | "suspended"
+  | "probation";
   name: string;
   position: string;
+  job_title_id?: number;
   // department: number | string;
   department_id?: number;
   p_email: string;
@@ -88,6 +91,164 @@ const workLocations = [
   { label: "Hybrid", value: "hybrid" },
 ];
 
+type MinimalJobTitle = { id: number; title: string; grade: string | null };
+
+// Cascading Job Title select — scoped to whichever department is currently
+// selected, plus an inline "+ Add new" quick-create that always attaches the
+// new title to that same department (a job title must belong to a department).
+function JobTitleField({
+  organizationId,
+  departmentId,
+  departmentName,
+  value,
+  onChange,
+  error,
+}: {
+  organizationId?: number;
+  departmentId: number | null;
+  departmentName?: string;
+  value: string;
+  onChange: (jobTitleId: string) => void;
+  error?: string;
+}) {
+  const [jobTitles, setJobTitles] = React.useState<MinimalJobTitle[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [showAdd, setShowAdd] = React.useState(false);
+  const [newTitle, setNewTitle] = React.useState("");
+  const [newGrade, setNewGrade] = React.useState("");
+  const [adding, setAdding] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!organizationId || !departmentId) {
+      setJobTitles([]);
+      return;
+    }
+    setLoading(true);
+    jobTitleAPI
+      .getJobTitlesMinimal(organizationId, { department_id: departmentId })
+      .then((res) => {
+        if (res.success && res.data) {
+          setJobTitles(
+            res.data.map((jt) => ({ id: jt.id, title: jt.title, grade: jt.grade })),
+          );
+        } else {
+          setJobTitles([]);
+        }
+      })
+      .finally(() => setLoading(false));
+  }, [organizationId, departmentId]);
+
+  const handleAddJobTitle = async () => {
+    if (!organizationId || !departmentId || !newTitle.trim()) return;
+    setAdding(true);
+    try {
+      const res = await jobTitleAPI.createJobTitle(organizationId, {
+        title: newTitle.trim(),
+        department_id: departmentId,
+        grade: newGrade.trim() || undefined,
+      });
+      if (res.success && res.data) {
+        const created = {
+          id: res.data.id,
+          title: res.data.title,
+          grade: res.data.grade,
+        };
+        setJobTitles((prev) =>
+          [...prev, created].sort((a, b) => a.title.localeCompare(b.title)),
+        );
+        onChange(created.id.toString());
+        setShowAdd(false);
+        setNewTitle("");
+        setNewGrade("");
+        toast.success("Job title added");
+      } else {
+        toast.error(res.error || "Failed to add job title");
+      }
+    } catch (err) {
+      console.error("Error creating job title:", err);
+      toast.error("An error occurred while adding the job title");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <label className="text-sm font-medium text-gray-700">
+          Job Title <span className="text-red-500">*</span>
+        </label>
+        {departmentId && (
+          <button
+            type="button"
+            onClick={() => setShowAdd((s) => !s)}
+            className="text-xs font-medium text-blue-600 hover:text-blue-700"
+          >
+            {showAdd ? "Cancel" : "+ Add new"}
+          </button>
+        )}
+      </div>
+
+      {showAdd ? (
+        <div className="space-y-2 rounded-md border border-gray-200 p-3">
+          <Input
+            placeholder="Job title name"
+            value={newTitle}
+            onChange={(e) => setNewTitle(e.target.value)}
+          />
+          <Input
+            placeholder="Grade (optional)"
+            value={newGrade}
+            onChange={(e) => setNewGrade(e.target.value)}
+          />
+          <Button
+            type="button"
+            size="sm"
+            onClick={handleAddJobTitle}
+            disabled={adding || !newTitle.trim()}
+            className="bg-blue-600 hover:bg-blue-700 w-full"
+          >
+            {adding ? "Adding..." : `Add to ${departmentName || "department"}`}
+          </Button>
+        </div>
+      ) : (
+        <>
+          <Select value={value} onValueChange={onChange} disabled={!departmentId}>
+            <SelectTrigger className={cn("w-full", error ? "border-red-500" : "")}>
+              <SelectValue
+                placeholder={
+                  !departmentId
+                    ? "Select department first"
+                    : loading
+                      ? "Loading job titles..."
+                      : "Select job title"
+                }
+              />
+            </SelectTrigger>
+            <SelectContent>
+              {jobTitles.length > 0 ? (
+                jobTitles.map((jt) => (
+                  <SelectItem key={jt.id} value={jt.id.toString()}>
+                    {jt.title}
+                    {jt.grade ? ` (${jt.grade})` : ""}
+                  </SelectItem>
+                ))
+              ) : (
+                <SelectItem value="no-job-titles" disabled>
+                  {departmentId
+                    ? "No job titles in this department yet"
+                    : "Select a department first"}
+                </SelectItem>
+              )}
+            </SelectContent>
+          </Select>
+          {error && <p className="text-xs text-red-500">{error}</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 interface EmployeeDrawerAddProps {
   children: React.ReactNode;
   employees: ApiEmployeeType[];
@@ -114,7 +275,8 @@ export function EmployeeDrawerAdd({
     workemail: "",
     phone: "",
     hire_date: new Date().toISOString().split("T")[0],
-    job_title: "",
+    start_date: new Date().toISOString().split("T")[0],
+    job_title_id: "",
     department: "",
     reports_to: "",
     base_salary: "",
@@ -138,6 +300,13 @@ export function EmployeeDrawerAdd({
     });
   }, [user?.organization_id]);
 
+  const selectedDepartmentId = formData.department
+    ? parseInt(formData.department)
+    : null;
+  const selectedDepartmentName = departments.find(
+    (d) => d.id === selectedDepartmentId,
+  )?.name;
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
@@ -155,11 +324,11 @@ export function EmployeeDrawerAdd({
     if (!formData.phone.trim()) {
       newErrors.phone = "Phone number is required";
     }
-    if (!formData.job_title.trim()) {
-      newErrors.job_title = "Job title is required";
-    }
     if (!formData.department.trim()) {
       newErrors.department = "Department is required";
+    }
+    if (!formData.job_title_id.trim()) {
+      newErrors.job_title_id = "Job title is required";
     }
     if (!formData.base_salary.trim()) {
       newErrors.base_salary = "Base salary is required";
@@ -171,6 +340,9 @@ export function EmployeeDrawerAdd({
     }
     if (!formData.hire_date.trim()) {
       newErrors.hire_date = "Hire date is required";
+    }
+    if (!formData.start_date.trim()) {
+      newErrors.start_date = "Start date is required";
     }
 
     if (!formData.employee_number.trim()) {
@@ -193,14 +365,16 @@ export function EmployeeDrawerAdd({
       // Build payload with proper types - no null values
       const payload: {
         firstname: string;
-        middle_name?: string;
+        middlename?: string;
         surname: string;
         email: string;
         employee_number: string;
         personalemail?: string;
         phone: string;
         hire_date: string;
-        job_title: string;
+        start_date: string;
+        role: string;
+        job_title_id: number;
         department_id: number;
         reports_to?: number;
         base_salary: string;
@@ -218,7 +392,11 @@ export function EmployeeDrawerAdd({
         employee_number: formData.employee_number,
         phone: formData.phone,
         hire_date: formData.hire_date,
-        job_title: formData.job_title,
+        start_date: formData.start_date,
+        // TODO: hardcoded until we build a proper role & permissions module —
+        // grab the intended role from the form/user selection once that module exists.
+        role: "employee",
+        job_title_id: parseInt(formData.job_title_id),
         department_id: parseInt(formData.department),
         base_salary: formData.base_salary,
         status: formData.status as Employee["status"], // Cast to the correct type
@@ -229,8 +407,8 @@ export function EmployeeDrawerAdd({
       };
 
       // Only add optional fields if they have values
-      if (formData.middle_name && formData.middle_name.trim()) {
-        payload.middle_name = formData.middle_name;
+      if (formData.middlename && formData.middlename.trim()) {
+        payload.middlename = formData.middlename;
       }
 
       if (formData.personalemail && formData.personalemail.trim()) {
@@ -282,7 +460,7 @@ export function EmployeeDrawerAdd({
       personalemail: "",
       phone: "",
       hire_date: new Date().toISOString().split("T")[0],
-      job_title: "",
+      job_title_id: "",
       department: "",
       reports_to: "",
       base_salary: "",
@@ -309,7 +487,12 @@ export function EmployeeDrawerAdd({
       emp.job_title.title?.toLowerCase().includes("manager"),
     ) || [];
 
-    console.log("Operations Managers:", operationsManagers);
+
+  const selectedManager = operationsManagers.find(
+    (manager) => manager.id.toString() === formData.reports_to,
+  );
+
+  console.log("Operations Managers:", operationsManagers);
 
   return (
     <>
@@ -396,9 +579,9 @@ export function EmployeeDrawerAdd({
                       <div>
                         <Input
                           placeholder="Middle Name (Optional)"
-                          value={formData.middle_name}
+                          value={formData.middlename}
                           onChange={(e) =>
-                            handleInputChange("middle_name", e.target.value)
+                            handleInputChange("middlename", e.target.value)
                           }
                         />
                       </div>
@@ -510,32 +693,17 @@ export function EmployeeDrawerAdd({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">
-                      Job Title <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      placeholder="e.g., Software Engineer"
-                      value={formData.job_title}
-                      onChange={(e) =>
-                        handleInputChange("job_title", e.target.value)
-                      }
-                      className={errors.job_title ? "border-red-500" : ""}
-                    />
-                    {errors.job_title && (
-                      <p className="text-xs text-red-500">{errors.job_title}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
                       Department <span className="text-red-500">*</span>
                     </label>
                     <Select
                       value={formData.department}
-                      onValueChange={(value) =>
-                        handleInputChange("department", value)
-                      }
+                      onValueChange={(value) => {
+                        handleInputChange("department", value);
+                        handleInputChange("job_title_id", "");
+                      }}
                     >
                       <SelectTrigger
-                        className={errors.department ? "border-red-500" : ""}
+                        className={cn("w-full", errors.department ? "border-red-500" : "")}
                       >
                         <SelectValue placeholder="Select department" />
                       </SelectTrigger>
@@ -562,6 +730,14 @@ export function EmployeeDrawerAdd({
                       </p>
                     )}
                   </div>
+                  <JobTitleField
+                    organizationId={user?.organization_id}
+                    departmentId={selectedDepartmentId}
+                    departmentName={selectedDepartmentName}
+                    value={formData.job_title_id}
+                    onChange={(id) => handleInputChange("job_title_id", id)}
+                    error={errors.job_title_id}
+                  />
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">
                       Employment Type
@@ -572,7 +748,7 @@ export function EmployeeDrawerAdd({
                         handleInputChange("employment_type", value)
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className={cn("w-full")}>
                         <SelectValue placeholder="Select type" />
                       </SelectTrigger>
 
@@ -601,7 +777,7 @@ export function EmployeeDrawerAdd({
                         handleInputChange("work_location", value)
                       }
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className={cn("w-full")}>
                         <SelectValue placeholder="Select location" />
                       </SelectTrigger>
 
@@ -633,22 +809,32 @@ export function EmployeeDrawerAdd({
                         handleInputChange("reports_to", value)
                       }
                     >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select manager" />
+                      <SelectTrigger className={cn("w-full")}>
+                        <SelectValue placeholder="Select manager">
+                          {selectedManager
+                            ? `${selectedManager.firstname}${selectedManager.middlename ? ` ${selectedManager.middlename}` : ""
+                            } ${selectedManager.surname}`
+                            : "Select manager"}
+                        </SelectValue>
                       </SelectTrigger>
 
                       <SelectContent>
-                        <SelectItem value="none">None</SelectItem>
-
                         {operationsManagers && operationsManagers.length > 0 ? (
                           operationsManagers.map((manager) => (
                             <SelectItem
                               key={manager.id}
                               value={manager.id.toString()}
                             >
-                              {/* {manager.firstname}  */}
-                              {manager.surname} -{" "}
-                              {/* {manager.job_title} */}
+                              <div className="flex flex-col">
+                                <span>
+                                  {manager.firstname}{" "}
+                                  {manager.middlename ? `${manager.middlename} ` : ""}
+                                  {manager.surname}
+                                </span>
+                                <span className="text-xs text-gray-400">
+                                  {manager.job_title.title}
+                                </span>
+                              </div>
                             </SelectItem>
                           ))
                         ) : (
@@ -658,6 +844,22 @@ export function EmployeeDrawerAdd({
                         )}
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Start Date <span className="text-red-500">*</span>
+                    </label>
+                    <Input
+                      type="date"
+                      value={formData.start_date}
+                      onChange={(e) =>
+                        handleInputChange("start_date", e.target.value)
+                      }
+                      className={errors.start_date ? "border-red-500" : ""}
+                    />
+                    {errors.start_date && (
+                      <p className="text-xs text-red-500">{errors.start_date}</p>
+                    )}
                   </div>
                 </div>
               </div>
@@ -903,7 +1105,12 @@ export function EmployeeDrawer({
                   </p>
                 </div>
 
-                {/* TODO : Add start date input field and logic*/}
+                <div>
+                  <span className="text-gray-600">Start Date</span>
+                  <p className="font-medium">
+                    {formatDate(employee.start_date)}
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -1005,7 +1212,8 @@ export function EmployeeDrawerEdit({
     workemail: employee.workemail || "",
     phone: employee.phone || "",
     hire_date: employee.hire_date || new Date().toISOString().split("T")[0],
-    job_title: employee.position || "",
+    start_date: employee.start_date || new Date().toISOString().split("T")[0],
+    job_title_id: employee.job_title_id?.toString() || "",
     department: employee.department_id?.toString() || "",
     reports_to: employee.reports_to || "",
     base_salary: employee.salary.toString() || "",
@@ -1042,6 +1250,13 @@ export function EmployeeDrawerEdit({
     }
   }, [departments, employee.department_id]);
 
+  const selectedDepartmentId = formData.department
+    ? parseInt(formData.department)
+    : null;
+  const selectedDepartmentName = departments.find(
+    (d) => d.id === selectedDepartmentId,
+  )?.name;
+
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
 
@@ -1059,11 +1274,11 @@ export function EmployeeDrawerEdit({
     if (!formData.phone.trim()) {
       newErrors.phone = "Phone number is required";
     }
-    if (!formData.job_title.trim()) {
-      newErrors.job_title = "Job title is required";
-    }
     if (!formData.department.trim()) {
       newErrors.department = "Department is required";
+    }
+    if (!formData.job_title_id.trim()) {
+      newErrors.job_title_id = "Job title is required";
     }
     if (!formData.base_salary.trim()) {
       newErrors.base_salary = "Base salary is required";
@@ -1098,7 +1313,7 @@ export function EmployeeDrawerEdit({
         workemail?: string;
         phone?: string;
         hire_date?: string;
-        job_title?: string;
+        job_title_id?: number;
         department_id?: number;
         reports_to?: number;
         base_salary?: string;
@@ -1143,10 +1358,12 @@ export function EmployeeDrawerEdit({
         payload.phone = formData.phone;
       if (formData.hire_date !== employee.hire_date)
         payload.hire_date = formData.hire_date;
-      if (formData.job_title !== employee.position)
-        payload.job_title = formData.job_title;
+      if (formData.start_date !== employee.start_date)
+        payload.start_date = formData.start_date;
       if (formData.department !== employee.department_id?.toString())
         payload.department_id = parseInt(formData.department);
+      if (formData.job_title_id !== (employee.job_title_id?.toString() || ""))
+        payload.job_title_id = parseInt(formData.job_title_id);
       if (formData.reports_to !== (employee.reports_to || "")) {
         payload.reports_to = formData.reports_to
           ? parseInt(formData.reports_to)
@@ -1388,6 +1605,18 @@ export function EmployeeDrawerEdit({
                       }
                     />
                   </div>
+                  <div className="space-y-2">
+                    <label className="text-sm font-medium text-gray-700">
+                      Start Date
+                    </label>
+                    <Input
+                      type="date"
+                      value={formData.start_date}
+                      onChange={(e) =>
+                        handleInputChange("start_date", e.target.value)
+                      }
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1400,29 +1629,14 @@ export function EmployeeDrawerEdit({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">
-                      Job Title <span className="text-red-500">*</span>
-                    </label>
-                    <Input
-                      placeholder="e.g., Software Engineer"
-                      value={formData.job_title}
-                      onChange={(e) =>
-                        handleInputChange("job_title", e.target.value)
-                      }
-                      className={errors.job_title ? "border-red-500" : ""}
-                    />
-                    {errors.job_title && (
-                      <p className="text-xs text-red-500">{errors.job_title}</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium text-gray-700">
                       Department <span className="text-red-500">*</span>
                     </label>
                     <Select
                       value={formData.department}
-                      onValueChange={(value) =>
-                        handleInputChange("department", value)
-                      }
+                      onValueChange={(value) => {
+                        handleInputChange("department", value);
+                        handleInputChange("job_title_id", "");
+                      }}
                     >
                       <SelectTrigger
                         className={errors.department ? "border-red-500" : ""}
@@ -1452,6 +1666,14 @@ export function EmployeeDrawerEdit({
                       </p>
                     )}
                   </div>
+                  <JobTitleField
+                    organizationId={user?.organization_id}
+                    departmentId={selectedDepartmentId}
+                    departmentName={selectedDepartmentName}
+                    value={formData.job_title_id}
+                    onChange={(id) => handleInputChange("job_title_id", id)}
+                    error={errors.job_title_id}
+                  />
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">
                       Employment Type
