@@ -13,6 +13,7 @@ use App\Controllers\NotificationController;
 use App\Controllers\AuthController;
 use App\Controllers\PayrollController;
 use App\Controllers\DepartmentController;
+use App\Controllers\JobTitleController;
 use App\Controllers\PayslipController;
 use App\Controllers\LoanController;
 use App\Controllers\P9Controller;
@@ -599,6 +600,45 @@ Router::post('api/v1/organizations/{org_id}/departments/{id}/assign-head', Depar
 Router::get('api/v1/organizations/{org_id}/departments/{id}/employees', DepartmentController::class . '@employees', [
     'AuthMiddleware',
     'DepartmentAuthorizationMiddleware'
+]);
+
+// Job title routes
+
+// List job titles — ?department_id=&search=&with_minimal=1&page=&per_page=
+// with_minimal=1 is what the employee drawer uses once a department is picked.
+Router::get('api/v1/organizations/{org_id}/job-titles', JobTitleController::class . '@index', [
+    'AuthMiddleware',
+    'JobTitleAuthorizationMiddleware'
+]);
+
+// Get a single job title
+Router::get('api/v1/organizations/{org_id}/job-titles/{id}', JobTitleController::class . '@show', [
+    'AuthMiddleware',
+    'JobTitleAuthorizationMiddleware'
+]);
+
+// Create a job title — admin, hr_manager only. Body: { title, department_id, grade? }
+// department_id is required. Also backs the employee drawer's inline quick-add.
+Router::post('api/v1/organizations/{org_id}/job-titles', JobTitleController::class . '@store', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'JobTitleAuthorizationMiddleware'
+]);
+
+// Update a job title — admin, hr_manager only
+Router::put('api/v1/organizations/{org_id}/job-titles/{id}', JobTitleController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'JobTitleAuthorizationMiddleware'
+]);
+
+Router::patch('api/v1/organizations/{org_id}/job-titles/{id}', JobTitleController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'JobTitleAuthorizationMiddleware'
+]);
+
+// Delete a job title (hard delete — job_titles has no is_active column) — admin, hr_manager only
+Router::delete('api/v1/organizations/{org_id}/job-titles/{id}', JobTitleController::class . '@destroy', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'JobTitleAuthorizationMiddleware'
 ]);
 
 // Leave routes with comprehensive authentication and authorization
