@@ -31,7 +31,7 @@ class EmployeeController
             // Then apply user-provided filters
             $userFilters = [
                 'department_id'   => $_GET['department_id']   ?? null,
-                'job_title'       => $_GET['job_title']       ?? null,
+                'job_title_id'    => $_GET['job_title_id']    ?? null,
                 'employee_number' => $_GET['employee_number'] ?? null,
             ];
 
@@ -69,9 +69,9 @@ class EmployeeController
                 $params[':department_id'] = $userFilters['department_id'];
             }
 
-            if (!empty($userFilters['job_title'])) {
-                $query .= " AND e.job_title = :job_title";
-                $params[':job_title'] = $userFilters['job_title'];
+            if (!empty($userFilters['job_title_id'])) {
+                $query .= " AND e.job_title_id = :job_title_id";
+                $params[':job_title_id'] = $userFilters['job_title_id'];
             }
 
             if (!empty($userFilters['employee_number'])) {
@@ -157,16 +157,16 @@ class EmployeeController
             $data = validate([
                 'user_id' => 'numeric',
                 'employee_number' => 'required,string',
-                'first_name' => 'required,string',
-                'middle_name' => 'string',
+                'firstname' => 'required,string',
+                'middlename' => 'string',
                 'surname' => 'required,string',
-                'personal_email' => 'email',
+                'personalemail' => 'required,email',
                 'workemail' => 'email',
                 'phone' => 'string',
                 'hire_date' => 'required,string',
                 'start_date' => 'required,string',
                 'role' => 'required,string',
-                'job_title' => 'string',
+                'job_title_id' => 'numeric',
                 'department_id' => 'numeric',
                 'reports_to' => 'required,numeric',
                 'base_salary' => 'required,numeric',
@@ -239,6 +239,28 @@ class EmployeeController
                         message: "Department not found or does not belong to this organization",
                         code: 400,
                         errors: ['department_id' => 'Invalid department_id']
+                    );
+                }
+            }
+
+            // Validate job_title_id belongs to this organization, and — if a
+            // department_id was also given — that the title belongs to that department
+            if (!empty($data['job_title_id'])) {
+                $jtConditions = "id = :jt_id AND organization_id = :org_id";
+                $jtParams = [':jt_id' => $data['job_title_id'], ':org_id' => $orgId];
+
+                if (!empty($data['department_id'])) {
+                    $jtConditions .= " AND department_id = :dept_id2";
+                    $jtParams[':dept_id2'] = $data['department_id'];
+                }
+
+                $jobTitle = DB::raw("SELECT id FROM job_titles WHERE $jtConditions LIMIT 1", $jtParams);
+                if (empty($jobTitle)) {
+                    return responseJson(
+                        success: false,
+                        message: "Job title not found, does not belong to this organization, or does not belong to the selected department",
+                        code: 400,
+                        errors: ['job_title_id' => 'Invalid job_title_id']
                     );
                 }
             }
@@ -321,12 +343,12 @@ class EmployeeController
                 $workemail = $data['workemail'];
 
                 $insertEmployeeSQL = "INSERT INTO employees (
-                    organization_id, user_id, has_user, employee_number, phone,
-                    hire_date, start_date, job_title, department_id, reports_to,
+                    organization_id, user_id, has_user, employee_number, firstname, middlename, surname,
+                    phone, hire_date, start_date, job_title_id, department_id, reports_to,
                     base_salary, bank_account_number, tax_id, workemail, personalemail, created_at
                 ) VALUES (
-                    :org_id, :user_id, :has_user, :employee_number, :phone,
-                    :hire_date, :start_date, :job_title, :department_id, :reports_to,
+                    :org_id, :user_id, :has_user, :employee_number, :firstname, :middlename, :surname,
+                    :phone, :hire_date, :start_date, :job_title_id, :department_id, :reports_to,
                     :base_salary, :bank_account_number, :tax_id, :workemail, :personalemail, NOW()
                 )";
 
@@ -335,16 +357,20 @@ class EmployeeController
                     ':user_id'             => $user_id,
                     ':has_user'            => $hasUser ? 1 : 0,
                     ':employee_number'     => $data['employee_number'],
+                    ':firstname'           => $data['firstname'],
+                    ':middlename'          => $data['middlename'] ?? null,
+                    ':surname'             => $data['surname'],
                     ':phone'               => $data['phone'],
                     ':hire_date'           => $data['hire_date'],
                     ':start_date'          => $data['start_date'] ?? null,
-                    ':job_title'           => $data['job_title'],
+                    ':job_title_id'        => $data['job_title_id'] ?? null,
                     ':department_id'       => $data['department_id'] ?? null,
                     ':reports_to'          => $data['reports_to'],
                     ':base_salary'         => $data['base_salary'],
                     ':bank_account_number' => $data['bank_account_number'],
                     ':tax_id'              => $data['tax_id'],
                     ':workemail'           => $workemail,
+                    ':personalemail'       => $data['personalemail'],
                 ]);
 
 
@@ -526,12 +552,15 @@ class EmployeeController
                 );
             }
 
-            // Send welcome email
-            $mailSent = mail(
-                $result[0]->email,
-                "Welcome to HR Payhub",
-                "Hello {$result[0]->first_name},\n\nYour account has been created successfully.\n\nEmployee Number: {$result[0]->employee_number}\nUsername: {$result[0]->username}\nEmail: {$result[0]->email}\nTemporary Password: password\n\nPlease change your password after your first login.\n\nBest regards,\nHR Payhub Team"
-            );
+            // Send welcome email — only when a user account (with login credentials) was actually created
+            $mailSent = false;
+            if ($hasUser && !empty($result[0]->email)) {
+                $mailSent = mail(
+                    $result[0]->email,
+                    "Welcome to HR Payhub",
+                    "Hello {$result[0]->firstname},\n\nYour account has been created successfully.\n\nEmployee Number: {$result[0]->employee_number}\nUsername: {$result[0]->username}\nEmail: {$result[0]->email}\nTemporary Password: password\n\nPlease change your password after your first login.\n\nBest regards,\nHR Payhub Team"
+                );
+            }
 
             return responseJson(
                 success: true,
@@ -660,7 +689,7 @@ class EmployeeController
             }
             // Managers can update team members' basic info but not financial data
             elseif ($user['user_type'] === 'department_manager') {
-                $allowedFields = ['phone', 'job_title', 'department'];
+                $allowedFields = ['phone', 'job_title_id', 'department_id'];
             }
             // Payroll can only update payroll-related fields
             elseif (in_array($user['user_type'], ['payroll_manager', 'payroll_officer'])) {
