@@ -39,7 +39,7 @@ class DepartmentController
             $withMinimal = isset($_GET['with_minimal']) && $_GET['with_minimal'] == '1';
 
             // Optional filters
-            $isActive = isset($_GET['is_active']) ? (int) $_GET['is_active'] : null;
+            $isActive = isset($_GET['is_active']) ? (int) $_GET['is_active'] : 1;
             $search = $_GET['search'] ?? null;
 
             // Build conditions
