@@ -265,7 +265,7 @@ function SetupWizard() {
                     <Input {...field('physical_address')} placeholder="123 Moi Avenue, Nairobi" />
                     {errors.physical_address && <p className="text-xs text-destructive">{errors.physical_address}</p>}
                 </div>
-                <div className="space-y-1">
+                {/* <div className="space-y-1">
                     <Label>Location / City *</Label>
                     <Input {...field('location')} placeholder="Nairobi" />
                     {errors.location && <p className="text-xs text-destructive">{errors.location}</p>}
@@ -279,7 +279,7 @@ function SetupWizard() {
                         </SelectContent>
                     </Select>
                     {errors.county_id && <p className="text-xs text-destructive">{errors.county_id}</p>}
-                </div>
+                </div> */}
                 <div className="space-y-1 md:col-span-2">
                     <Label>Postal Address</Label>
                     <Input {...field('postal_address')} placeholder="P.O. Box 1234-00100 Nairobi (optional)" />
