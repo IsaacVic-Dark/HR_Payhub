@@ -79,7 +79,6 @@ CREATE TABLE IF NOT EXISTS `organizations` (
   `primary_phone`             VARCHAR(20)   DEFAULT NULL,
   `secondary_phone`           VARCHAR(20)   DEFAULT NULL,
   `official_email`            VARCHAR(255)  DEFAULT NULL,
-  `location`                  VARCHAR(255)  DEFAULT NULL,
   `logo_url`                  VARCHAR(255)  DEFAULT NULL,
   `currency`                  VARCHAR(10)   DEFAULT 'KES',
   `payroll_schedule`          ENUM('Monthly','Bi-Monthly','Weekly') DEFAULT 'Monthly',
