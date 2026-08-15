@@ -22,7 +22,8 @@ class RegistrationController
         $username    = trim($body['username']     ?? '');
         $password    = $body['password']          ?? '';
         $phone       = trim($body['phone']        ?? '');
-        $country     = trim($body['country']      ?? '');
+        $countryId   = isset($body['country_id']) ? (int) $body['country_id'] : 0;
+        $countyId    = isset($body['county_id'])  ? (int) $body['county_id']  : 0;
         $companyName = trim($body['company_name'] ?? '');
 
         // Email
@@ -55,8 +56,35 @@ class RegistrationController
         }
 
         // Country
-        if (empty($country)) {
-            $errors['country'] = 'Country is required.';
+        $countryRow = null;
+        if (empty($countryId)) {
+            $errors['country_id'] = 'Country is required.';
+        } else {
+            $countryRows = DB::raw(
+                'SELECT id FROM countries WHERE id = ? AND is_active = 1',
+                [$countryId]
+            );
+            if (empty($countryRows)) {
+                $errors['country_id'] = 'Selected country is invalid.';
+            } else {
+                $countryRow = (array) $countryRows[0];
+            }
+        }
+
+        // County (only checked if country itself was valid)
+        $countyRow = null;
+        if (empty($countyId)) {
+            $errors['county_id'] = 'County is required.';
+        } elseif ($countryRow) {
+            $countyRows = DB::raw(
+                'SELECT id FROM counties WHERE id = ? AND country_id = ? AND is_active = 1',
+                [$countyId, $countryId]
+            );
+            if (empty($countyRows)) {
+                $errors['county_id'] = 'Selected county does not belong to the selected country.';
+            } else {
+                $countyRow = (array) $countyRows[0];
+            }
         }
 
         // Company name
@@ -122,7 +150,8 @@ class RegistrationController
         try {
             DB::transaction(function () use (
                 $companyName,
-                $country,
+                $countryId,
+                $countyId,
                 $phone,
                 $email,
                 $username,
@@ -142,7 +171,8 @@ class RegistrationController
                 //      It returns void, so get the new ID with DB::lastInsertId().
                 DB::table('organizations')->insert([
                     'name'           => $companyName,
-                    'location'       => $country,
+                    'country_id'     => $countryId,
+                    'county_id'      => $countyId,
                     'primary_phone'  => $phone,
                     'official_email' => $email,
                 ]);
