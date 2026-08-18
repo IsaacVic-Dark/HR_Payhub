@@ -242,6 +242,25 @@ Router::get('api/v1/organizations/{org_id}/employees/{id}/financial-data', Emplo
     'EmployeeAuthorizationMiddleware'
 ]);
 
+// ── Employee bulk import/export ─────────────────────────────────────────────
+// Field definitions for the import mapping wizard
+Router::get('api/v1/organizations/{org_id}/employees/import/fields', EmployeeController::class . '@importFields', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'EmployeeAuthorizationMiddleware'
+]);
+
+// Bulk create/update employees from an uploaded, pre-mapped CSV
+Router::post('api/v1/organizations/{org_id}/employees/import', EmployeeController::class . '@import', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'EmployeeAuthorizationMiddleware'
+]);
+
+// Download all employees as CSV
+Router::get('api/v1/organizations/{org_id}/employees/export', EmployeeController::class . '@export', [
+    ['AuthMiddleware', ['admin', 'hr_manager']],
+    'EmployeeAuthorizationMiddleware'
+]);
+
 // Payrun routes with comprehensive authentication and authorization
 Router::post('api/v1/organizations/{org_id}/payruns', PayrunController::class . '@store', [
     'AuthMiddleware',
