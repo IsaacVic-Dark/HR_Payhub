@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { PayrunDetailType } from "@/services/api/payrun-detail";
 import { User, DollarSign, Receipt, Briefcase } from "lucide-react";
-import {formatCurrency} from "@/utils/currency";
+import { formatCurrency } from "@/utils/currency";
 
 interface PayrunDetailDrawerProps {
   open: boolean;
@@ -29,11 +29,12 @@ export function PayrunDetailDrawer({
   return (
     <Drawer open={open} onOpenChange={onOpenChange} direction="right">
       <DrawerContent
+        data-vaul-no-drag
         className="h-full min-w-xl ml-auto bg-white"
         onInteractOutside={() => onOpenChange(false)}
         onEscapeKeyDown={() => onOpenChange(false)}
       >
-        <DrawerHeader className="border-b">
+        <DrawerHeader className="select-text border-b">
           <div className="flex items-center space-x-3">
             <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
               <User className="h-6 w-6 text-blue-600" />
@@ -49,7 +50,7 @@ export function PayrunDetailDrawer({
           </div>
         </DrawerHeader>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+        <div className="select-text flex-1 overflow-y-auto p-6 space-y-6">
           {loading && (
             <div className="flex items-center justify-center py-16">
               <div className="text-gray-400 text-sm">Loading detail...</div>
@@ -110,6 +111,14 @@ export function PayrunDetailDrawer({
                   <div>
                     <span className="text-gray-600">Commission</span>
                     <p className="font-medium">{formatCurrency(detail.commission_amount)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Taxable Reimbursement</span>
+                    <p className="font-medium">{formatCurrency(detail.taxable_reimbursement)}</p>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Non-taxable Reimbursement</span>
+                    <p className="font-medium">{formatCurrency(detail.nontaxable_reimbursement)}</p>
                   </div>
                   <div className="col-span-2 pt-2 border-t flex items-center justify-between">
                     <span className="text-gray-600 font-medium">Gross Pay</span>
@@ -175,7 +184,7 @@ export function PayrunDetailDrawer({
           )}
         </div>
 
-        <DrawerFooter className="border-t p-6">
+        <DrawerFooter className="select-text border-t p-6">
           <DrawerClose asChild>
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Close
