@@ -183,34 +183,5 @@ class PayRun {
         return $stmt->fetchAll(PDO::FETCH_ASSOC);
     }
 }
-
-// payrun_create.php - Create Pay Run Page
-session_start();
-
-
-// Check admin access
-// if (!isset($_SESSION['user_role']) || $_SESSION['user_role'] !== 'admin') {
-//     header('Location: login.php');
-//     exit;
-// }
-
-$id = isset($_SESSION['user']['UserID']) ? $_SESSION['user']['UserID'] : null;
-
-$payrun = new PayRun($pdo, $id);
-
-if ($_POST) {
-    $data = [
-        'payrun_name' => $_POST['payrun_name'],
-        'pay_period_start' => $_POST['pay_period_start'],
-        'pay_period_end' => $_POST['pay_period_end'],
-        'pay_frequency' => $_POST['pay_frequency'] ?? 'monthly'
-    ];
-    
-    if ($payrun->createPayRun($data)) {
-        $message = "Pay run created successfully!";
-    } else {
-        $error = "Failed to create pay run.";
-    }
-}
 ?>
 
