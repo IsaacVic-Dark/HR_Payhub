@@ -118,6 +118,14 @@ function customErrorHandler($severity, $message, $file, $line, $context = []) {
         return false;
     }
 
+        $fatal = in_array($severity, [E_ERROR, E_CORE_ERROR, E_COMPILE_ERROR, E_PARSE, E_USER_ERROR], true);
+
+    if (!$fatal) {
+        // Log and let execution continue, like PHP's default warning behavior.
+        error_log("[$severity] $message in $file on line $line");
+        return true;
+    }
+
     // Get error type name
     $errorTypes = [
         E_ERROR => 'Fatal Error',
