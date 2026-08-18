@@ -120,10 +120,23 @@ function calculateProgressiveTax(float $taxableIncome): float
 /**
  * Full net-pay calculation for a single employee.
  *
- * @param float $basicSalary     Employee's basic (base) salary
- * @param float $grossPay        Total gross: basic + overtime + bonuses + commissions
- * @param array $config          Result of loadTaxConfig()
- * @param float $extraDeductions Any additional voluntary/org deductions already summed
+ * @param float $basicSalary          Employee's basic (base) salary
+ * @param float $grossPay             Total gross: basic + overtime + bonuses + commissions
+ *                                     + benefits/per-diems + taxable & non-taxable reimbursements.
+ *                                     Must already include $taxableReimbursement and any
+ *                                     non-taxable reimbursement amount — this function does not
+ *                                     add reimbursements to gross itself, it only decides how much
+ *                                     of what's already in $grossPay is subject to PAYE.
+ * @param array $config               Result of loadTaxConfig()
+ * @param float $extraDeductions      Any additional voluntary/org deductions already summed
+ * @param float $taxableReimbursement Portion of $grossPay that came from *taxable* reimbursement
+ *                                    claims (payrun_details.taxable_reimbursement). Added to the
+ *                                    PAYE taxable base. Non-taxable reimbursements are deliberately
+ *                                    NOT passed here — they still reach net pay via $grossPay, just
+ *                                    without ever being taxed.
+ *                                    NOTE: reimbursements (taxable or not) are expense repayments,
+ *                                    not salary, so — unlike PAYE — they never enter the NSSF, SHIF,
+ *                                    or Housing Levy bases, which remain basic-salary-only per KRA rules.
  *
  * @return array  Detailed breakdown of all figures
  */
@@ -131,19 +144,23 @@ function calculateNetPay(
     float $basicSalary,
     float $grossPay,
     array $config,
-    float $extraDeductions = 0.0
+    float $extraDeductions = 0.0,
+    float $taxableReimbursement = 0.0
 ): array {
     if ($basicSalary <= 0) {
         throw new \InvalidArgumentException('Basic salary must be greater than zero');
     }
 
-    // Statutory deductions — all based on basic salary per KRA rules
+    // Statutory deductions — all based on basic salary per KRA rules.
+    // Reimbursements never touch NSSF/SHIF/Housing Levy, taxable or not.
     $nssf         = calculateNSSF($basicSalary, $config);
     $shif         = $basicSalary * $config['shif_rate'];
     $housingLevy  = $basicSalary * $config['housing_levy_rate'];
 
-    // PAYE taxable income = basic − NSSF − SHIF − Housing Levy
-    $taxableIncome  = $basicSalary - $nssf - $shif - $housingLevy;
+    // PAYE taxable income = basic − NSSF − SHIF − Housing Levy + taxable reimbursements.
+    // Non-taxable reimbursements are excluded here — they still reach net pay through
+    // $grossPay without ever being taxed.
+    $taxableIncome  = $basicSalary - $nssf - $shif - $housingLevy + $taxableReimbursement;
     $taxBeforeRelief = calculateProgressiveTax($taxableIncome);
     $paye           = max(0.0, $taxBeforeRelief - $config['personal_relief']);
 
@@ -153,8 +170,9 @@ function calculateNetPay(
 
     return [
         // Earnings
-        'basic_salary'      => round($basicSalary, 2),
-        'gross_pay'         => round($grossPay, 2),
+        'basic_salary'          => round($basicSalary, 2),
+        'gross_pay'             => round($grossPay, 2),
+        'taxable_reimbursement' => round($taxableReimbursement, 2),
 
         // Statutory deductions
         'nssf'              => round($nssf, 2),
