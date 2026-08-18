@@ -574,7 +574,7 @@ class EmployeeController
                 ],
                 code: 201
             );
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             error_log("Employee store error: " . $e->getMessage());
             return responseJson(
                 success: false,
@@ -1271,4 +1271,570 @@ class EmployeeController
             return [];
         }
     }
+
+// ─── GET /organizations/{org_id}/employees/import/fields ──────────────────
+
+public function importFields($orgId)
+{
+    if (!is_numeric($orgId)) {
+        return responseJson(success: false, message: "Invalid organization ID", code: 400);
+    }
+
+    return responseJson(
+        success: true,
+        data: [
+            'module' => 'employees',
+            'fields' => $this->importFieldDefinitions(),
+        ],
+        message: "Import field definitions for employees",
+        code: 200
+    );
+}
+
+// ─── POST /organizations/{org_id}/employees/import ─────────────────────────
+
+/**
+ * WHY THIS IS A SINGLE PASS NOW (re: "two-pass" question):
+ *
+ * The earlier draft accepted `reports_to` as a manager's *employee_number*
+ * (a business identifier, e.g. "BAY-2026-004"). That created an ordering
+ * problem: if employee A (row 2) reports to employee B (row 40), B's
+ * database `id` doesn't exist yet when we process row 2 — B hasn't been
+ * inserted. A "two-pass" approach solved this by first inserting/updating
+ * every row (so every employee_number is guaranteed to have a real id
+ * *somewhere* in the map), then doing a second loop just to resolve and
+ * write `reports_to`, regardless of what order rows appeared in the file.
+ *
+ * Now that reports_to is a raw numeric employee `id` (per your request),
+ * that ordering problem mostly goes away: an id can only point at a row
+ * that ALREADY has that id — i.e. either an employee that existed before
+ * this import, or one created earlier in this same loop. So we validate
+ * reports_to against a running set of "known valid ids for this org"
+ * (pre-loaded existing ids + newly inserted ones as we go) in one single
+ * pass. The one remaining limitation: if a manager appears LATER in the
+ * same file than their report, that row will fail with "unknown
+ * reports_to id" — for a brand-new org chart, list managers before their
+ * reports in the CSV. (Once we implement name-based reports_to lookup by
+ * employee_number, per the TODO, we can reintroduce a second pass to lift
+ * this restriction.)
+ */
+public function import($orgId)
+{
+    try {
+        $user = \App\Middleware\AuthMiddleware::getCurrentUser();
+        if (!in_array($user['user_type'], ['admin', 'hr_manager'])) {
+            return responseJson(success: false, message: "Not permitted to import employees", code: 403);
+        }
+
+        if (!is_numeric($orgId)) {
+            return responseJson(success: false, message: "Invalid organization ID", code: 400);
+        }
+
+        if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
+            return responseJson(success: false, message: "No file uploaded, or upload failed", code: 400);
+        }
+
+        $replaceExisting = filter_var($_POST['replace_existing'] ?? false, FILTER_VALIDATE_BOOLEAN);
+
+        $handle = fopen($_FILES['file']['tmp_name'], 'r');
+        if ($handle === false) {
+            return responseJson(success: false, message: "Could not read uploaded file", code: 400);
+        }
+
+        $headers = fgetcsv($handle);
+        if ($headers === false) {
+            fclose($handle);
+            return responseJson(success: false, message: "File is empty or not a valid CSV", code: 400);
+        }
+        $headers = array_map(fn($h) => strtolower(trim((string) $h)), $headers);
+
+        $fieldDefs      = $this->importFieldDefinitions();
+        $requiredFields = array_column(array_filter($fieldDefs, fn($f) => $f['required']), 'name');
+
+        $employeeNumbers = $this->loadEmployeeNumberLookup($orgId); // employee_number => id
+        $validEmployeeIds = array_flip(array_values($employeeNumbers)); // id => true, for reports_to checks
+        $validDepartmentIds = $this->loadValidIds('departments', $orgId);
+        $validJobTitleIds   = $this->loadValidIds('job_titles', $orgId);
+
+        // Draft payrun (if any) is org-level, not per-row — fetch once.
+        $draftPayrun = DB::raw(
+            "SELECT id, pay_period_start, pay_period_end FROM payruns
+             WHERE organization_id = :org_id AND status = 'draft' AND deleted_at IS NULL
+             ORDER BY pay_period_start DESC LIMIT 1",
+            [':org_id' => $orgId]
+        );
+        $draftPayrun = $draftPayrun[0] ?? null;
+
+        $imported   = 0;
+        $updated    = 0;
+        $skipped    = 0;
+        $errors     = [];      // string[]
+        $duplicates = [];      // [{row, employee_number}] for the frontend to build a resolution UI
+        $rowNum     = 1;       // header row = 1
+
+        while (($row = fgetcsv($handle)) !== false) {
+            $rowNum++;
+
+            if (count(array_filter($row, fn($v) => trim((string) $v) !== '')) === 0) {
+                continue; // skip blank rows
+            }
+
+            $record = [];
+            foreach ($headers as $i => $key) {
+                $record[$key] = $row[$i] ?? null;
+            }
+
+            $empNumber = trim((string) ($record['employee_number'] ?? ''));
+            $rowLabel  = "Row {$rowNum}" . ($empNumber !== '' ? " ({$empNumber})" : '');
+            $rowErrors = [];
+
+            foreach ($requiredFields as $reqField) {
+                if (trim((string) ($record[$reqField] ?? '')) === '') {
+                    $rowErrors[] = "missing required field '{$reqField}'";
+                }
+            }
+
+            if (!empty($record['personalemail']) && !filter_var($record['personalemail'], FILTER_VALIDATE_EMAIL)) {
+                $rowErrors[] = "invalid personalemail";
+            }
+            if (!empty($record['workemail']) && !filter_var($record['workemail'], FILTER_VALIDATE_EMAIL)) {
+                $rowErrors[] = "invalid workemail";
+            }
+            if (!empty($record['base_salary']) && !is_numeric($record['base_salary'])) {
+                $rowErrors[] = "base_salary must be numeric";
+            }
+
+            $hireTs = !empty($record['hire_date']) ? strtotime($record['hire_date']) : false;
+            if (!empty($record['hire_date']) && $hireTs === false) {
+                $rowErrors[] = "invalid hire_date";
+            }
+            $startTs = !empty($record['start_date']) ? strtotime($record['start_date']) : false;
+            if (!empty($record['start_date']) && $startTs === false) {
+                $rowErrors[] = "invalid start_date";
+            }
+
+            $allowedEmploymentTypes = ['full_time', 'part_time', 'contract'];
+            if (!empty($record['employment_type']) && !in_array($record['employment_type'], $allowedEmploymentTypes, true)) {
+                $rowErrors[] = "employment_type must be one of: " . implode(', ', $allowedEmploymentTypes);
+            }
+            $allowedWorkLocations = ['on-site', 'hybrid', 'remote'];
+            if (!empty($record['work_location']) && !in_array($record['work_location'], $allowedWorkLocations, true)) {
+                $rowErrors[] = "work_location must be one of: " . implode(', ', $allowedWorkLocations);
+            }
+            $allowedStatuses = ['active', 'on_leave', 'on_probation', 'suspended', 'resigned', 'terminated', 'retired', 'deceased'];
+            if (!empty($record['status']) && !in_array($record['status'], $allowedStatuses, true)) {
+                $rowErrors[] = "status must be one of: " . implode(', ', $allowedStatuses);
+            }
+
+            // TODO: currently numeric-ID-only. Add name-based lookup (e.g.
+            // "Engineering" -> department_id) once that's prioritized —
+            // loadNameLookup() below is a ready-made helper for that.
+            $departmentId = null;
+            if (!empty($record['department_id'])) {
+                if (!is_numeric($record['department_id']) || !isset($validDepartmentIds[(int) $record['department_id']])) {
+                    $rowErrors[] = "department_id '{$record['department_id']}' does not exist in this organization";
+                } else {
+                    $departmentId = (int) $record['department_id'];
+                }
+            }
+
+            $jobTitleId = null;
+            if (!empty($record['job_title_id'])) {
+                if (!is_numeric($record['job_title_id']) || !isset($validJobTitleIds[(int) $record['job_title_id']])) {
+                    $rowErrors[] = "job_title_id '{$record['job_title_id']}' does not exist in this organization";
+                } else {
+                    $jobTitleId = (int) $record['job_title_id'];
+                }
+            }
+
+            $reportsTo = null;
+            if (!empty($record['reports_to'])) {
+                if (!is_numeric($record['reports_to']) || !isset($validEmployeeIds[(int) $record['reports_to']])) {
+                    $rowErrors[] = "reports_to id '{$record['reports_to']}' does not exist yet (must already exist, or appear earlier in this file)";
+                } else {
+                    $reportsTo = (int) $record['reports_to'];
+                }
+            }
+
+            if (!empty($rowErrors)) {
+                $errors[] = "{$rowLabel}: " . implode('; ', $rowErrors);
+                $skipped++;
+                continue;
+            }
+
+            $existingId = $employeeNumbers[$empNumber] ?? null;
+
+            if ($existingId && !$replaceExisting) {
+                $duplicates[] = ['row' => $rowNum, 'employee_number' => $empNumber];
+                $errors[] = "{$rowLabel}: employee_number already exists (enable 'replace existing' to update)";
+                $skipped++;
+                continue;
+            }
+
+            $payload = [
+                'employee_number'     => $empNumber,
+                'firstname'           => trim($record['firstname']),
+                'middlename'          => !empty($record['middlename']) ? trim($record['middlename']) : null,
+                'surname'             => trim($record['surname']),
+                'personalemail'       => trim($record['personalemail']),
+                'workemail'           => !empty($record['workemail']) ? trim($record['workemail']) : null,
+                'phone'               => !empty($record['phone']) ? trim($record['phone']) : null,
+                'hire_date'           => date('Y-m-d', $hireTs),
+                'start_date'          => date('Y-m-d', $startTs),
+                'department_id'       => $departmentId,
+                'job_title_id'        => $jobTitleId,
+                'reports_to'          => $reportsTo,
+                'base_salary'         => (float) $record['base_salary'],
+                'bank_account_number' => !empty($record['bank_account_number']) ? trim($record['bank_account_number']) : null,
+                'bank_name'           => !empty($record['bank_name']) ? trim($record['bank_name']) : null,
+                'tax_id'              => !empty($record['tax_id']) ? trim($record['tax_id']) : null,
+                'employment_type'     => !empty($record['employment_type']) ? $record['employment_type'] : 'full_time',
+                'work_location'       => !empty($record['work_location']) ? $record['work_location'] : 'on-site',
+                'status'              => !empty($record['status']) ? $record['status'] : 'active',
+            ];
+
+            try {
+                if ($existingId) {
+                    $this->updateEmployeeRow($existingId, $payload, $orgId);
+                    $employeeId = $existingId;
+                    $updated++;
+                } else {
+                    $employeeId = $this->insertEmployeeRow($payload, $orgId);
+                    $employeeNumbers[$empNumber] = $employeeId;
+                    $validEmployeeIds[$employeeId] = true; // so later rows can report_to this one
+                    $imported++;
+
+                    // Mid-payrun-period proration — only for newly created
+                    // employees, mirroring store()'s behavior exactly.
+                    if ($draftPayrun) {
+                        $this->applyDraftPayrunProration($orgId, $employeeId, $payload['start_date'], $payload['base_salary'], $draftPayrun);
+                    }
+                }
+            } catch (\Throwable $e) {
+                $errors[] = "{$rowLabel}: " . $e->getMessage();
+                $skipped++;
+            }
+        }
+
+        fclose($handle);
+
+        return responseJson(
+            success: true,
+            data: [
+                'imported'   => $imported,
+                'updated'    => $updated,
+                'skipped'    => $skipped,
+                'duplicates' => $duplicates,
+                'errors'     => $errors,
+            ],
+            message: "Import complete: {$imported} created, {$updated} updated, {$skipped} skipped",
+            code: 200
+        );
+    } catch (\Throwable $e) {
+        error_log("Employee import error: " . $e->getMessage());
+        return responseJson(success: false, message: "Import failed: " . $e->getMessage(), code: 500);
+    }
+}
+
+// ─── GET /organizations/{org_id}/employees/export ───────────────────────────
+
+public function export($orgId)
+{
+    if (!is_numeric($orgId)) {
+        return responseJson(success: false, message: "Invalid organization ID", code: 400);
+    }
+
+    $user = \App\Middleware\AuthMiddleware::getCurrentUser();
+    if (!in_array($user['user_type'], ['admin', 'hr_manager'])) {
+        return responseJson(success: false, message: "Not permitted to export employees", code: 403);
+    }
+
+    $format = strtolower($_GET['format'] ?? 'csv');
+    if ($format !== 'csv') {
+        return responseJson(
+            success: false,
+            message: "Unsupported export format '{$format}'. Only 'csv' is currently supported.",
+            code: 400
+        );
+    }
+
+    $rows = DB::raw(
+        "SELECT
+            employee_number, firstname, middlename, surname,
+            personalemail, workemail, phone,
+            hire_date, start_date,
+            department_id, job_title_id, reports_to,
+            base_salary, bank_account_number, bank_name, tax_id,
+            employment_type, work_location, status
+         FROM employees
+         WHERE organization_id = :org_id
+         ORDER BY employee_number",
+        [':org_id' => $orgId]
+    );
+
+    // Same column set/order as importFieldDefinitions() so an export can be
+    // re-imported unmodified.
+    $columns = array_column($this->importFieldDefinitions(), 'name');
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="employees-export-' . date('Y-m-d') . '.csv"');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+
+    $out = fopen('php://output', 'w');
+    fputcsv($out, $columns);
+    foreach ($rows as $row) {
+        $line = [];
+        foreach ($columns as $col) {
+            $line[] = $row->$col ?? '';
+        }
+        fputcsv($out, $line);
+    }
+    fclose($out);
+    exit;
+}
+
+// ─── Private helpers ─────────────────────────────────────────────────────────
+
+/**
+ * Canonical field list for the import wizard AND the export column order.
+ * department_id / job_title_id / reports_to are raw numeric FK ids for now.
+ * TODO: accept human-readable names (department name, job title, manager's
+ * employee_number) and resolve them server-side — loadNameLookup() below is
+ * a ready-made helper for that when it's prioritized.
+ */
+private function importFieldDefinitions(): array
+{
+    return [
+        ['name' => 'employee_number',     'required' => true,  'validation' => ['required', 'string', 'max:50']],
+        ['name' => 'firstname',           'required' => true,  'validation' => ['required', 'string', 'max:255']],
+        ['name' => 'middlename',          'required' => false, 'validation' => ['nullable', 'string', 'max:255']],
+        ['name' => 'surname',             'required' => true,  'validation' => ['required', 'string', 'max:255']],
+        ['name' => 'personalemail',       'required' => true,  'validation' => ['required', 'email', 'max:255']],
+        ['name' => 'workemail',           'required' => false, 'validation' => ['nullable', 'email', 'max:255']],
+        ['name' => 'phone',               'required' => false, 'validation' => ['nullable', 'string', 'max:20']],
+        ['name' => 'hire_date',           'required' => true,  'validation' => ['required', 'date']],
+        ['name' => 'start_date',          'required' => true,  'validation' => ['required', 'date']],
+        ['name' => 'department_id',       'required' => false, 'validation' => ['nullable', 'numeric']],
+        ['name' => 'job_title_id',        'required' => false, 'validation' => ['nullable', 'numeric']],
+        ['name' => 'reports_to',          'required' => false, 'validation' => ['nullable', 'numeric']],
+        ['name' => 'base_salary',         'required' => true,  'validation' => ['required', 'numeric']],
+        ['name' => 'bank_account_number', 'required' => false, 'validation' => ['nullable', 'string', 'max:50']],
+        ['name' => 'bank_name',           'required' => false, 'validation' => ['nullable', 'string', 'max:100']],
+        ['name' => 'tax_id',              'required' => false, 'validation' => ['nullable', 'string', 'max:50']],
+        ['name' => 'employment_type',     'required' => false, 'validation' => ['nullable', 'in:full_time,part_time,contract']],
+        ['name' => 'work_location',       'required' => false, 'validation' => ['nullable', 'in:on-site,hybrid,remote']],
+        ['name' => 'status',              'required' => false, 'validation' => ['nullable', 'in:active,on_leave,on_probation,suspended,resigned,terminated,retired,deceased']],
+    ];
+}
+
+/** Set of valid ids (id => true) for a table, scoped to the organization. */
+private function loadValidIds(string $table, int $orgId): array
+{
+    // $table is only ever passed as a hardcoded literal by this class, never user input.
+    $rows = DB::raw("SELECT id FROM {$table} WHERE organization_id = :org_id", [':org_id' => $orgId]);
+    $ids = [];
+    foreach ($rows as $row) {
+        $ids[(int) $row->id] = true;
+    }
+    return $ids;
+}
+
+/**
+ * TODO (not yet used): org-scoped name(lowercased) => id lookup, for when
+ * department/job_title accept human-readable names instead of raw ids.
+ */
+private function loadNameLookup(string $table, string $nameColumn, int $orgId): array
+{
+    $rows = DB::raw(
+        "SELECT id, {$nameColumn} AS name FROM {$table} WHERE organization_id = :org_id",
+        [':org_id' => $orgId]
+    );
+    $lookup = [];
+    foreach ($rows as $row) {
+        $lookup[strtolower(trim($row->name))] = (int) $row->id;
+    }
+    return $lookup;
+}
+
+/** employee_number => id, scoped to the organization. */
+private function loadEmployeeNumberLookup(int $orgId): array
+{
+    $rows = DB::raw(
+        "SELECT id, employee_number FROM employees WHERE organization_id = :org_id",
+        [':org_id' => $orgId]
+    );
+    $lookup = [];
+    foreach ($rows as $row) {
+        $lookup[$row->employee_number] = (int) $row->id;
+    }
+    return $lookup;
+}
+
+private function insertEmployeeRow(array $data, int $orgId): int
+{
+    // has_user is always 0 here — TODO: bulk auto-account-creation (mirroring
+    // store()'s has_user flow) is a separate future feature, not implemented yet.
+    $sql = "INSERT INTO employees (
+        organization_id, has_user, employee_number, firstname, middlename, surname,
+        personalemail, workemail, phone, hire_date, start_date,
+        department_id, job_title_id, reports_to, base_salary,
+        bank_account_number, bank_name, tax_id, employment_type, work_location, status, created_at
+    ) VALUES (
+        :org_id, 0, :employee_number, :firstname, :middlename, :surname,
+        :personalemail, :workemail, :phone, :hire_date, :start_date,
+        :department_id, :job_title_id, :reports_to, :base_salary,
+        :bank_account_number, :bank_name, :tax_id, :employment_type, :work_location, :status, NOW()
+    )";
+
+    DB::raw($sql, [
+        ':org_id'              => $orgId,
+        ':employee_number'     => $data['employee_number'],
+        ':firstname'           => $data['firstname'],
+        ':middlename'          => $data['middlename'],
+        ':surname'             => $data['surname'],
+        ':personalemail'       => $data['personalemail'],
+        ':workemail'           => $data['workemail'],
+        ':phone'               => $data['phone'],
+        ':hire_date'           => $data['hire_date'],
+        ':start_date'          => $data['start_date'],
+        ':department_id'       => $data['department_id'],
+        ':job_title_id'        => $data['job_title_id'],
+        ':reports_to'          => $data['reports_to'],
+        ':base_salary'         => $data['base_salary'],
+        ':bank_account_number' => $data['bank_account_number'],
+        ':bank_name'           => $data['bank_name'],
+        ':tax_id'              => $data['tax_id'],
+        ':employment_type'     => $data['employment_type'],
+        ':work_location'       => $data['work_location'],
+        ':status'              => $data['status'],
+    ]);
+
+    $result = DB::raw("SELECT LAST_INSERT_ID() as id");
+    return (int) $result[0]->id;
+}
+
+private function updateEmployeeRow(int $employeeId, array $data, int $orgId): void
+{
+    $sql = "UPDATE employees SET
+        firstname = :firstname, middlename = :middlename, surname = :surname,
+        personalemail = :personalemail, workemail = :workemail, phone = :phone,
+        hire_date = :hire_date, start_date = :start_date,
+        department_id = :department_id, job_title_id = :job_title_id, reports_to = :reports_to,
+        base_salary = :base_salary, bank_account_number = :bank_account_number,
+        bank_name = :bank_name, tax_id = :tax_id, employment_type = :employment_type,
+        work_location = :work_location, status = :status, updated_at = NOW()
+    WHERE id = :id AND organization_id = :org_id";
+
+    DB::raw($sql, [
+        ':firstname'           => $data['firstname'],
+        ':middlename'          => $data['middlename'],
+        ':surname'             => $data['surname'],
+        ':personalemail'       => $data['personalemail'],
+        ':workemail'           => $data['workemail'],
+        ':phone'               => $data['phone'],
+        ':hire_date'           => $data['hire_date'],
+        ':start_date'          => $data['start_date'],
+        ':department_id'       => $data['department_id'],
+        ':job_title_id'        => $data['job_title_id'],
+        ':reports_to'          => $data['reports_to'],
+        ':base_salary'         => $data['base_salary'],
+        ':bank_account_number' => $data['bank_account_number'],
+        ':bank_name'           => $data['bank_name'],
+        ':tax_id'              => $data['tax_id'],
+        ':employment_type'     => $data['employment_type'],
+        ':work_location'       => $data['work_location'],
+        ':status'              => $data['status'],
+        ':id'                  => $employeeId,
+        ':org_id'              => $orgId,
+    ]);
+}
+
+/**
+ * Replicates the exact proration logic from store() (see EmployeeController::store(),
+ * "8. Find the latest draft payrun..." onward): if the employee's start_date falls on
+ * or before the current draft payrun's period end, prorate their salary for days
+ * actually worked in that period, calculate tax on the prorated amount, insert a
+ * payrun_details row, and roll the totals into the payruns row.
+ *
+ * NOTE: this is the same proration mechanism flagged earlier as inconsistent with
+ * PayrunProcessingService::processEmployee() (which uses the full, unprorated
+ * base_salary and will overwrite this row if the payrun is later processed). That
+ * inconsistency still exists — this method only makes bulk-import match store()'s
+ * current (not yet fixed) behavior, as requested.
+ */
+private function applyDraftPayrunProration(int $orgId, int $employeeId, string $startDate, float $baseSalary, object $draftPayrun): void
+{
+    $payPeriodEnd = $draftPayrun->pay_period_end;
+    if ($startDate > $payPeriodEnd) {
+        return; // employee hasn't started yet within this draft period
+    }
+
+    $payrunId       = (int) $draftPayrun->id;
+    $payPeriodStart = $draftPayrun->pay_period_start;
+
+    $effectiveStart   = max($startDate, $payPeriodStart);
+    $periodStartDt    = new \DateTime($payPeriodStart);
+    $periodEndDt      = new \DateTime($payPeriodEnd);
+    $effectiveStartDt = new \DateTime($effectiveStart);
+
+    $totalDays  = (int) $periodStartDt->diff($periodEndDt)->days + 1;
+    $workedDays = (int) $effectiveStartDt->diff($periodEndDt)->days + 1;
+
+    $proratedSalary = round(($baseSalary / $totalDays) * $workedDays, 2);
+
+    $config = loadTaxConfig($orgId);
+    $tax    = calculateNetPay($proratedSalary, $proratedSalary, $config);
+
+    DB::raw(
+        "INSERT INTO payrun_details (
+            payrun_id, organization_id, employee_id,
+            basic_salary, gross_pay,
+            nssf, shif, housing_levy,
+            taxable_income, tax_before_relief, personal_relief, paye,
+            total_deductions, net_pay,
+            created_at
+        ) VALUES (
+            :payrun_id, :org_id, :employee_id,
+            :basic_salary, :gross_pay,
+            :nssf, :shif, :housing_levy,
+            :taxable_income, :tax_before_relief, :personal_relief, :paye,
+            :total_deductions, :net_pay,
+            NOW()
+        )",
+        [
+            ':payrun_id'         => $payrunId,
+            ':org_id'            => $orgId,
+            ':employee_id'       => $employeeId,
+            ':basic_salary'      => $tax['basic_salary'],
+            ':gross_pay'         => $tax['gross_pay'],
+            ':nssf'              => $tax['nssf'],
+            ':shif'              => $tax['shif'],
+            ':housing_levy'      => $tax['housing_levy'],
+            ':taxable_income'    => $tax['taxable_income'],
+            ':tax_before_relief' => $tax['tax_before_relief'],
+            ':personal_relief'   => $tax['personal_relief'],
+            ':paye'              => $tax['paye'],
+            ':total_deductions'  => $tax['total_deductions'],
+            ':net_pay'           => $tax['net_pay'],
+        ]
+    );
+
+    DB::raw(
+        "UPDATE payruns SET
+            total_gross_pay  = total_gross_pay  + :gross_pay,
+            total_deductions = total_deductions + :total_deductions,
+            total_net_pay    = total_net_pay    + :net_pay,
+            employee_count   = employee_count   + 1,
+            updated_at       = NOW()
+        WHERE id = :payrun_id",
+        [
+            ':gross_pay'        => $tax['gross_pay'],
+            ':total_deductions' => $tax['total_deductions'],
+            ':net_pay'          => $tax['net_pay'],
+            ':payrun_id'        => $payrunId,
+        ]
+    );
+}
+
 }
