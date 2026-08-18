@@ -146,6 +146,7 @@ CREATE TABLE IF NOT EXISTS `employees` (
   KEY `idx_employee_org` (`organization_id`,`id`),
   KEY `idx_department_id` (`department_id`),
   UNIQUE KEY `unique_employee_number_per_org` (`organization_id`, `employee_number`),
+  UNIQUE KEY `unique_workemail_per_org` (`organization_id`, `workemail`),
   CONSTRAINT `employees_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `employees_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `employees_ibfk_3` FOREIGN KEY (`reports_to`) REFERENCES `employees` (`id`) ON DELETE SET NULL,
