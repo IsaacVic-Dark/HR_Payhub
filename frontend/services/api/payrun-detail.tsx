@@ -7,6 +7,10 @@ type PayrunDetailType = {
   overtime_amount: number;
   bonus_amount: number;
   commission_amount: number;
+  // Reimbursements
+  taxable_reimbursement: number;
+  nontaxable_reimbursement: number;
+  reimbursement_metadata?: string | null;
   // Statutory deductions
   nssf: number;
   shif: number;
@@ -23,11 +27,11 @@ type PayrunDetailType = {
   employee_number: string;
   job_title: string;
   department: string;
-  employee_firstname: string; 
-  employee_middlename: string | null; 
+  employee_firstname: string;
+  employee_middlename: string | null;
   employee_surname: string;
-  employee_email: string; 
-  employee_personal_email: string; 
+  employee_email: string;
+  employee_personal_email: string;
   employee_full_name: string;
 };
 
@@ -123,11 +127,9 @@ class PayrunDetailAPI {
   ): Promise<ApiResponse<PayrunDetailType[]>> {
     try {
       const queryParams = this.buildQueryParams(filters);
-      const url = `${
-        process.env.NEXT_PUBLIC_BACKEND_API_URL
-      }/organizations/${organizationId}/payrun/${payrunId}/employees${
-        queryParams ? `?${queryParams}` : ""
-      }`;
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL
+        }/organizations/${organizationId}/payrun/${payrunId}/employees${queryParams ? `?${queryParams}` : ""
+        }`;
 
       const response = await fetch(url, {
         method: "GET",
@@ -182,6 +184,8 @@ class PayrunDetailAPI {
       overtime_amount?: number;
       bonus_amount?: number;
       commission_amount?: number;
+      taxable_reimbursement?: number;
+      nontaxable_reimbursement?: number;
       extra_deductions?: number;
     },
   ): Promise<ApiResponse> {
@@ -217,6 +221,8 @@ class PayrunDetailAPI {
       overtime_amount?: number;
       bonus_amount?: number;
       commission_amount?: number;
+      taxable_reimbursement?: number;
+      nontaxable_reimbursement?: number;
       extra_deductions?: number;
     },
   ): Promise<ApiResponse> {

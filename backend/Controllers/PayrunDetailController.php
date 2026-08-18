@@ -226,15 +226,21 @@ class PayrunDetailController
             $bonusAmount      = (float) ($data['bonus_amount']      ?? 0.00);
             $commissionAmount = (float) ($data['commission_amount'] ?? 0.00);
             $extraDeductions  = (float) ($data['extra_deductions']  ?? 0.00);
+            // Net pay is the total amount payable to the employee including
+            // reimbursements, so a manually-entered detail can carry them too —
+            // taxable adds to the PAYE base, non-taxable is a straight addition
+            // to gross/net. Normally these are populated via
+            // ReimbursementController::attachToPayrun() instead of by hand.
+            $taxableReimbursement    = (float) ($data['taxable_reimbursement']    ?? 0.00);
+            $nontaxableReimbursement = (float) ($data['nontaxable_reimbursement'] ?? 0.00);
 
-            $grossPay = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount;
+            $grossPay = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount
+                + $taxableReimbursement + $nontaxableReimbursement;
 
             // Load org tax config and calculate
             $orgId  = $payrun[0]->organization_id;
             $config = loadTaxConfig($orgId);
-            $tax    = calculateNetPay($basicSalary, $grossPay, $config, $extraDeductions);
-
-            var_dump($tax); // Debugging output
+            $tax    = calculateNetPay($basicSalary, $grossPay, $config, $extraDeductions, $taxableReimbursement);
 
             $insertData = [
                 'payrun_id'          => $payrunId,
@@ -244,6 +250,8 @@ class PayrunDetailController
                 'overtime_amount'    => $overtimeAmount,
                 'bonus_amount'       => $bonusAmount,
                 'commission_amount'  => $commissionAmount,
+                'taxable_reimbursement'    => round($taxableReimbursement, 2),
+                'nontaxable_reimbursement' => round($nontaxableReimbursement, 2),
                 'nssf'               => $tax['nssf'],
                 'shif'               => $tax['shif'],
                 'housing_levy'       => $tax['housing_levy'],
@@ -488,11 +496,17 @@ class PayrunDetailController
             $overtimeAmount   = (float) ($data['overtime_amount']   ?? $current->overtime_amount);
             $bonusAmount      = (float) ($data['bonus_amount']      ?? $current->bonus_amount);
             $commissionAmount = (float) ($data['commission_amount'] ?? $current->commission_amount);
+            $taxableReimbursement    = (float) ($data['taxable_reimbursement']    ?? $current->taxable_reimbursement);
+            $nontaxableReimbursement = (float) ($data['nontaxable_reimbursement'] ?? $current->nontaxable_reimbursement);
 
             // Recalculate gross from updated components.
-            // Tax figures are kept as stored — no recalculation.
+            // Tax figures (including PAYE/taxable_income) are kept as stored — no
+            // recalculation here, same as for basic_salary/bonus/etc. If a change
+            // to taxable_reimbursement should move PAYE, reprocess the payrun
+            // instead of editing the detail directly.
             // net_pay = new gross_pay − existing total_deductions
-            $grossPay = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount;
+            $grossPay = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount
+                + $taxableReimbursement + $nontaxableReimbursement;
             $netPay   = $grossPay - (float) $current->total_deductions;
 
             $updateData = [
@@ -500,6 +514,8 @@ class PayrunDetailController
                 'overtime_amount'   => round($overtimeAmount, 2),
                 'bonus_amount'      => round($bonusAmount, 2),
                 'commission_amount' => round($commissionAmount, 2),
+                'taxable_reimbursement'    => round($taxableReimbursement, 2),
+                'nontaxable_reimbursement' => round($nontaxableReimbursement, 2),
                 'gross_pay'         => round($grossPay, 2),
                 'net_pay'           => round($netPay, 2),
             ];

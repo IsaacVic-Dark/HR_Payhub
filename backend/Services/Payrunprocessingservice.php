@@ -120,6 +120,84 @@ class PayrunProcessingService
     }
 
     /**
+     * Recompute a single employee's payrun_details row (and roll the change up
+     * into the payrun's header totals) without touching payrun status.
+     *
+     * Used by ReimbursementController::attachToPayrun() so a reimbursement
+     * attached to a payrun that's already been processed still lands in that
+     * employee's gross_pay/net_pay immediately, instead of silently sitting
+     * on the reimbursement row until someone re-runs the whole payrun.
+     *
+     * @param  int  $orgId       Organisation ID
+     * @param  int  $payrunId    Payrun ID (must not be finalized)
+     * @param  int  $employeeId  Employee to recompute
+     * @param  int  $userId      ID of the user triggering the recompute (audit trail)
+     * @return array  The employee's recalculated figures (same shape as calculateNetPay())
+     */
+    public function processSingleEmployee(int $orgId, int $payrunId, int $employeeId, int $userId): array
+    {
+        $payrun = $this->getPayrun($payrunId, $orgId);
+        if (!$payrun) {
+            throw new \RuntimeException("Payrun #$payrunId not found for organisation #$orgId");
+        }
+        if ($payrun->status === 'finalized') {
+            throw new \RuntimeException("Payrun #$payrunId is already finalised and cannot be reprocessed");
+        }
+
+        $employee = $this->getSingleEmployee($orgId, $employeeId);
+        if (!$employee) {
+            throw new \RuntimeException("Employee #$employeeId not found or not active for organisation #$orgId");
+        }
+
+        $taxConfig        = loadTaxConfig($orgId);
+        $deductionConfigs = $this->getDeductionConfigs($orgId);
+
+        $result = $this->processEmployee($employee, $payrun, $taxConfig, $deductionConfigs, $orgId);
+
+        $this->recalculatePayrunTotals($payrunId);
+
+        $this->audit($orgId, $userId, 'payrun_details', $payrunId, 'update', [
+            'action'      => 'recompute_single_employee',
+            'employee_id' => $employeeId,
+            'result'      => $result,
+        ]);
+
+        return $result;
+    }
+
+    /**
+     * Re-sum payrun_details back onto the payrun header (total_gross_pay,
+     * total_deductions, total_net_pay, employee_count) without changing status.
+     */
+    private function recalculatePayrunTotals(int $payrunId): void
+    {
+        $sums = DB::raw(
+            "SELECT
+                COALESCE(SUM(gross_pay), 0)        AS total_gross,
+                COALESCE(SUM(total_deductions), 0) AS total_deductions,
+                COALESCE(SUM(net_pay), 0)          AS total_net,
+                COUNT(*)                           AS employee_count
+             FROM payrun_details
+             WHERE payrun_id = :payrun_id",
+            [':payrun_id' => $payrunId]
+        );
+
+        $row = $sums[0] ?? null;
+        if (!$row) return;
+
+        DB::table('payruns')->update(
+            [
+                'employee_count'   => (int) $row->employee_count,
+                'total_gross_pay'  => round((float) $row->total_gross, 2),
+                'total_deductions' => round((float) $row->total_deductions, 2),
+                'total_net_pay'    => round((float) $row->total_net, 2),
+            ],
+            'id',
+            $payrunId
+        );
+    }
+
+    /**
      * Seed baseline Kenyan statutory 'tax' configs for an organisation that
      * has none yet. Used by the new-org bootstrap flow so a first payrun can
      * be processed immediately without a manual config-setup step.
@@ -226,6 +304,45 @@ class PayrunProcessingService
     }
 
     /**
+     * Same shape as getActiveEmployees() but scoped to a single employee, for
+     * processSingleEmployee(). Deliberately does NOT restrict to
+     * status IN ('active','on_probation') the way the bulk query does, since a
+     * reimbursement can legitimately be attached to a payrun for an employee
+     * whose status changed after the payrun was first processed — the caller
+     * (attachToPayrun) already validated the reimbursement/employee pairing.
+     */
+    private function getSingleEmployee(int $orgId, int $employeeId): ?object
+    {
+        $rows = DB::raw(
+            "SELECT 
+                e.id,
+                e.employee_number,
+                e.base_salary,
+                e.hire_date,
+                e.job_title_id,
+                e.department_id,
+                e.bank_account_number,
+                e.tax_id,
+                e.employment_type,
+                e.firstname AS first_name,
+                e.middlename AS middle_name,
+                e.surname,
+                COALESCE(e.workemail, e.personalemail) AS email,
+                ep.national_id,
+                ep.kra_pin,
+                ep.nssf_number,
+                ep.shif_number
+             FROM employees e
+             LEFT JOIN employee_profiles ep ON ep.employee_id = e.id
+             WHERE e.organization_id = :org_id
+               AND e.id = :employee_id",
+            [':org_id' => $orgId, ':employee_id' => $employeeId]
+        );
+
+        return $rows[0] ?? null;
+    }
+
+    /**
      * Get all approved, active deduction/benefit configs for the organisation
      * (excludes 'tax' configs — those are handled by loadTaxConfig)
      */
@@ -282,8 +399,17 @@ class PayrunProcessingService
         $benefitsAmount  = $this->getApprovedBenefitsTotal($employeeId, $periodStart, $periodEnd);
         $perDiemAmount   = $this->getApprovedPerDiemsTotal($employeeId, $periodStart, $periodEnd);
 
+        // Reimbursements explicitly attached to THIS payrun (see
+        // ReimbursementController::attachToPayrun()). Net pay is the total
+        // amount payable to the employee including reimbursements, so both
+        // buckets join gross pay; only the taxable bucket also raises the
+        // PAYE base (handled inside calculateNetPay()).
+        $reimbursements        = $this->getScheduledReimbursementsTotal($employeeId, $payrun->id);
+        $taxableReimbursement  = $reimbursements['taxable'];
+        $nontaxableReimbursement = $reimbursements['nontaxable'];
+
         $grossPay = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount
-            + $benefitsAmount + $perDiemAmount;
+            + $benefitsAmount + $perDiemAmount + $taxableReimbursement + $nontaxableReimbursement;
 
         // --- Voluntary/org deductions ---
         $loanDeductions       = $this->getLoanInstalment($employeeId, $periodStart, $periodEnd, $deductionConfigs);
@@ -292,7 +418,7 @@ class PayrunProcessingService
         $extraDeductions      = $loanDeductions['total'] + $advanceDeductions['total'] + $attendanceDeductions['total'];
 
         // --- Statutory calculations ---
-        $calc = calculateNetPay($basicSalary, $grossPay, $taxConfig, $extraDeductions);
+        $calc = calculateNetPay($basicSalary, $grossPay, $taxConfig, $extraDeductions, $taxableReimbursement);
 
         // --- Upsert payrun_details ---
         $detailData = [
@@ -302,6 +428,9 @@ class PayrunProcessingService
             'overtime_amount'  => round($overtimeAmount, 2),
             'bonus_amount'     => round($bonusAmount + $benefitsAmount + $perDiemAmount, 2),
             'commission_amount' => round($commissionAmount, 2),
+            'taxable_reimbursement'    => round($taxableReimbursement, 2),
+            'nontaxable_reimbursement' => round($nontaxableReimbursement, 2),
+            'reimbursement_metadata'   => !empty($reimbursements['metadata']) ? json_encode($reimbursements['metadata']) : null,
             'gross_pay'        => $calc['gross_pay'],
             'total_deductions' => $calc['total_deductions'],
             'net_pay'          => $calc['net_pay'],
@@ -333,6 +462,58 @@ class PayrunProcessingService
     // -------------------------------------------------------------------------
     // Earnings helpers
     // -------------------------------------------------------------------------
+
+    /**
+     * Sum reimbursements that have been attached to this payrun (via
+     * ReimbursementController::attachToPayrun(), which sets payrun_id and
+     * flips status to 'scheduled') for this employee, split by is_taxable.
+     *
+     * The `reimbursements` table — not payrun_details — is the source of
+     * truth here, the same way loans/advances/benefits are re-queried from
+     * their own tables on every process() run. That keeps this idempotent:
+     * reprocessing a payrun always reflects exactly what's currently
+     * scheduled against it, nothing more, nothing stale.
+     *
+     * Returns ['taxable' => float, 'nontaxable' => float, 'metadata' => array]
+     * where metadata is a flat list of {reimbursement_id, reimbursement_number,
+     * amount, taxable} for the audit-trail JSON column.
+     */
+    private function getScheduledReimbursementsTotal(int $employeeId, int $payrunId): array
+    {
+        $rows = DB::raw(
+            "SELECT id, reimbursement_number, amount_approved, is_taxable
+             FROM reimbursements
+             WHERE employee_id = :employee_id
+               AND payrun_id = :payrun_id
+               AND status = 'scheduled'",
+            [':employee_id' => $employeeId, ':payrun_id' => $payrunId]
+        );
+
+        $taxable    = 0.0;
+        $nontaxable = 0.0;
+        $metadata   = [];
+
+        foreach ($rows as $row) {
+            $amount = (float) $row->amount_approved;
+            if (!empty($row->is_taxable)) {
+                $taxable += $amount;
+            } else {
+                $nontaxable += $amount;
+            }
+            $metadata[] = [
+                'reimbursement_id'     => (int) $row->id,
+                'reimbursement_number' => $row->reimbursement_number,
+                'amount'               => round($amount, 2),
+                'taxable'              => (bool) $row->is_taxable,
+            ];
+        }
+
+        return [
+            'taxable'    => round($taxable, 2),
+            'nontaxable' => round($nontaxable, 2),
+            'metadata'   => $metadata,
+        ];
+    }
 
     /**
      * Overtime: extend this to read from a timesheets or overtime_records table.

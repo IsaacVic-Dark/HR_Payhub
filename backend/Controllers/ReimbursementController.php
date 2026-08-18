@@ -3,6 +3,7 @@
 namespace App\Controllers;
 require_once __DIR__ . '/ReimbursementResponseWrapper.php';
 use App\Services\DB;
+use App\Services\PayrunProcessingService;
 use App\Middleware\AuthMiddleware;
 
 /**
@@ -1073,60 +1074,45 @@ class ReimbursementController
 
             $amount = (float) $reimbursement->amount_approved;
             $isTaxable = (bool) $reimbursement->is_taxable;
+            $employeeId = (int) $reimbursement->employee_id;
 
-            $existingDetail = DB::raw(
-                "SELECT * FROM payrun_details WHERE payrun_id = :payrun_id AND employee_id = :employee_id",
-                [':payrun_id' => $payrun->id, ':employee_id' => $reimbursement->employee_id]
-            );
+            // Net pay is the total amount payable to the employee including
+            // reimbursements, so gross/net for this employee must be recomputed
+            // once the claim is attached — not just have two columns bumped on
+            // payrun_details. Point the reimbursement at the payrun first (inside
+            // a transaction so a processing failure rolls the attachment back
+            // too), then let PayrunProcessingService — which is also the source
+            // of truth for how a full payrun run computes reimbursements —
+            // recompute this one employee's row and the payrun's header totals.
+            // This keeps a single place that turns reimbursements into gross/net,
+            // whether it runs via the bulk process() or this single-employee path.
+            try {
+                $result = DB::transaction(function () use ($org_id, $id, $payrun, $employeeId, $user) {
+                    DB::table('reimbursements')->update([
+                        'payrun_id' => $payrun->id,
+                        'payslip_inclusion' => 'current',
+                        'scheduled_payment_date' => $payrun->pay_period_end,
+                        'updated_by' => $user['id'],
+                    ], 'id', $id);
 
-            $metaEntry = [
-                'reimbursement_id' => (int) $id,
-                'reimbursement_number' => $reimbursement->reimbursement_number,
-                'amount' => $amount,
-                'taxable' => $isTaxable,
-            ];
-
-            if (!empty($existingDetail)) {
-                $detail = $existingDetail[0];
-                $existingMeta = $detail->reimbursement_metadata ? json_decode($detail->reimbursement_metadata, true) : [];
-                $existingMeta[] = $metaEntry;
-                $updateData = [
-                    'reimbursement_metadata' => json_encode($existingMeta),
-                ];
-                $updateData[$isTaxable ? 'taxable_reimbursement' : 'nontaxable_reimbursement'] =
-                    (float) $detail->{$isTaxable ? 'taxable_reimbursement' : 'nontaxable_reimbursement'} + $amount;
-                DB::table('payrun_details')->update($updateData, 'id', $detail->id);
-            } else {
-                // No payrun_details row yet for this employee on this payrun — most
-                // payruns are processed/populated before reimbursements are attached,
-                // so this is a fallback that seeds just the reimbursement columns;
-                // your payrun processing step should still recompute gross/net pay.
-                DB::table('payrun_details')->insert([
-                    'payrun_id' => $payrun->id,
-                    'organization_id' => $org_id,
-                    'employee_id' => $reimbursement->employee_id,
-                    'basic_salary' => 0,
-                    'taxable_reimbursement' => $isTaxable ? $amount : 0,
-                    'nontaxable_reimbursement' => $isTaxable ? 0 : $amount,
-                    'reimbursement_metadata' => json_encode([$metaEntry]),
-                    'gross_pay' => 0,
-                    'total_deductions' => 0,
-                    'net_pay' => 0,
-                ]);
+                    return (new PayrunProcessingService())
+                        ->processSingleEmployee($org_id, $payrun->id, $employeeId, $user['id']);
+                });
+            } catch (\RuntimeException $e) {
+                // e.g. employee not found/active, or payrun finalized mid-request —
+                // surface as a 409 rather than a generic 500, and nothing was committed.
+                return responseJson(success: false, message: $e->getMessage(), code: 409);
             }
-
-            DB::table('reimbursements')->update([
-                'payrun_id' => $payrun->id,
-                'payslip_inclusion' => 'current',
-                'scheduled_payment_date' => $payrun->pay_period_end,
-                'updated_by' => $user['id'],
-            ], 'id', $id);
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'scheduled', [
                 'payrun_id' => $payrun->id, 'amount' => $amount, 'taxable' => $isTaxable,
             ]);
 
-            return responseJson(success: true, data: ['payrun_id' => $payrun->id], message: "Reimbursement attached to payrun {$payrun->payrun_name}");
+            return responseJson(
+                success: true,
+                data: ['payrun_id' => $payrun->id, 'net_pay' => $result['net_pay'], 'gross_pay' => $result['gross_pay']],
+                message: "Reimbursement attached to payrun {$payrun->payrun_name}"
+            );
         } catch (\Exception $e) {
             error_log("Reimbursement attachToPayrun error: " . $e->getMessage());
             return responseJson(success: false, message: "Failed to attach reimbursement to payrun", code: 500,

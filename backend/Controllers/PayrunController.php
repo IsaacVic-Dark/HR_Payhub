@@ -1379,6 +1379,11 @@ class PayrunController
                             'overtime_amount'    => round($carryOvertime, 2),
                             'bonus_amount'       => 0.00,
                             'commission_amount'  => 0.00,
+                            // Reimbursements are per-payrun claims attached explicitly via
+                            // ReimbursementController::attachToPayrun() — they never carry
+                            // forward automatically onto a new draft payrun, unlike overtime.
+                            'taxable_reimbursement'    => 0.00,
+                            'nontaxable_reimbursement' => 0.00,
                             'nssf'               => $tax['nssf'],
                             'shif'               => $tax['shif'],
                             'housing_levy'       => $tax['housing_levy'],
