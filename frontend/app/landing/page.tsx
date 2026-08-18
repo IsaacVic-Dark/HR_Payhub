@@ -315,6 +315,12 @@ const PayrollLanding = () => {
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
               </a>
+              <a
+                href="/docs/payrun"
+                className="hover:text-gray-900 transition-colors flex items-center gap-1"
+              >
+                Docs
+              </a>
             </nav>
             {/* CTA */}
             <div className="flex items-center gap-3 shrink-0">
