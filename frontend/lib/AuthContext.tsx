@@ -87,8 +87,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // ── Hydrate from localStorage on mount ────────────────────────────────────
 useEffect(() => {
   // Don't attempt auth check on public pages — prevents refresh loop on /login
-  const publicPaths = ['/login', '/register', '/'];
-  if (publicPaths.includes(window.location.pathname)) {
+  // and prevents authed-only calls firing (and redirecting) on public marketing/docs pages.
+  const publicPaths = ['/login', '/register', '/', '/landing', '/docs', '/unauthorized'];
+  const isPublicPath = publicPaths.some(
+    (path) => window.location.pathname === path || window.location.pathname.startsWith(path + '/')
+  );
+  if (isPublicPath) {
     setIsLoading(false);   // unblock the UI
     return;
   }
