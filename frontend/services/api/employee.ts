@@ -126,6 +126,30 @@ interface UpdateEmployeeData {
   workemail?: string;
 }
 
+// ── Bulk import/export types ──────────────────────────────────────────────
+// Mirrors ImportExportButtons.tsx's types — kept as plain local types here
+// (rather than importing from that component) so this API module has no
+// dependency on any particular UI component.
+
+interface ImportField {
+  name: string;
+  required: boolean;
+  validation: string[];
+}
+
+interface ImportFieldsResponse {
+  module: string;
+  fields: ImportField[];
+}
+
+interface ImportResult {
+  imported: number;
+  updated?: number;
+  skipped?: number;
+  duplicates?: Array<{ row: number; employee_number: string }>;
+  errors?: string[];
+}
+
 class EmployeeAPI {
   private async handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
     try {
@@ -379,6 +403,105 @@ class EmployeeAPI {
       };
     }
   }
+  // GET /organizations/{org_id}/employees/import/fields
+  async getImportFields(
+    organizationId: number
+  ): Promise<ApiResponse<ImportFieldsResponse>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees/import/fields`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<ImportFieldsResponse>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch import fields",
+      };
+    }
+  }
+
+  // POST /organizations/{org_id}/employees/import (multipart/form-data)
+  async importEmployees(
+    organizationId: number,
+    file: File,
+    replaceExisting: boolean = false
+  ): Promise<ApiResponse<ImportResult>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees/import`;
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("replace_existing", String(replaceExisting));
+
+      // NOTE: deliberately not using getAuthHeaders() here — it sets
+      // "Content-Type: application/json", which would break the multipart
+      // boundary the browser needs to set itself for FormData. We still
+      // attach the Authorization header manually.
+      const token = this.getCookie("access_token");
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers,
+        body: formData,
+      });
+
+      return this.handleResponse<ImportResult>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to import employees",
+      };
+    }
+  }
+
+  // GET /organizations/{org_id}/employees/export?format=csv
+  // Triggers a browser download directly rather than returning parsed JSON.
+  async exportEmployees(organizationId: number): Promise<ApiResponse<void>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees/export?format=csv`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        // Error responses are JSON, not CSV — safe to parse here.
+        const data = await response.json().catch(() => null);
+        return {
+          success: false,
+          error: data?.message || `HTTP error! status: ${response.status}`,
+        };
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `employees-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to export employees",
+      };
+    }
+  }
 }
 
 export const employeeAPI = new EmployeeAPI();
@@ -393,4 +516,7 @@ export type {
   EmployeeStatus,
   EmploymentType,
   WorkLocation,
+  ImportField,
+  ImportFieldsResponse,
+  ImportResult,
 };
