@@ -2,17 +2,14 @@
 
 import { SectionCards, type CardDetail } from "@/components/section-cards";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { DataTableEmployees } from "@/app/(dashboard)/employees/components/data-table-employees";
 import { employeeAPI } from "@/services/api/employee";
 import { useAuth } from "@/lib/AuthContext";
 import { formatCurrency } from "@/lib/utils";
-import { Upload, Download } from "lucide-react";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import ImportExportButtons, {
+  type ImportResult,
+} from "@/components/ImportExportButtons";
 
 interface Statistics {
   total: number;
@@ -35,47 +32,57 @@ export default function Page() {
   const [statistics, setStatistics] = useState<Statistics | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Bumped after a successful bulk import to force DataTableEmployees to
+  // refetch — the import wizard lives in ImportExportButtons, outside that
+  // component's own data-fetching, so there's no other way to tell it data changed.
+  const [tableRefreshKey, setTableRefreshKey] = useState(0);
+
+  const fetchStatistics = useCallback(async () => {
+    if (!user?.organization_id) {
+      setIsLoading(false);
+      setError("No organization ID found");
+      return;
+    }
+
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const response = await employeeAPI.getEmployees(user.organization_id);
+
+      if (!response.success) {
+        throw new Error(
+          `Failed to fetch: ${response.error || response.message || "Unknown error"}`,
+        );
+      }
+
+      // Check for metadata at the top level of the response
+      if (response.metadata?.statistics) {
+        setStatistics(response.metadata.statistics);
+      } else {
+        // If no statistics in metadata, you might need to calculate them from the employees data
+        console.log("No statistics found in metadata");
+        setStatistics(null);
+      }
+    } catch (error) {
+      console.error("Failed to fetch statistics:", error);
+      setError(
+        error instanceof Error ? error.message : "Failed to fetch statistics",
+      );
+    } finally {
+      setIsLoading(false);
+    }
+  }, [user?.organization_id]);
 
   useEffect(() => {
-    const fetchStatistics = async () => {
-      if (!user?.organization_id) {
-        setIsLoading(false);
-        setError("No organization ID found");
-        return;
-      }
-
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const response = await employeeAPI.getEmployees(user.organization_id);
-
-        if (!response.success) {
-          throw new Error(
-            `Failed to fetch: ${response.error || response.message || "Unknown error"}`,
-          );
-        }
-
-        // Check for metadata at the top level of the response
-        if (response.metadata?.statistics) {
-          setStatistics(response.metadata.statistics);
-        } else {
-          // If no statistics in metadata, you might need to calculate them from the employees data
-          console.log("No statistics found in metadata");
-          setStatistics(null);
-        }
-      } catch (error) {
-        console.error("Failed to fetch statistics:", error);
-        setError(
-          error instanceof Error ? error.message : "Failed to fetch statistics",
-        );
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchStatistics();
-  }, [user?.organization_id]);
+  }, [fetchStatistics]);
+
+  const handleImportSuccess = (result: ImportResult) => {
+    setTableRefreshKey((k) => k + 1);
+    fetchStatistics();
+    console.log("Employee import finished:", result);
+  };
 
   // Generate card details dynamically from statistics
   const cardDetails: CardDetail[] = [];
@@ -129,35 +136,10 @@ export default function Page() {
                   This page shows all employees in your organization:
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                {/* Import Button */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => console.log("Import clicked")}
-                      className="flex items-center gap-1.5 rounded-md bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-                    >
-                      <Upload className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-
-                  <TooltipContent>Import data</TooltipContent>
-                </Tooltip>
-
-                {/* Export Button */}
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => console.log("Export clicked")}
-                      className="flex items-center gap-1.5 rounded-md bg-background px-3 py-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground transition-colors"
-                    >
-                      <Download className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-
-                  <TooltipContent>Export data</TooltipContent>
-                </Tooltip>
-              </div>
+              <ImportExportButtons
+                module="employees"
+                onImportSuccess={handleImportSuccess}
+              />
             </div>
             <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
               <div className="peer-data-[state=expanded]:xl:grid-cols-4 peer-data-[state=collapsed]:xl:grid-cols-5">
@@ -167,11 +149,10 @@ export default function Page() {
                   error={error}
                 />
               </div>
-              <DataTableEmployees statistics={statistics} />
+              <DataTableEmployees statistics={statistics} refreshKey={tableRefreshKey} />
             </div>
           </div>
         </div>
       </>
   );
 }
-// [file content end]
