@@ -2,7 +2,11 @@ import axios from 'axios';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_API_URL || 'http://localhost:8000/api/v1';
 
-const authAPI = axios.create({
+// Exported so other parts of the app (e.g. ImportExportButtons.tsx) can reuse
+// the same axios instance — including its Authorization header injection and
+// 401 → refresh → retry interceptors below — instead of re-implementing auth
+// plumbing per-component.
+export const authAPI = axios.create({
     baseURL: `${API_BASE_URL}`,
     withCredentials: true,
 });
@@ -40,7 +44,7 @@ authAPI.interceptors.response.use(
             } catch (refreshError) {
                 clearAuthCookies();
                 if (typeof window !== 'undefined') {
-                    const publicPaths = ['/login', '/register', '/'];
+                    const publicPaths = ['/login', '/register', '/', '/landing', '/docs', '/unauthorized'];
                     if (!publicPaths.includes(window.location.pathname)) {
                         window.location.href = '/login';
                     }
