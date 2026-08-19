@@ -503,8 +503,8 @@ export function EmployeeDrawerAdd({
         onOpenChange={setIsDrawerOpen}
         direction={isMobile ? "bottom" : "right"}
       >
-        <DrawerContent className="h-full min-w-xl ml-auto bg-white">
-          <DrawerHeader className="border-b">
+        <DrawerContent data-vaul-no-drag className="select-text h-full min-w-xl ml-auto bg-white">
+          <DrawerHeader className="select-text border-b">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -527,7 +527,7 @@ export function EmployeeDrawerAdd({
             </div>
           </DrawerHeader>
 
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="select-text flex-1 overflow-y-auto p-6">
             <form onSubmit={handleSubmit} className="space-y-6">
               {/* Employee Profile Section */}
               <div className="bg-blue-50 p-4 rounded-lg">
@@ -904,31 +904,10 @@ export function EmployeeDrawerAdd({
                   </div>
                 </div>
               </div>
-
-              {/* Status */}
-              <div>
-                <h3 className="font-semibold mb-4">Status</h3>
-                <div className="grid grid-cols-4 gap-2">
-                  {employeeStatuses.map(({ label, value }) => (
-                    <div key={value} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`status-${value}`}
-                        checked={formData.status === value}
-                        onCheckedChange={() =>
-                          handleInputChange("status", value)
-                        }
-                      />
-                      <Label htmlFor={`status-${value}`} className="text-sm">
-                        {label}
-                      </Label>
-                    </div>
-                  ))}
-                </div>
-              </div>
             </form>
           </div>
 
-          <DrawerFooter className="border-t p-6">
+          <DrawerFooter className="select-text border-t p-6">
             <div className="flex items-center justify-end space-x-3">
               <DrawerClose asChild>
                 <Button variant="outline" onClick={resetForm}>
@@ -947,7 +926,6 @@ export function EmployeeDrawerAdd({
                   </>
                 ) : (
                   <>
-                    <CheckCheck className="h-4 w-4 mr-2" />
                     Save Employee
                   </>
                 )}
@@ -1015,12 +993,13 @@ export function EmployeeDrawer({
       </div>
 
       <Drawer
+        data-vaul-no-drag
         open={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
         direction={isMobile ? "bottom" : "right"}
       >
-        <DrawerContent className="h-full min-w-xl ml-auto bg-white">
-          <DrawerHeader className="border-b">
+        <DrawerContent className="select-text h-full min-w-xl ml-auto bg-white">
+          <DrawerHeader className="select-text border-b">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
                 <div className="h-12 w-12 bg-blue-100 rounded-full flex items-center justify-center">
@@ -1041,7 +1020,7 @@ export function EmployeeDrawer({
             </div>
           </DrawerHeader>
 
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          <div className="select-text flex-1 overflow-y-auto p-6 space-y-6">
             {/* Employee Profile */}
             <div className="bg-blue-50 p-4 rounded-lg">
               <div className="flex items-center space-x-4">
@@ -1173,7 +1152,7 @@ export function EmployeeDrawer({
             </div>
           </div>
 
-          <DrawerFooter className="border-t p-6">
+          <DrawerFooter className="select-text border-t p-6">
             <div className="flex items-center justify-end space-x-3">
               <DrawerClose asChild>
                 <Button variant="outline">Close</Button>
@@ -1442,11 +1421,12 @@ export function EmployeeDrawerEdit({
       <div onClick={() => setIsDrawerOpen(true)}>{children}</div>
 
       <Drawer
+        data-vaul-no-drag
         open={isDrawerOpen}
         onOpenChange={setIsDrawerOpen}
         direction={isMobile ? "bottom" : "right"}
       >
-        <DrawerContent className="h-full min-w-xl ml-auto bg-white">
+        <DrawerContent className="select-text h-full min-w-xl ml-auto bg-white">
           <DrawerHeader className="border-b">
             <div className="flex items-center justify-between">
               <div className="flex items-center space-x-3">
@@ -1565,7 +1545,7 @@ export function EmployeeDrawerEdit({
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">
-                      Personal Email (Optional)
+                      Personal Email <span className="text-red-500">*</span>
                     </label>
                     <Input
                       type="email"
@@ -1582,7 +1562,7 @@ export function EmployeeDrawerEdit({
                     </label>
                     <Input
                       type="tel"
-                      placeholder="+1 (555) 123-4567"
+                      placeholder="0700 000 000"
                       value={formData.phone}
                       onChange={(e) =>
                         handleInputChange("phone", e.target.value)
@@ -1641,9 +1621,9 @@ export function EmployeeDrawerEdit({
                       <SelectTrigger
                         className={errors.department ? "border-red-500" : ""}
                       >
-                        <SelectValue placeholder="Select department" />
+                        <SelectValue placeholder="Select department ..." />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent searchable>
                         {departments.length > 0 ? (
                           departments.map((dept) => (
                             <SelectItem
@@ -1817,7 +1797,7 @@ export function EmployeeDrawerEdit({
             </form>
           </div>
 
-          <DrawerFooter className="border-t p-6">
+          <DrawerFooter className="select-text border-t p-6">
             <div className="flex items-center justify-end space-x-3">
               <DrawerClose asChild>
                 <Button variant="outline">Cancel</Button>

@@ -12,7 +12,7 @@ import {
 import { toast } from "sonner";
 import { DataTable, ColumnDef } from "@/components/table";
 import { useAuth } from "@/lib/AuthContext";
-import {formatCurrency} from "@/utils/currency";
+import { formatCurrency } from "@/utils/currency";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -48,10 +48,17 @@ interface Statistics {
 
 interface DataTableEmployeesProps {
   statistics?: Statistics | null;
+  /**
+   * Bump this (e.g. a counter or Date.now()) from the parent to force a
+   * refetch — used after a bulk import completes, since the import wizard
+   * lives outside this component and has no other way to tell it data changed.
+   */
+  refreshKey?: number;
 }
 
 const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
   statistics: _statistics,
+  refreshKey,
 }) => {
   const { user } = useAuth();
   const [employees, setEmployees] = useState<EmployeeType[]>([]);
@@ -88,19 +95,19 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
       setLoading(true);
       setError(null);
 
-const filters: {
-  department?: string;
-  status?: string;
-  job_title?: string;
-  sort_by: string;
-  sort_order: "asc" | "desc";
-} = {
-  department: selectedDepartment || undefined,
-  status: selectedStatus || undefined,
-  job_title: selectedJobTitle || undefined,
-  sort_by: "created_at",
-  sort_order: "desc",
-};
+      const filters: {
+        department?: string;
+        status?: string;
+        job_title?: string;
+        sort_by: string;
+        sort_order: "asc" | "desc";
+      } = {
+        department: selectedDepartment || undefined,
+        status: selectedStatus || undefined,
+        job_title: selectedJobTitle || undefined,
+        sort_by: "created_at",
+        sort_order: "desc",
+      };
 
       const response = await employeeAPI.getEmployees(
         user.organization_id,
@@ -114,10 +121,10 @@ const filters: {
         // Filter by search term if provided
         const filteredEmployees = searchTerm
           ? employeesData.filter((emp: EmployeeType) =>
-              `${emp.firstname} ${emp.surname}`
-                .toLowerCase()
-                .includes(searchTerm.toLowerCase()),
-            )
+            `${emp.firstname} ${emp.surname}`
+              .toLowerCase()
+              .includes(searchTerm.toLowerCase()),
+          )
           : employeesData;
 
         setEmployees(filteredEmployees);
@@ -165,7 +172,7 @@ const filters: {
     if (user?.organization_id) {
       fetchEmployees();
     }
-  }, [fetchEmployees, user?.organization_id]);
+  }, [fetchEmployees, user?.organization_id, refreshKey]);
 
   const getStatusBadge = (status: string) => {
     const statusConfig: Record<string, { color: string; label: string }> = {
@@ -266,12 +273,12 @@ const filters: {
     searchTerm || selectedDepartment || selectedStatus || selectedJobTitle;
 
   // Get unique values for filter dropdowns
-const departments = Array.from(
-  new Set(employees.map((emp) => emp.department?.name).filter(Boolean)),
-);
-const jobTitles = Array.from(
-  new Set(employees.map((emp) => emp.job_title?.title).filter(Boolean)),
-);
+  const departments = Array.from(
+    new Set(employees.map((emp) => emp.department?.name).filter(Boolean)),
+  );
+  const jobTitles = Array.from(
+    new Set(employees.map((emp) => emp.job_title?.title).filter(Boolean)),
+  );
   const statuses = Array.from(
     new Set(employees.map((emp) => emp.status)),
   ).filter(Boolean);
@@ -346,7 +353,6 @@ const jobTitles = Array.from(
             employee={{
               id: employee.id.toString(),
               name: `${employee.firstname} ${employee.surname}`,
-              // email: employee.email,
               workemail: employee.workemail || "",
               personalemail: employee.personalemail || "",
               phone: employee.phone || "",
@@ -355,17 +361,18 @@ const jobTitles = Array.from(
               status: employee.status as unknown as DrawerEmployeeStatus,
               salary: parseFloat(employee.base_salary),
               hire_date: employee.hire_date,
+              start_date: employee.start_date,
               bank_account_number: employee.bank_account_number || "",
               work_location: employee.work_location,
               employment_type: employee.employment_type,
               report_to: employee.report_to
                 ? [
-                    employee.report_to.firstname,
-                    employee.report_to.middlename,
-                    employee.report_to.surname
-                  ]
-                    .filter(Boolean)
-                    .join(" ")
+                  employee.report_to.firstname,
+                  employee.report_to.middlename,
+                  employee.report_to.surname
+                ]
+                  .filter(Boolean)
+                  .join(" ")
                 : "",
               location: employee.work_location,
               img: (
@@ -621,4 +628,3 @@ const jobTitles = Array.from(
 };
 
 export { DataTableEmployees };
-// [file content end]
