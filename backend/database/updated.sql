@@ -198,34 +198,6 @@ CREATE TABLE IF NOT EXISTS `employee_profiles` (
 
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-
--- -----------------------------------------------------------------------------
--- 2. employee_allowances
---    Recurring allowances attached to an employee (house allowance, transport, etc.)
---    These are added to gross pay every payrun automatically.
--- -----------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS `employee_allowances` (
-  `id`              INT           NOT NULL AUTO_INCREMENT,
-  `employee_id`     INT           NOT NULL,
-  `config_id`       INT           NOT NULL  COMMENT 'Points to organization_configs (config_type=benefit)',
-  `amount`          DECIMAL(15,2) NOT NULL,
-  `effective_from`  DATE          NOT NULL,
-  `effective_to`    DATE          DEFAULT NULL  COMMENT 'NULL = no end date',
-  `is_active`       TINYINT(1)    DEFAULT 1,
-  `created_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-
-  PRIMARY KEY (`id`),
-  KEY `ea_employee_id` (`employee_id`),
-  KEY `ea_config_id`   (`config_id`),
-
-  CONSTRAINT `ea_emp_fk`    FOREIGN KEY (`employee_id`) REFERENCES `employees`            (`id`) ON DELETE CASCADE,
-  CONSTRAINT `ea_config_fk` FOREIGN KEY (`config_id`)   REFERENCES `organization_configs` (`id`) ON DELETE CASCADE
-
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
-
 -- -----------------------------------------------------------------------------
 -- 3. departments
 --    Departments within an organization
@@ -1550,6 +1522,224 @@ CREATE TABLE `reimbursementitems` (
   KEY `idxreimbitemreimb` (`reimbursement_id`),
   CONSTRAINT `reimbitemreimbfk` FOREIGN KEY (`reimbursement_id`) REFERENCES `reimbursements` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
+-- =============================================================================
+-- ALLOWANCE MODULE MIGRATION
+-- Replaces the old `employee_allowances` table (simple employee->config link)
+-- with a full allowance_types / employee_allowance system.
+--
+-- `benefits` and `organization_configs` (config_type = 'benefit') are left
+-- untouched per instruction — they remain available for anything not
+-- migrated into the new allowance module.
+-- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- 0. Drop the old employee_allowances table it is being replaced.
+--    NOTE: if you have production data in this table, export/migrate it
+--    into employee_allowance BEFORE running this drop. This statement is
+--    written as a straight drop since the table was effectively a stub
+--    (employee_id, config_id, amount, effective_from/to) with no rows
+--    reflecting the richer allowance_types model.
+-- -----------------------------------------------------------------------------
+
+-- -----------------------------------------------------------------------------
+-- 1. allowance_types
+--    Org-level catalogue of allowance definitions (Housing, Transport, etc).
+--    Analogous to organization_configs, but allowances get their own table
+--    because they carry a lot more structure (calculation method, taxable
+--    limit, receipt requirement) than a generic config row can hold.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `allowance_types` (
+  `id`                  INT           NOT NULL AUTO_INCREMENT,
+  `organization_id`     INT           NOT NULL,
+  `name`                VARCHAR(150)  NOT NULL,
+  `code`                VARCHAR(50)   NOT NULL,
+  `description`         TEXT          DEFAULT NULL,
+
+  `category`            ENUM('housing','transport','meal','medical','travel','responsibility') NOT NULL,
+  `payment_nature`      ENUM('cash','non_cash') NOT NULL DEFAULT 'cash',
+
+  `frequency`           ENUM('one_time','monthly','weekly','daily','per_pay_run','per_event') NOT NULL DEFAULT 'monthly',
+  `calculation_method`  ENUM(
+                            'FIXED_AMOUNT',
+                            'PERCENTAGE_OF_BASIC',
+                            'PERCENTAGE_OF_GROSS',
+                            'PER_DAY',
+                            'PER_UNIT',
+                            'FORMULA',
+                            'ACTUAL_EXPENSE'
+                         ) NOT NULL DEFAULT 'FIXED_AMOUNT'
+                         COMMENT 'Phase 1 engine (PayrunProcessingService) only evaluates FIXED_AMOUNT, PERCENTAGE_OF_BASIC, PERCENTAGE_OF_GROSS. The others are accepted here for forward-compatibility but rejected by the API at store/update time until phase 2.',
+
+  `amount`               DECIMAL(15,2) DEFAULT NULL COMMENT 'Org-wide default amount for FIXED_AMOUNT',
+  `percentage`           DECIMAL(5,2)  DEFAULT NULL COMMENT 'Org-wide default percentage for PERCENTAGE_OF_BASIC / PERCENTAGE_OF_GROSS',
+  `formula_expression`   TEXT          DEFAULT NULL COMMENT 'Reserved for FORMULA method — not evaluated in phase 1',
+  `unit_name`            VARCHAR(50)   DEFAULT NULL COMMENT 'Reserved for PER_UNIT method — not evaluated in phase 1',
+
+  `is_recurring`         TINYINT(1)    NOT NULL DEFAULT 1,
+  `requires_receipt`     TINYINT(1)    NOT NULL DEFAULT 0,
+
+  `taxable_income`       TINYINT(1)    NOT NULL DEFAULT 1
+                          COMMENT '1 = this category is subject to PAYE (above taxable_limit). 0 = always fully tax-exempt, taxable_limit ignored.',
+  `taxable_limit`        DECIMAL(15,2) DEFAULT NULL
+                          COMMENT 'KRA-style exemption threshold. Portion of the amount up to this limit is tax-free; only the excess feeds the PAYE base. NULL + taxable_income=1 => entire amount is taxed.',
+
+  `effective_from`       DATE          DEFAULT NULL,
+  `effective_to`         DATE          DEFAULT NULL,
+
+  `status`               VARCHAR(20)   NOT NULL DEFAULT 'ACTIVE'
+                          CHECK (`status` IN ('DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED')),
+
+  `created_by`           INT           DEFAULT NULL,
+  `created_at`           TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_by`           INT           DEFAULT NULL,
+  `updated_at`           TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_allowance_code_per_org` (`organization_id`, `code`),
+  KEY `idx_allowance_types_org`     (`organization_id`),
+  KEY `idx_allowance_types_status`  (`status`),
+  KEY `idx_allowance_types_category` (`category`),
+
+  CONSTRAINT `allowance_types_org_fk`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `allowance_types_created_by_fk`
+    FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `allowance_types_updated_by_fk`
+    FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+
+  CONSTRAINT `chk_allowance_type_inputs` CHECK (
+    (`calculation_method` <> 'FIXED_AMOUNT' OR `amount` IS NOT NULL)
+    AND
+    (`calculation_method` NOT IN ('PERCENTAGE_OF_BASIC', 'PERCENTAGE_OF_GROSS') OR `percentage` IS NOT NULL)
+  )
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+-- -----------------------------------------------------------------------------
+-- 2. employee_allowance
+--    A specific grant of an allowance_type to one employee, with its own
+--    approval workflow. Recurring by nature (start_date/end_date), so it is
+--    NOT tied to a single payrun here — see employee_allowance_payrun_lines
+--    below for the explicit per-payrun attach step.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `employee_allowance` (
+  `id`                  INT           NOT NULL AUTO_INCREMENT,
+  `organization_id`     INT           NOT NULL,
+  `employee_id`         INT           NOT NULL,
+  `allowance_type_id`   INT           NOT NULL,
+
+  `amount`              DECIMAL(15,2) DEFAULT NULL COMMENT 'Override for FIXED_AMOUNT. NULL falls back to allowance_types.amount',
+  `percentage`          DECIMAL(5,2)  DEFAULT NULL COMMENT 'Override for PERCENTAGE_OF_BASIC/GROSS. NULL falls back to allowance_types.percentage',
+  `formula_override`    TEXT          DEFAULT NULL COMMENT 'Reserved — FORMULA method not evaluated in phase 1',
+
+  `start_date`          DATE          NOT NULL,
+  `end_date`            DATE          DEFAULT NULL,
+
+  `eligibility_reason`  TEXT          DEFAULT NULL,
+
+  `status`              VARCHAR(30)   NOT NULL DEFAULT 'DRAFT'
+                         CHECK (`status` IN (
+                           'DRAFT',
+                           'PENDING_APPROVAL',
+                           'APPROVED',
+                           'REJECTED',
+                           'SUSPENDED',
+                           'EXPIRED',
+                           'CANCELLED'
+                         )),
+
+  `requested_by`            INT       DEFAULT NULL,
+  `requested_at`             TIMESTAMP NULL DEFAULT NULL,
+  `approved_by`              INT       DEFAULT NULL,
+  `approved_at`               TIMESTAMP NULL DEFAULT NULL,
+  `rejected_by`               INT       DEFAULT NULL,
+  `rejected_at`                TIMESTAMP NULL DEFAULT NULL,
+  `rejection_reason`           TEXT      DEFAULT NULL,
+  `supporting_document_id`     INT       DEFAULT NULL
+                                COMMENT 'No dedicated documents table in this schema yet — stored as a plain reference id, not FK-constrained.',
+
+  `created_at`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  KEY `idx_emp_allowance_org`      (`organization_id`),
+  KEY `idx_emp_allowance_employee` (`employee_id`),
+  KEY `idx_emp_allowance_type`     (`allowance_type_id`),
+  KEY `idx_emp_allowance_status`   (`status`),
+  KEY `idx_emp_allowance_dates`    (`start_date`, `end_date`),
+
+  CONSTRAINT `emp_allowance_org_fk`
+    FOREIGN KEY (`organization_id`)   REFERENCES `organizations`   (`id`) ON DELETE CASCADE,
+  CONSTRAINT `emp_allowance_employee_fk`
+    FOREIGN KEY (`employee_id`)       REFERENCES `employees`       (`id`) ON DELETE CASCADE,
+  CONSTRAINT `emp_allowance_type_fk`
+    FOREIGN KEY (`allowance_type_id`) REFERENCES `allowance_types` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `emp_allowance_requested_by_fk`
+    FOREIGN KEY (`requested_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `emp_allowance_approved_by_fk`
+    FOREIGN KEY (`approved_by`)  REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `emp_allowance_rejected_by_fk`
+    FOREIGN KEY (`rejected_by`)  REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+-- -----------------------------------------------------------------------------
+-- 3. employee_allowance_payrun_lines   (NEW — not in your original spec)
+--    Records the explicit "attach to payrun" action, reimbursement-style,
+--    for a recurring employee_allowance. One row per (employee_allowance,
+--    payrun) pairing. PayrunProcessingService re-derives the actual amount
+--    fresh on every process() run (same idempotent pattern as loans/
+--    advances/reimbursements) — this table only answers "is this allowance
+--    in scope for this payrun", not "how much".
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `employee_allowance_payrun_lines` (
+  `id`                    INT       NOT NULL AUTO_INCREMENT,
+  `organization_id`       INT       NOT NULL,
+  `employee_allowance_id` INT       NOT NULL,
+  `payrun_id`             INT       NOT NULL,
+  `employee_id`           INT       NOT NULL COMMENT 'Denormalized from employee_allowance for fast lookups during payrun processing',
+
+  `status`     ENUM('attached', 'detached') NOT NULL DEFAULT 'attached',
+  `attached_by`  INT       DEFAULT NULL,
+  `attached_at`   TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `detached_by`    INT       DEFAULT NULL,
+  `detached_at`     TIMESTAMP NULL DEFAULT NULL,
+
+  `created_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at` TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_allowance_per_payrun` (`employee_allowance_id`, `payrun_id`),
+  KEY `idx_ea_lines_org`      (`organization_id`),
+  KEY `idx_ea_lines_payrun`   (`payrun_id`),
+  KEY `idx_ea_lines_employee` (`employee_id`),
+  KEY `idx_ea_lines_status`   (`status`),
+
+  CONSTRAINT `ea_lines_org_fk`
+    FOREIGN KEY (`organization_id`)       REFERENCES `organizations`        (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ea_lines_allowance_fk`
+    FOREIGN KEY (`employee_allowance_id`) REFERENCES `employee_allowance`   (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ea_lines_payrun_fk`
+    FOREIGN KEY (`payrun_id`)             REFERENCES `payruns`              (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ea_lines_employee_fk`
+    FOREIGN KEY (`employee_id`)           REFERENCES `employees`            (`id`) ON DELETE CASCADE,
+  CONSTRAINT `ea_lines_attached_by_fk`
+    FOREIGN KEY (`attached_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `ea_lines_detached_by_fk`
+    FOREIGN KEY (`detached_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+-- -----------------------------------------------------------------------------
+-- 4. payrun_details — new allowance columns, mirroring the existing
+--    taxable_reimbursement / nontaxable_reimbursement / reimbursement_metadata
+--    trio.
+-- -----------------------------------------------------------------------------
+ALTER TABLE `payrun_details`
+  ADD COLUMN `taxable_allowance`    DECIMAL(15,2) NOT NULL DEFAULT '0.00' AFTER `nontaxable_reimbursement`,
+  ADD COLUMN `nontaxable_allowance` DECIMAL(15,2) NOT NULL DEFAULT '0.00' AFTER `taxable_allowance`,
+  ADD COLUMN `allowance_metadata`   JSON          DEFAULT NULL             AFTER `nontaxable_allowance`;
 
 -- Optional: auto-purge expired rows every hour (requires MySQL Event Scheduler)
 -- SET GLOBAL event_scheduler = ON;

@@ -85,6 +85,43 @@ function calculateNSSF(float $salary, array $config): float
 }
 
 /**
+ * Split a single allowance instance's amount into its taxable and
+ * non-taxable portions, per KRA-style exemption rules:
+ *
+ *   - taxable_income = 0            → entire amount is exempt (nontaxable),
+ *                                      taxable_limit is ignored.
+ *   - taxable_income = 1, no limit  → entire amount is taxable.
+ *   - taxable_income = 1, limit set → amount up to the limit is exempt,
+ *                                      only the excess above the limit is
+ *                                      taxable (same shape as the NSSF
+ *                                      tiered-max logic above).
+ *
+ * @param float $amount        Resolved amount for this allowance instance
+ * @param bool  $isTaxable     allowance_types.taxable_income
+ * @param ?float $taxableLimit allowance_types.taxable_limit (NULL = no cap)
+ * @return array{taxable: float, nontaxable: float}
+ */
+function splitAllowanceTaxability(float $amount, bool $isTaxable, ?float $taxableLimit): array
+{
+    if ($amount <= 0) {
+        return ['taxable' => 0.0, 'nontaxable' => 0.0];
+    }
+
+    if (!$isTaxable) {
+        return ['taxable' => 0.0, 'nontaxable' => $amount];
+    }
+
+    if ($taxableLimit === null) {
+        return ['taxable' => $amount, 'nontaxable' => 0.0];
+    }
+
+    $nontaxable = min($amount, $taxableLimit);
+    $taxable    = max(0.0, $amount - $taxableLimit);
+
+    return ['taxable' => $taxable, 'nontaxable' => $nontaxable];
+}
+
+/**
  * Kenya progressive income tax bands (2025).
  * These are statutory and do not come from organisation configs.
  *
@@ -137,6 +174,17 @@ function calculateProgressiveTax(float $taxableIncome): float
  *                                    NOTE: reimbursements (taxable or not) are expense repayments,
  *                                    not salary, so — unlike PAYE — they never enter the NSSF, SHIF,
  *                                    or Housing Levy bases, which remain basic-salary-only per KRA rules.
+ * @param float $taxableAllowance    Portion of $grossPay that came from allowances whose
+ *                                    allowance_types.taxable_income = 1, net of each allowance's
+ *                                    own taxable_limit exemption (payrun_details.taxable_allowance).
+ *                                    Added to the PAYE taxable base, same treatment as
+ *                                    $taxableReimbursement. The threshold split (how much of a given
+ *                                    allowance is exempt vs taxable) is resolved per-allowance by the
+ *                                    caller (PayrunProcessingService) BEFORE it reaches this function —
+ *                                    this parameter is already the post-exemption taxable total.
+ *                                    Non-taxable allowances reach net pay via $grossPay only, exactly
+ *                                    like non-taxable reimbursements, and never touch NSSF/SHIF/
+ *                                    Housing Levy (those remain basic-salary-only per KRA rules).
  *
  * @return array  Detailed breakdown of all figures
  */
@@ -145,22 +193,24 @@ function calculateNetPay(
     float $grossPay,
     array $config,
     float $extraDeductions = 0.0,
-    float $taxableReimbursement = 0.0
+    float $taxableReimbursement = 0.0,
+    float $taxableAllowance = 0.0
 ): array {
     if ($basicSalary <= 0) {
         throw new \InvalidArgumentException('Basic salary must be greater than zero');
     }
 
     // Statutory deductions — all based on basic salary per KRA rules.
-    // Reimbursements never touch NSSF/SHIF/Housing Levy, taxable or not.
+    // Reimbursements and allowances never touch NSSF/SHIF/Housing Levy, taxable or not.
     $nssf         = calculateNSSF($basicSalary, $config);
     $shif         = $basicSalary * $config['shif_rate'];
     $housingLevy  = $basicSalary * $config['housing_levy_rate'];
 
-    // PAYE taxable income = basic − NSSF − SHIF − Housing Levy + taxable reimbursements.
-    // Non-taxable reimbursements are excluded here — they still reach net pay through
-    // $grossPay without ever being taxed.
-    $taxableIncome  = $basicSalary - $nssf - $shif - $housingLevy + $taxableReimbursement;
+    // PAYE taxable income = basic − NSSF − SHIF − Housing Levy + taxable reimbursements
+    // + taxable allowances (already net of their own exemption thresholds).
+    // Non-taxable reimbursements/allowances are excluded here — they still reach net pay
+    // through $grossPay without ever being taxed.
+    $taxableIncome  = $basicSalary - $nssf - $shif - $housingLevy + $taxableReimbursement + $taxableAllowance;
     $taxBeforeRelief = calculateProgressiveTax($taxableIncome);
     $paye           = max(0.0, $taxBeforeRelief - $config['personal_relief']);
 
@@ -173,6 +223,7 @@ function calculateNetPay(
         'basic_salary'          => round($basicSalary, 2),
         'gross_pay'             => round($grossPay, 2),
         'taxable_reimbursement' => round($taxableReimbursement, 2),
+        'taxable_allowance'     => round($taxableAllowance, 2),
 
         // Statutory deductions
         'nssf'              => round($nssf, 2),

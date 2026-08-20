@@ -14,7 +14,9 @@ require_once __DIR__ . '/../helpers/tax.php';
  *  2. Fetch all active employees in the organisation
  *  3. For each employee:
  *     a. Gather basic salary, overtime, bonuses, commissions
- *     b. Pull in-period benefits (allowances, per diems, refunds) → add to gross
+ *     b. Pull in-period per diems, reimbursements and allowances explicitly
+ *        attached to this payrun (allowances via the allowance_types /
+ *        employee_allowance / employee_allowance_payrun_lines module) → add to gross
  *     c. Pull in-period voluntary deductions (loans, advances, Sacco) → extra deductions
  *     d. Calculate gross pay, NSSF, SHIF, Housing Levy, PAYE, net pay
  *     e. Upsert payrun_details row
@@ -123,10 +125,12 @@ class PayrunProcessingService
      * Recompute a single employee's payrun_details row (and roll the change up
      * into the payrun's header totals) without touching payrun status.
      *
-     * Used by ReimbursementController::attachToPayrun() so a reimbursement
-     * attached to a payrun that's already been processed still lands in that
-     * employee's gross_pay/net_pay immediately, instead of silently sitting
-     * on the reimbursement row until someone re-runs the whole payrun.
+     * Used by ReimbursementController::attachToPayrun() and
+     * EmployeeAllowanceController::attachToPayrun()/detachFromPayrun() so a
+     * reimbursement or allowance attached to (or removed from) a payrun
+     * that's already been processed still lands in that employee's
+     * gross_pay/net_pay immediately, instead of silently sitting unapplied
+     * until someone re-runs the whole payrun.
      *
      * @param  int  $orgId       Organisation ID
      * @param  int  $payrunId    Payrun ID (must not be finalized)
@@ -395,8 +399,7 @@ class PayrunProcessingService
         $bonusAmount     = $this->getBenefitAmount($employeeId, $periodStart, $periodEnd, 'bonus', $orgId);
         $commissionAmount = 0.0; // extend here if you track commissions separately
 
-        // Benefits that add to gross (allowances, per diems)
-        $benefitsAmount  = $this->getApprovedBenefitsTotal($employeeId, $periodStart, $periodEnd);
+        // Per diems still add to gross directly (unrelated to the allowance module).
         $perDiemAmount   = $this->getApprovedPerDiemsTotal($employeeId, $periodStart, $periodEnd);
 
         // Reimbursements explicitly attached to THIS payrun (see
@@ -408,8 +411,20 @@ class PayrunProcessingService
         $taxableReimbursement  = $reimbursements['taxable'];
         $nontaxableReimbursement = $reimbursements['nontaxable'];
 
-        $grossPay = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount
-            + $benefitsAmount + $perDiemAmount + $taxableReimbursement + $nontaxableReimbursement;
+        // Gross pay BEFORE allowances — used as the base for any
+        // PERCENTAGE_OF_GROSS allowance, so that base doesn't include the
+        // allowances being computed from it.
+        $grossBeforeAllowances = $basicSalary + $overtimeAmount + $bonusAmount + $commissionAmount
+            + $perDiemAmount + $taxableReimbursement + $nontaxableReimbursement;
+
+        // Allowances explicitly attached to THIS payrun (see
+        // EmployeeAllowanceController::attachToPayrun()), same explicit-attach
+        // model as reimbursements above.
+        $allowances               = $this->getAttachedAllowancesTotal($employeeId, $payrun->id, $basicSalary, $grossBeforeAllowances);
+        $taxableAllowance         = $allowances['taxable'];
+        $nontaxableAllowance      = $allowances['nontaxable'];
+
+        $grossPay = $grossBeforeAllowances + $taxableAllowance + $nontaxableAllowance;
 
         // --- Voluntary/org deductions ---
         $loanDeductions       = $this->getLoanInstalment($employeeId, $periodStart, $periodEnd, $deductionConfigs);
@@ -418,7 +433,7 @@ class PayrunProcessingService
         $extraDeductions      = $loanDeductions['total'] + $advanceDeductions['total'] + $attendanceDeductions['total'];
 
         // --- Statutory calculations ---
-        $calc = calculateNetPay($basicSalary, $grossPay, $taxConfig, $extraDeductions, $taxableReimbursement);
+        $calc = calculateNetPay($basicSalary, $grossPay, $taxConfig, $extraDeductions, $taxableReimbursement, $taxableAllowance);
 
         // --- Upsert payrun_details ---
         $detailData = [
@@ -426,11 +441,14 @@ class PayrunProcessingService
             'employee_id'      => $employeeId,
             'basic_salary'     => $calc['basic_salary'],
             'overtime_amount'  => round($overtimeAmount, 2),
-            'bonus_amount'     => round($bonusAmount + $benefitsAmount + $perDiemAmount, 2),
+            'bonus_amount'     => round($bonusAmount + $perDiemAmount, 2),
             'commission_amount' => round($commissionAmount, 2),
             'taxable_reimbursement'    => round($taxableReimbursement, 2),
             'nontaxable_reimbursement' => round($nontaxableReimbursement, 2),
             'reimbursement_metadata'   => !empty($reimbursements['metadata']) ? json_encode($reimbursements['metadata']) : null,
+            'taxable_allowance'        => round($taxableAllowance, 2),
+            'nontaxable_allowance'     => round($nontaxableAllowance, 2),
+            'allowance_metadata'       => !empty($allowances['metadata']) ? json_encode($allowances['metadata']) : null,
             'gross_pay'        => $calc['gross_pay'],
             'total_deductions' => $calc['total_deductions'],
             'net_pay'          => $calc['net_pay'],
@@ -529,21 +547,124 @@ class PayrunProcessingService
     }
 
     /**
-     * Approved benefits (allowances) for the pay period.
+     * Sum allowances that have been explicitly attached to this payrun (via
+     * EmployeeAllowanceController::attachToPayrun(), which inserts an
+     * 'attached' row into employee_allowance_payrun_lines) for this employee,
+     * split into taxable / non-taxable per each allowance_type's
+     * taxable_income + taxable_limit exemption rule.
+     *
+     * The amount itself is NOT read from the attach line (that table only
+     * records eligibility for this payrun) — it's resolved fresh here from
+     * employee_allowance + allowance_types + the employee's current
+     * basic_salary/gross-so-far, the same idempotent re-derive-from-source
+     * pattern used by loans/advances/reimbursements elsewhere in this file.
+     * That way reprocessing a draft payrun always reflects the allowance's
+     * current approved amount, not a frozen snapshot.
+     *
+     * Only FIXED_AMOUNT, PERCENTAGE_OF_BASIC and PERCENTAGE_OF_GROSS are
+     * evaluated. PER_DAY / PER_UNIT / FORMULA / ACTUAL_EXPENSE rows are
+     * skipped with a logged warning — the API layer should already prevent
+     * allowance_types using those methods from being created (phase 2).
+     *
+     * Returns ['taxable' => float, 'nontaxable' => float, 'metadata' => array]
+     * where metadata is a flat list of {employee_allowance_id, allowance_type,
+     * amount, taxable, nontaxable} for the audit-trail JSON column.
      */
-    private function getApprovedBenefitsTotal(int $employeeId, string $start, string $end): float
-    {
+    private function getAttachedAllowancesTotal(
+        int   $employeeId,
+        int   $payrunId,
+        float $basicSalary,
+        float $grossBeforeAllowances
+    ): array {
         $rows = DB::raw(
-            "SELECT COALESCE(SUM(b.amount), 0) as total
-               FROM benefits b
-               INNER JOIN organization_configs oc ON b.config_id = oc.id
-              WHERE b.employee_id = :emp
-                AND b.date_granted BETWEEN :start AND :end
-                AND oc.config_type = 'benefit'",
-            [':emp' => $employeeId, ':start' => $start, ':end' => $end]
+            "SELECT
+                ea.id                    AS employee_allowance_id,
+                ea.amount                AS ea_amount,
+                ea.percentage            AS ea_percentage,
+                at.name                  AS allowance_name,
+                at.calculation_method,
+                at.amount                AS type_amount,
+                at.percentage            AS type_percentage,
+                at.taxable_income,
+                at.taxable_limit
+             FROM employee_allowance_payrun_lines eapl
+             INNER JOIN employee_allowance ea ON ea.id = eapl.employee_allowance_id
+             INNER JOIN allowance_types    at ON at.id = ea.allowance_type_id
+             WHERE eapl.payrun_id    = :payrun_id
+               AND eapl.employee_id  = :employee_id
+               AND eapl.status       = 'attached'
+               AND ea.status         = 'APPROVED'",
+            [':payrun_id' => $payrunId, ':employee_id' => $employeeId]
         );
 
-        return (float) ($rows[0]->total ?? 0);
+        $taxable    = 0.0;
+        $nontaxable = 0.0;
+        $metadata   = [];
+
+        foreach ($rows as $row) {
+            $amount = $this->resolveAllowanceAmount($row, $basicSalary, $grossBeforeAllowances);
+            if ($amount <= 0) {
+                continue;
+            }
+
+            $split = splitAllowanceTaxability(
+                $amount,
+                (bool) $row->taxable_income,
+                $row->taxable_limit !== null ? (float) $row->taxable_limit : null
+            );
+
+            $taxable    += $split['taxable'];
+            $nontaxable += $split['nontaxable'];
+
+            $metadata[] = [
+                'employee_allowance_id' => (int) $row->employee_allowance_id,
+                'allowance_type'        => $row->allowance_name,
+                'amount'                => round($amount, 2),
+                'taxable'               => round($split['taxable'], 2),
+                'nontaxable'            => round($split['nontaxable'], 2),
+            ];
+        }
+
+        return [
+            'taxable'    => round($taxable, 2),
+            'nontaxable' => round($nontaxable, 2),
+            'metadata'   => $metadata,
+        ];
+    }
+
+    /**
+     * Resolve a single attached allowance's amount for this pay period.
+     * employee_allowance's own amount/percentage override the allowance_type
+     * default when set (NULL on the employee row = "use the type default").
+     *
+     * PERCENTAGE_OF_GROSS is computed against $grossBeforeAllowances (basic +
+     * overtime + bonus + commission + per diems + reimbursements) so it is
+     * never circular with the allowance total being built here.
+     */
+    private function resolveAllowanceAmount(object $row, float $basicSalary, float $grossBeforeAllowances): float
+    {
+        switch ($row->calculation_method) {
+            case 'FIXED_AMOUNT':
+                $amount = $row->ea_amount !== null ? (float) $row->ea_amount : (float) $row->type_amount;
+                break;
+
+            case 'PERCENTAGE_OF_BASIC':
+                $pct    = $row->ea_percentage !== null ? (float) $row->ea_percentage : (float) $row->type_percentage;
+                $amount = $basicSalary * ($pct / 100);
+                break;
+
+            case 'PERCENTAGE_OF_GROSS':
+                $pct    = $row->ea_percentage !== null ? (float) $row->ea_percentage : (float) $row->type_percentage;
+                $amount = $grossBeforeAllowances * ($pct / 100);
+                break;
+
+            default:
+                // PER_DAY / PER_UNIT / FORMULA / ACTUAL_EXPENSE — not evaluated yet.
+                error_log("Allowance #{$row->employee_allowance_id} ({$row->allowance_name}) uses unsupported calculation_method '{$row->calculation_method}' — skipped.");
+                $amount = 0.0;
+        }
+
+        return max(0.0, round($amount, 2));
     }
 
     /**

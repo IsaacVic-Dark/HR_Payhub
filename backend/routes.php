@@ -27,6 +27,8 @@ use App\Controllers\PublicHolidayController;
 use App\Controllers\OvertimeApprovalController;
 use App\Controllers\CountryController;
 use App\Controllers\CountyController;
+use App\Controllers\AllowanceTypeController;
+use App\Controllers\EmployeeAllowanceController;
 
 // Authentication routes - NO authentication required
 Router::post('/api/v1/auth/login', [AuthController::getInstance(), 'login']);
@@ -1572,4 +1574,145 @@ Router::post('api/v1/organizations/{org_id}/overtime-approvals/{id}/reject', Ove
 Router::post('api/v1/organizations/{org_id}/overtime-approvals/{id}/resolve', OvertimeApprovalController::class . '@resolve', [
     ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
     ['AttendanceAuthorizationMiddleware', 'write'],
+]);
+
+// GET /api/v1/organizations/{org_id}/allowance-types?category=&status=&search=&page=&per_page=
+Router::get('api/v1/organizations/{org_id}/allowance-types', AllowanceTypeController::class . '@index', [
+    'AuthMiddleware',
+    'AllowanceTypeAuthorizationMiddleware'
+]);
+
+// GET /api/v1/organizations/{org_id}/allowance-types/{id}
+Router::get('api/v1/organizations/{org_id}/allowance-types/{id}', AllowanceTypeController::class . '@show', [
+    'AuthMiddleware',
+    'AllowanceTypeAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/allowance-types
+// Body: { name, code, category, payment_nature?, frequency?, calculation_method,
+//         amount?, percentage?, is_recurring?, requires_receipt?, taxable_income?,
+//         taxable_limit?, effective_from?, effective_to?, status?, description? }
+Router::post('api/v1/organizations/{org_id}/allowance-types', AllowanceTypeController::class . '@store', [
+    'AuthMiddleware',
+    'AllowanceTypeAuthorizationMiddleware'
+]);
+
+// PUT /api/v1/organizations/{org_id}/allowance-types/{id}
+Router::put('api/v1/organizations/{org_id}/allowance-types/{id}', AllowanceTypeController::class . '@update', [
+    'AuthMiddleware',
+    'AllowanceTypeAuthorizationMiddleware'
+]);
+
+// PATCH /api/v1/organizations/{org_id}/allowance-types/{id}
+Router::patch('api/v1/organizations/{org_id}/allowance-types/{id}', AllowanceTypeController::class . '@update', [
+    'AuthMiddleware',
+    'AllowanceTypeAuthorizationMiddleware'
+]);
+
+// DELETE /api/v1/organizations/{org_id}/allowance-types/{id}
+// Soft — flips status to ARCHIVED. See AllowanceTypeController::destroy()
+Router::delete('api/v1/organizations/{org_id}/allowance-types/{id}', AllowanceTypeController::class . '@destroy', [
+    'AuthMiddleware',
+    'AllowanceTypeAuthorizationMiddleware'
+]);
+
+// ---------------------------------------------------------------------------
+// Employee Allowances — grants + approval workflow
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/employee-allowances?employee_id=&status=&allowance_type_id=&page=&per_page=
+Router::get('api/v1/organizations/{org_id}/employee-allowances', EmployeeAllowanceController::class . '@index', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// GET /api/v1/organizations/{org_id}/employee-allowances/payrun/{payrun_id}
+// List every allowance currently attached to a payrun — put this BEFORE the
+// /{id} route below in your router if it matches on registration order,
+// so "payrun" isn't swallowed as an {id} value.
+Router::get('api/v1/organizations/{org_id}/employee-allowances/payrun/{payrun_id}', EmployeeAllowanceController::class . '@indexForPayrun', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// GET /api/v1/organizations/{org_id}/employee-allowances/{id}
+Router::get('api/v1/organizations/{org_id}/employee-allowances/{id}', EmployeeAllowanceController::class . '@show', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/employee-allowances
+// Body: { employee_id, allowance_type_id, amount?, percentage?, start_date,
+//         end_date?, eligibility_reason?, supporting_document_id?, submit? }
+Router::post('api/v1/organizations/{org_id}/employee-allowances', EmployeeAllowanceController::class . '@store', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// PUT /api/v1/organizations/{org_id}/employee-allowances/{id}
+Router::put('api/v1/organizations/{org_id}/employee-allowances/{id}', EmployeeAllowanceController::class . '@update', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// PATCH /api/v1/organizations/{org_id}/employee-allowances/{id}
+Router::patch('api/v1/organizations/{org_id}/employee-allowances/{id}', EmployeeAllowanceController::class . '@update', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// DELETE /api/v1/organizations/{org_id}/employee-allowances/{id}
+// Only DRAFT rows — see EmployeeAllowanceController::destroy()
+Router::delete('api/v1/organizations/{org_id}/employee-allowances/{id}', EmployeeAllowanceController::class . '@destroy', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/employee-allowances/{id}/submit
+// DRAFT -> PENDING_APPROVAL
+Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/submit', EmployeeAllowanceController::class . '@submit', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/employee-allowances/{id}/approve
+// PENDING_APPROVAL -> APPROVED. Roles: admin, payroll_manager, finance_manager
+Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/approve', EmployeeAllowanceController::class . '@approve', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/employee-allowances/{id}/reject
+// Body: { rejection_reason } — required. PENDING_APPROVAL -> REJECTED
+Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/reject', EmployeeAllowanceController::class . '@reject', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/employee-allowances/{id}/suspend
+// APPROVED -> SUSPENDED
+Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/suspend', EmployeeAllowanceController::class . '@suspend', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/employee-allowances/{id}/cancel
+Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/cancel', EmployeeAllowanceController::class . '@cancel', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/employee-allowances/{id}/attach-payrun
+// Body: { payrun_id }. Only APPROVED allowances. Recomputes payrun_details
+// for that employee immediately (see PayrunProcessingService::processSingleEmployee).
+Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/attach-payrun', EmployeeAllowanceController::class . '@attachToPayrun', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// POST /api/v1/organizations/{org_id}/employee-allowances/{id}/detach-payrun
+// Body: { payrun_id }
+Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/detach-payrun', EmployeeAllowanceController::class . '@detachFromPayrun', [
+    'AuthMiddleware',
+    'EmployeeAllowanceAuthorizationMiddleware'
 ]);
