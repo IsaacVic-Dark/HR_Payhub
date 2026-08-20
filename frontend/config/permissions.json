@@ -9,7 +9,7 @@
         "/platform/organizations/:id",
         "/platform/countries",
         "/platform/countries/:id",
-        "/platform/subscription-plans",
+        "/subscription-plans",
         "/platform/subscriptions",
         "/platform/subscriptions/:id",
         "/platform/public-holidays",

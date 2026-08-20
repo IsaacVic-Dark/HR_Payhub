@@ -440,7 +440,7 @@ platformSection: [
   },
   {
     title: "Subscription Plans",
-    url: "/platform/subscription-plans",
+    url: "/subscription-plans",
     icon: IconReportMoney,
     roles: ["super_admin"],
   },
