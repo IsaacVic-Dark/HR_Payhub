@@ -10,16 +10,24 @@ use App\Services\HolidayLookupService;
  * Public holidays.
  *
  * Replaces the old org-only public_holidays CRUD. New model:
- *   - public_holidays_master : global, per-country calendar (imported from Mansa)
+ *   - public_holidays_master : global, per-country calendar (imported from
+ *                              Mansa OR entered manually by super_admin)
  *   - org_public_holidays    : ONLY override + custom rows (never inherited rows)
  *
  * See HolidayLookupService for the merge logic and HolidayImportService for
  * the Mansa sync logic.
+ *
+ * Access:
+ *   - public_holidays_master : super_admin only (see *Master() methods below)
+ *   - org_public_holidays    : org admin only (see storeOverride/storeCustom/
+ *                              update/destroy/index/check above)
  */
 class PublicHolidayController
 {
     private HolidayImportService $importService;
     private HolidayLookupService $lookupService;
+
+    private const HOLIDAY_TYPES = ['national', 'regional', 'religious', 'bank', 'observance'];
 
     public function __construct()
     {
@@ -309,6 +317,251 @@ class PublicHolidayController
         } catch (\Exception $e) {
             error_log("Destroy holiday error: " . $e->getMessage());
             return responseJson(success: false, data: null, message: "Failed to deactivate holiday: " . $e->getMessage(), code: 500);
+        }
+    }
+
+    // =========================================================================
+    // MASTER HOLIDAY CALENDAR — super_admin only.
+    // Manages public_holidays_master directly, on top of whatever Import from
+    // Mansa already populated. Rows can come from source='api_mansa' (import)
+    // or source='manual' (created here) — both are fully editable/deactivatable
+    // through these endpoints.
+    // =========================================================================
+
+    // -------------------------------------------------------------------------
+    // GET /api/v1/holidays/master?country_code=&year=&search=&is_active=&page=&per_page=
+    // -------------------------------------------------------------------------
+    public function indexMaster(): mixed
+    {
+        try {
+            $countryCode = isset($_GET['country_code']) && $_GET['country_code'] !== ''
+                ? strtoupper(trim($_GET['country_code']))
+                : null;
+            $year     = isset($_GET['year']) && $_GET['year'] !== '' ? (int) $_GET['year'] : null;
+            $search   = isset($_GET['search']) && $_GET['search'] !== '' ? trim($_GET['search']) : null;
+            $isActive = isset($_GET['is_active']) && $_GET['is_active'] !== '' ? (int) $_GET['is_active'] : null;
+            $page     = max(1, (int) ($_GET['page'] ?? 1));
+            $perPage  = max(1, min(100, (int) ($_GET['per_page'] ?? 15)));
+            $offset   = ($page - 1) * $perPage;
+
+            if ($countryCode && !preg_match('/^[A-Z]{2}$/', $countryCode)) {
+                return responseJson(success: false, data: null, message: "country_code must be a 2-letter ISO code", code: 400);
+            }
+
+            $where  = [];
+            $params = [];
+
+            if ($countryCode) {
+                $where[]        = 'country_code = :cc';
+                $params[':cc']  = $countryCode;
+            }
+            if ($year) {
+                $where[]          = 'YEAR(holiday_date) = :year';
+                $params[':year']  = $year;
+            }
+            if ($search) {
+                $where[]            = 'name LIKE :search';
+                $params[':search']  = '%' . $search . '%';
+            }
+            if ($isActive !== null) {
+                $where[]               = 'is_active = :is_active';
+                $params[':is_active']  = $isActive;
+            }
+
+            $whereSql = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+
+            $totalRow = DB::raw("SELECT COUNT(*) AS cnt FROM public_holidays_master {$whereSql}", $params);
+            $total    = (int) ($totalRow[0]->cnt ?? 0);
+
+            $rows = DB::raw(
+                "SELECT * FROM public_holidays_master {$whereSql}
+                 ORDER BY holiday_date ASC
+                 LIMIT {$perPage} OFFSET {$offset}",
+                $params
+            );
+
+            return responseJson(
+                success: true,
+                data: $rows,
+                message: "Master holidays fetched successfully",
+                metadata: [
+                    'pagination' => [
+                        'current_page' => $page,
+                        'per_page'     => $perPage,
+                        'total'        => $total,
+                        'total_pages'  => $perPage > 0 ? (int) ceil($total / $perPage) : 0,
+                    ],
+                ]
+            );
+        } catch (\Exception $e) {
+            error_log("Master holiday index error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: $e->getMessage(), code: 400);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // GET /api/v1/holidays/master/{id}
+    // -------------------------------------------------------------------------
+    public function showMaster(int $id): mixed
+    {
+        try {
+            $row = DB::table('public_holidays_master')->where(['id' => $id])->get();
+
+            if (empty($row)) {
+                return responseJson(success: false, data: null, message: "Master holiday not found", code: 404);
+            }
+
+            return responseJson(success: true, data: $row[0], message: "Master holiday fetched successfully");
+        } catch (\Exception $e) {
+            error_log("Master holiday show error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: $e->getMessage(), code: 400);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // POST /api/v1/holidays/master
+    // Body: { country_code, holiday_date, name, type?, is_active? }
+    // Manually adds a holiday to the master calendar (on top of whatever
+    // Import from Mansa already populated).
+    // -------------------------------------------------------------------------
+    public function storeMaster(): mixed
+    {
+        try {
+            $data = json_decode(file_get_contents('php://input'), true) ?? [];
+
+            foreach (['country_code', 'holiday_date', 'name'] as $f) {
+                if (empty($data[$f])) {
+                    return responseJson(success: false, data: null, message: "Field '$f' is required", code: 400);
+                }
+            }
+
+            $countryCode = strtoupper(trim($data['country_code']));
+            if (!preg_match('/^[A-Z]{2}$/', $countryCode)) {
+                return responseJson(success: false, data: null, message: "country_code must be a 2-letter ISO code", code: 400);
+            }
+
+            $country = DB::raw(
+                "SELECT id FROM countries WHERE iso2 = :cc AND is_active = 1 LIMIT 1",
+                [':cc' => $countryCode]
+            );
+            if (empty($country)) {
+                return responseJson(success: false, data: null, message: "Unknown or inactive country_code: {$countryCode}", code: 404);
+            }
+
+            if (!\DateTime::createFromFormat('Y-m-d', $data['holiday_date'])) {
+                return responseJson(success: false, data: null, message: "holiday_date must be in YYYY-MM-DD format", code: 400);
+            }
+
+            if (isset($data['type']) && $data['type'] !== null && !in_array($data['type'], self::HOLIDAY_TYPES, true)) {
+                return responseJson(success: false, data: null, message: "type must be one of: " . implode(', ', self::HOLIDAY_TYPES), code: 400);
+            }
+
+            $existing = DB::raw(
+                "SELECT id FROM public_holidays_master WHERE country_code = :cc AND holiday_date = :date AND name = :name LIMIT 1",
+                [':cc' => $countryCode, ':date' => $data['holiday_date'], ':name' => $data['name']]
+            );
+            if (!empty($existing)) {
+                return responseJson(success: false, data: null, message: "A holiday with that date and name already exists for this country", code: 409);
+            }
+
+            DB::table('public_holidays_master')->insert([
+                'country_code' => $countryCode,
+                'holiday_date' => $data['holiday_date'],
+                'name'         => $data['name'],
+                'type'         => $data['type'] ?? null,
+                'is_active'    => isset($data['is_active']) ? (int) (bool) $data['is_active'] : 1,
+                'source'       => 'manual',
+                'source_id'    => null,
+                'created_at'   => date('Y-m-d H:i:s'),
+                'updated_at'   => date('Y-m-d H:i:s'),
+            ]);
+
+            return responseJson(success: true, data: null, message: "Master holiday created successfully", code: 201);
+        } catch (\Exception $e) {
+            error_log("Master holiday store error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: "Failed to create master holiday: " . $e->getMessage(), code: 500);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // PUT/PATCH /api/v1/holidays/master/{id}
+    // Body: { holiday_date?, name?, type?, is_active? }
+    // country_code is intentionally not editable here — deactivate + recreate
+    // under the correct country instead, to avoid orphaning org overrides
+    // that reference master_holiday_id.
+    // -------------------------------------------------------------------------
+    public function updateMaster(int $id): mixed
+    {
+        try {
+            $existing = DB::table('public_holidays_master')->where(['id' => $id])->get();
+            if (empty($existing)) {
+                return responseJson(success: false, data: null, message: "Master holiday not found", code: 404);
+            }
+
+            $data = json_decode(file_get_contents('php://input'), true) ?? [];
+            $updateData = [];
+
+            if (isset($data['holiday_date'])) {
+                if (!\DateTime::createFromFormat('Y-m-d', $data['holiday_date'])) {
+                    return responseJson(success: false, data: null, message: "holiday_date must be in YYYY-MM-DD format", code: 400);
+                }
+                $updateData['holiday_date'] = $data['holiday_date'];
+            }
+
+            if (isset($data['name'])) {
+                $updateData['name'] = $data['name'];
+            }
+
+            if (array_key_exists('type', $data)) {
+                if ($data['type'] !== null && !in_array($data['type'], self::HOLIDAY_TYPES, true)) {
+                    return responseJson(success: false, data: null, message: "type must be one of: " . implode(', ', self::HOLIDAY_TYPES), code: 400);
+                }
+                $updateData['type'] = $data['type'];
+            }
+
+            if (isset($data['is_active'])) {
+                $updateData['is_active'] = (int) (bool) $data['is_active'];
+            }
+
+            if (empty($updateData)) {
+                return responseJson(success: false, data: null, message: "No fields to update", code: 400);
+            }
+
+            $updateData['updated_at'] = date('Y-m-d H:i:s');
+
+            DB::table('public_holidays_master')->update($updateData, 'id', $id);
+
+            return responseJson(success: true, data: null, message: "Master holiday updated successfully");
+        } catch (\Exception $e) {
+            error_log("Master holiday update error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: "Failed to update master holiday: " . $e->getMessage(), code: 500);
+        }
+    }
+
+    // -------------------------------------------------------------------------
+    // DELETE /api/v1/holidays/master/{id}
+    // Soft-delete only — sets is_active = 0. Never hard-deletes (audit trail,
+    // and org overrides may still reference this master_holiday_id).
+    // Reactivating is the same PUT/PATCH endpoint above with is_active: 1.
+    // -------------------------------------------------------------------------
+    public function destroyMaster(int $id): mixed
+    {
+        try {
+            $existing = DB::table('public_holidays_master')->where(['id' => $id])->get();
+            if (empty($existing)) {
+                return responseJson(success: false, data: null, message: "Master holiday not found", code: 404);
+            }
+
+            DB::table('public_holidays_master')->update(
+                ['is_active' => 0, 'updated_at' => date('Y-m-d H:i:s')],
+                'id',
+                $id
+            );
+
+            return responseJson(success: true, data: null, message: "Master holiday deactivated successfully");
+        } catch (\Exception $e) {
+            error_log("Master holiday destroy error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: "Failed to deactivate master holiday: " . $e->getMessage(), code: 500);
         }
     }
 }

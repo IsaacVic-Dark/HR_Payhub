@@ -1473,6 +1473,41 @@ Router::post('api/v1/holidays/import', PublicHolidayController::class . '@import
     ['AuthMiddleware', ['super_admin']],
 ]);
 
+// GET /api/v1/holidays/master?country_code=&year=&search=&is_active=&page=&per_page=
+// super_admin only — lists public_holidays_master rows (both Mansa-imported
+// and manually-created), filterable by country/year/search/status.
+Router::get('api/v1/holidays/master', PublicHolidayController::class . '@indexMaster', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// GET /api/v1/holidays/master/{id}
+Router::get('api/v1/holidays/master/{id}', PublicHolidayController::class . '@showMaster', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// POST /api/v1/holidays/master
+// Body: { country_code, holiday_date, name, type?, is_active? }
+Router::post('api/v1/holidays/master', PublicHolidayController::class . '@storeMaster', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// PUT /api/v1/holidays/master/{id}
+// Body: { holiday_date?, name?, type?, is_active? }
+Router::put('api/v1/holidays/master/{id}', PublicHolidayController::class . '@updateMaster', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// PATCH /api/v1/holidays/master/{id}
+Router::patch('api/v1/holidays/master/{id}', PublicHolidayController::class . '@updateMaster', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// DELETE /api/v1/holidays/master/{id}
+// Soft-delete (is_active = 0) — see PublicHolidayController::destroyMaster()
+Router::delete('api/v1/holidays/master/{id}', PublicHolidayController::class . '@destroyMaster', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
 // GET /api/v1/organizations/{org_id}/holidays?year=
 Router::get('api/v1/organizations/{org_id}/holidays', PublicHolidayController::class . '@index', [
     ['AuthMiddleware', ['admin', 'super_admin']],
