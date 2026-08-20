@@ -447,12 +447,12 @@ platformSection: [
   {
     title: "Countries",
     url: "/platform/countries",
-    icon: IconWorld, // new import needed
+    icon: IconWorld,
     roles: ["super_admin"],
   },
   {
     title: "Public Holidays",
-    url: "/platform/public-holidays",
+    url: "/public-holidays",
     icon: IconCalendar,
     roles: ["super_admin"],
   },
