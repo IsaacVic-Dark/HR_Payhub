@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import OrganizationsTable from "@/app/(platform-admin)/platform/organizations/components/data-table-organizations";
 
 export default function Page() {
@@ -13,7 +14,9 @@ export default function Page() {
           </p>
         </div>
         <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-          <OrganizationsTable />
+          <Suspense fallback={<div className="p-4">Loading...</div>}>
+            <OrganizationsTable />
+          </Suspense>
         </div>
       </div>
     </div>

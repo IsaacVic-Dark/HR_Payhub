@@ -1,7 +1,7 @@
 "use client";
 
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import {
   payrunDetailAPI,
   PayrunDetailType,
@@ -17,7 +17,7 @@ import { PayrunDetailDrawer } from "@/app/(dashboard)/payrun/components/payrun-d
 import { formatCurrency } from "@/utils/currency";
 import { usePermissions } from "@/hooks/usePermissions";
 
-export default function Page() {
+function PageContent() {
   const pathname = usePathname();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -538,5 +538,13 @@ export default function Page() {
         loading={detailLoading}
       />
     </>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="p-4">Loading...</div>}>
+      <PageContent />
+    </Suspense>
   );
 }

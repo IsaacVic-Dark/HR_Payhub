@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
 import { Eye, EyeOff, Building2, CheckIcon } from 'lucide-react';
@@ -63,7 +63,7 @@ const STEPS = [
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function RegisterPage() {
+function RegisterPageContent() {
   const router = useRouter();
   const { checkAuthStatus } = useAuth();
   const searchParams = useSearchParams();
@@ -739,5 +739,13 @@ export default function RegisterPage() {
         </Card>
       </div>
     </>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <RegisterPageContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
 import Link from "next/link";
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
@@ -17,7 +17,7 @@ type PaymentState = 'waiting' | 'completed' | 'failed' | 'timeout';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export default function PaymentWaitingPage() {
+function PaymentWaitingPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -253,5 +253,13 @@ export default function PaymentWaitingPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function PaymentWaitingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <PaymentWaitingPageContent />
+    </Suspense>
   );
 }
