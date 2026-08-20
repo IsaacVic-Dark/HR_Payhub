@@ -1066,6 +1066,32 @@ Router::get('/api/v1/subscription/current', SubscriptionController::class . '@ge
 ]);
 
 // =============================================================================
+// SUBSCRIPTION PLANS — ADMIN MANAGEMENT (super_admin only)
+// =============================================================================
+
+// GET /api/v1/subscription-plans
+// Lists ALL plans (active + inactive) — used by the platform-admin plan table.
+Router::get('api/v1/subscription-plans', SubscriptionController::class . '@getAllPlans', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// POST /api/v1/subscription-plans
+Router::post('api/v1/subscription-plans', SubscriptionController::class . '@storePlan', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// PUT /api/v1/subscription-plans/{id}
+Router::put('api/v1/subscription-plans/{id}', SubscriptionController::class . '@updatePlan', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// DELETE /api/v1/subscription-plans/{id}
+// Soft delete — sets is_active = 0.
+Router::delete('api/v1/subscription-plans/{id}', SubscriptionController::class . '@destroyPlan', [
+    ['AuthMiddleware', ['super_admin']],
+]);
+
+// =============================================================================
 // ORGANIZATION SETUP WIZARD
 // POST /api/v1/organization/complete-setup
 // Auth-guarded (admin only). Accepts all wizard fields and marks setup_completed = 1.
