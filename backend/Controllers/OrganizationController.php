@@ -144,6 +144,59 @@ class OrganizationController
         }
     }
 
+        /**
+     * Attach the currently active/trialing subscription plan to each organization row.
+     * Batched into a single query keyed by organization_id — avoids N+1 queries.
+     * If an org somehow has more than one active/trialing row, the most recently
+     * created one wins.
+     */
+    private function attachSubscriptions(array $organizations): void
+    {
+        if (empty($organizations)) {
+            return;
+        }
+
+        $orgIds = array_map(fn($org) => (int)$org->id, $organizations);
+        $placeholders = implode(',', array_fill(0, count($orgIds), '?'));
+
+        $sql = "SELECT
+                    os.organization_id,
+                    os.status,
+                    os.current_period_ends_at,
+                    os.trial_ends_at,
+                    os.created_at AS subscription_created_at,
+                    sp.code,
+                    sp.name,
+                    sp.billing_cycle
+                FROM organization_subscriptions os
+                INNER JOIN subscription_plans sp ON sp.id = os.plan_id
+                WHERE os.organization_id IN ({$placeholders})
+                  AND os.status IN ('active', 'trialing')
+                ORDER BY os.created_at DESC";
+
+        $rows = DB::raw($sql, $orgIds);
+
+        // Keep only the most recent row per organization_id (first hit, since ordered DESC)
+        $subscriptionsByOrgId = [];
+        foreach ($rows as $row) {
+            $orgId = (int)$row->organization_id;
+            if (!isset($subscriptionsByOrgId[$orgId])) {
+                $subscriptionsByOrgId[$orgId] = [
+                    'code' => $row->code,
+                    'name' => $row->name,
+                    'billing_cycle' => $row->billing_cycle,
+                    'status' => $row->status,
+                    'current_period_ends_at' => $row->current_period_ends_at,
+                    'trial_ends_at' => $row->trial_ends_at,
+                ];
+            }
+        }
+
+        foreach ($organizations as $org) {
+            $org->subscription = $subscriptionsByOrgId[(int)$org->id] ?? null;
+        }
+    }
+
     // Keep existing methods but refactor them to use responseJson pattern
     public function index()
     {
@@ -196,6 +249,9 @@ class OrganizationController
 
             // Fetch paginated data
             $organizations = DB::raw($sql, $bindings);
+
+            // Attach each org's currently active/trialing subscription plan (batched, no N+1)
+            $this->attachSubscriptions($organizations);
 
             // Calculate pagination metadata
             $totalPages = ceil($total / $limit);

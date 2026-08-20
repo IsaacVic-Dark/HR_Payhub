@@ -10,7 +10,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { OrganizationType } from "@/services/api/organization";
-import { Building2, MapPin, Landmark, Clock } from "lucide-react";
+import { Building2, MapPin, Landmark, Clock, CreditCard  } from "lucide-react";
 
 interface OrganizationViewDrawerProps {
   open: boolean;
@@ -93,6 +93,55 @@ export function OrganizationViewDrawer({
               <div><span className="text-gray-600">Bank Account Name</span><p className="font-medium">{organization.bank_account_name || "—"}</p></div>
               <div><span className="text-gray-600">Bank Account No.</span><p className="font-medium">{organization.bank_account_number || "—"}</p></div>
             </div>
+          </div>
+
+          <div>
+            <h3 className="font-semibold mb-4 flex items-center">
+              <CreditCard className="h-4 w-4 mr-2" />
+              Subscription
+            </h3>
+            {organization.subscription ? (
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <span className="text-gray-600">Plan</span>
+                  <p className="font-medium">{organization.subscription.name}</p>
+                </div>
+                <div>
+                  <span className="text-gray-600">Status</span>
+                  <p className="font-medium">
+                    <Badge
+                      className={
+                        organization.subscription.status === "active"
+                          ? "bg-green-100 text-green-800"
+                          : "bg-yellow-100 text-yellow-800"
+                      }
+                    >
+                      {organization.subscription.status}
+                    </Badge>
+                  </p>
+                </div>
+                <div>
+                  <span className="text-gray-600">Billing Cycle</span>
+                  <p className="font-medium capitalize">{organization.subscription.billing_cycle}</p>
+                </div>
+                <div>
+                  <span className="text-gray-600">
+                    {organization.subscription.status === "trialing" ? "Trial Ends" : "Renews"}
+                  </span>
+                  <p className="font-medium">
+                    {organization.subscription.status === "trialing"
+                      ? organization.subscription.trial_ends_at
+                        ? formatDateTime(organization.subscription.trial_ends_at)
+                        : "—"
+                      : organization.subscription.current_period_ends_at
+                      ? formatDateTime(organization.subscription.current_period_ends_at)
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-500">No active subscription</p>
+            )}
           </div>
 
           <div className="grid grid-cols-2 gap-4 text-sm pt-4 border-t">

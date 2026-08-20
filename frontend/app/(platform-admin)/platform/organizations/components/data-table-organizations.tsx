@@ -113,11 +113,24 @@ const OrganizationsTable: React.FC = () => {
     setFilters((prev) => ({ ...prev, limit: newLimit, page: 1 }));
   };
 
+  const getSubscriptionBadge = (org: OrganizationType) => {
+    if (!org.subscription) {
+      return <span className="text-gray-400 text-xs">No plan</span>;
+    }
+    return (
+      <div className="flex flex-col">
+        <span className="font-medium text-sm">{org.subscription.name}</span>
+        <span className="text-xs text-gray-500 capitalize">
+          {org.subscription.billing_cycle} · {org.subscription.status}
+        </span>
+      </div>
+    );
+  };
+
   const getStatusBadge = (isActive: number) => (
     <span
-      className={`px-2 py-1 rounded-full text-xs font-medium ${
-        isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
-      }`}
+      className={`px-2 py-1 rounded-full text-xs font-medium ${isActive ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-800"
+        }`}
     >
       {isActive ? "Active" : "Inactive"}
     </span>
@@ -132,6 +145,11 @@ const OrganizationsTable: React.FC = () => {
     },
     { key: "location", header: "Location", cell: (org) => org.location || "—" },
     { key: "currency", header: "Currency", cell: (org) => org.currency },
+    {
+      key: "subscription",
+      header: "Plan",
+      cell: (org) => getSubscriptionBadge(org),
+    },
     {
       key: "status",
       header: "Status",

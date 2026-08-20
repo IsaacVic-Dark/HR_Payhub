@@ -1,3 +1,12 @@
+type OrganizationSubscriptionSummary = {
+  code: string;
+  name: string;
+  billing_cycle: "monthly" | "annual";
+  status: "trialing" | "pending_payment" | "active" | "past_due" | "suspended" | "cancelled" | "expired";
+  current_period_ends_at: string | null;
+  trial_ends_at: string | null;
+};
+
 type OrganizationType = {
   id: number;
   tenant_id: number | null;
@@ -34,6 +43,7 @@ type OrganizationType = {
   created_at: string;
   updated_at: string;
   domain: string | null;
+  subscription: OrganizationSubscriptionSummary | null;
 };
 
 interface OrganizationStatistics {
@@ -261,6 +271,7 @@ export type {
   OrganizationListMetadata,
   OrganizationType,
   OrganizationStatistics,
+  OrganizationSubscriptionSummary,
   OrganizationMetadata,
   OrganizationResponseData,
   UpdateOrganizationData,
