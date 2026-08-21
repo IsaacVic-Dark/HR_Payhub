@@ -1959,3 +1959,191 @@ INSERT INTO `subscription_plans` (`id`, `code`, `name`, `billing_cycle`, `base_p
 INSERT INTO `subscription_plans` (`id`, `code`, `name`, `billing_cycle`, `base_price`, `price_per_employee`, `trial_days`, `requires_card`, `max_employees`, `features`, `is_active`, `created_at`, `updated_at`) VALUES (4, 'starter_annual', 'Starter', 'annual', 0.00, NULL, 20, 1, 30, '["Core payroll runs", "Payslip generation", "Single pay schedule", "Basic statutory calculations (PAYE/NSSF/NHIF or local equivalents)", "CSV employee import", "Email support"]', 1, '2026-05-14 10:32:53', '2026-05-14 10:32:53');
 INSERT INTO `subscription_plans` (`id`, `code`, `name`, `billing_cycle`, `base_price`, `price_per_employee`, `trial_days`, `requires_card`, `max_employees`, `features`, `is_active`, `created_at`, `updated_at`) VALUES (5, 'professional_annual', 'Professional', 'annual', 306.00, 30.60, NULL, 1, 250, '["Everything in Starter", "Multi-schedule payrolls", "Automated tax filings/remittances", "Direct deposit or payrun funding", "Time and leave integration", "Reporting and analytics", "API access", "Priority support"]', 1, '2026-05-14 10:32:53', '2026-05-14 10:32:53');
 INSERT INTO `subscription_plans` (`id`, `code`, `name`, `billing_cycle`, `base_price`, `price_per_employee`, `trial_days`, `requires_card`, `max_employees`, `features`, `is_active`, `created_at`, `updated_at`) VALUES (6, 'enterprise_annual', 'Enterprise', 'annual', 1530.00, 61.20, NULL, 1, NULL, '["Everything in Professional", "SSO/SCIM", "Role-based access and audit logs", "Custom integrations and onboarding", "Higher uptime and SLAs", "Dedicated account manager", "Custom pricing", "Advanced compliance for multi-country payrolls"]', 1, '2026-05-14 10:32:53', '2026-05-14 10:32:53');
+-- =============================================================================
+-- ALLOWANCE MODULE — SEED DATA
+-- Standard Kenyan payroll allowance catalogue + sample employee grants.
+--
+-- Swap @org_id below before running. @created_by is used for allowance_types
+-- created_by / employee_allowance requested_by+approved_by — swap it to a
+-- real users.id in your target org (e.g. the org's admin user), or leave it
+-- NULL if you'd rather not attribute the seed rows to anyone.
+-- =============================================================================
+
+SET @org_id     = 1;      -- <-- swap to your target organizations.id
+SET @created_by = NULL;   -- <-- swap to a real users.id, or leave NULL
+
+-- -----------------------------------------------------------------------------
+-- allowance_types — standard Kenyan catalogue
+--
+-- Tax treatment notes (KRA, informational — verify against current KRA
+-- guidance before relying on these in production):
+--
+--   * Commuter/Transport Allowance: cash transport allowance is exempt up to
+--     KES 5,000/month; only the excess is taxable. taxable_limit = 5000
+--     models this correctly.
+--   * Meals (non-cash, employer-provided): exempt up to KES 5,000/month per
+--     employee. taxable_limit = 5000 models this correctly for a per-employee
+--     cash-equivalent meal allowance; if you run an actual staff canteen /
+--     voucher scheme instead of a cash allowance, that's a payment_nature
+--     distinction this seed already reflects (non_cash).
+--   * House Allowance (cash) has NO statutory exemption — it's fully taxable,
+--     hence taxable_limit = NULL below. Note: this is different from
+--     *employer-provided housing* (a non-cash benefit valued at the lower of
+--     fair market rent or 15% of gross emoluments), which this simple
+--     flat-taxable_limit model cannot represent precisely — that 15%-of-gross
+--     rule needs a FORMULA-method allowance, which is out of scope for phase 1.
+--   * Medical Allowance (cash) is fully taxable; only employer medical
+--     insurance/cover under a scheme open to all staff is exempt, and that's
+--     usually run as a benefit outside this module, not a cash allowance.
+--   * Travel/Subsistence and Responsibility/Acting allowances have no
+--     blanket statutory exemption for a lump-sum cash allowance (KRA's
+--     subsistence per-diem exemption is rate-and-day based, which needs the
+--     PER_DAY calculation method — not yet evaluated by the engine — so this
+--     is modeled here as a simple fully-taxable FIXED_AMOUNT/PERCENTAGE grant).
+-- -----------------------------------------------------------------------------
+
+INSERT INTO `allowance_types`
+  (`organization_id`, `name`, `code`, `description`,
+   `category`, `payment_nature`, `frequency`, `calculation_method`,
+   `amount`, `percentage`,
+   `is_recurring`, `requires_receipt`,
+   `taxable_income`, `taxable_limit`,
+   `status`, `created_by`)
+VALUES
+
+-- ── House Allowance ──────────────────────────────────────────
+-- Cash housing allowance, 15% of basic salary, fully taxable (no
+-- statutory exemption for a cash allowance — see note above).
+(@org_id, 'House Allowance', 'HOUSE_ALLOW',
+  'Monthly cash housing allowance, calculated as a percentage of basic salary.',
+  'housing', 'cash', 'monthly', 'PERCENTAGE_OF_BASIC',
+  NULL, 15.00,
+  1, 0,
+  1, NULL,
+  'ACTIVE', @created_by),
+
+-- ── Transport / Commuter Allowance ───────────────────────────
+-- KES 5,000 default, exempt up to KES 5,000/month per KRA — excess taxed.
+(@org_id, 'Transport Allowance', 'TRANSPORT_ALLOW',
+  'Monthly commuter/transport allowance. First KES 5,000 is tax-exempt per KRA guidance.',
+  'transport', 'cash', 'monthly', 'FIXED_AMOUNT',
+  5000.00, NULL,
+  1, 0,
+  1, 5000.00,
+  'ACTIVE', @created_by),
+
+-- ── Meal Allowance ────────────────────────────────────────────
+-- KES 5,000 default, exempt up to KES 5,000/month per KRA — excess taxed.
+(@org_id, 'Meal Allowance', 'MEAL_ALLOW',
+  'Monthly meal allowance. First KES 5,000 is tax-exempt per KRA guidance for employer-provided meals.',
+  'meal', 'non_cash', 'monthly', 'FIXED_AMOUNT',
+  5000.00, NULL,
+  1, 0,
+  1, 5000.00,
+  'ACTIVE', @created_by),
+
+-- ── Medical Allowance ─────────────────────────────────────────
+-- Fully taxable cash allowance (distinct from an employer medical cover
+-- scheme, which would normally be tracked outside this module).
+(@org_id, 'Medical Allowance', 'MEDICAL_ALLOW',
+  'Monthly cash medical allowance. Fully taxable — not the same as an employer medical insurance scheme.',
+  'medical', 'cash', 'monthly', 'FIXED_AMOUNT',
+  3000.00, NULL,
+  1, 0,
+  1, NULL,
+  'ACTIVE', @created_by),
+
+-- ── Travel / Subsistence Allowance ───────────────────────────
+-- Lump-sum per pay run, fully taxable (see note on PER_DAY above).
+(@org_id, 'Travel Allowance', 'TRAVEL_ALLOW',
+  'Per-pay-run travel/subsistence allowance for field or travel-heavy roles. Fully taxable lump sum.',
+  'travel', 'cash', 'per_pay_run', 'FIXED_AMOUNT',
+  4000.00, NULL,
+  0, 1,
+  1, NULL,
+  'ACTIVE', @created_by),
+
+-- ── Responsibility / Acting Allowance ────────────────────────
+-- 10% of basic salary while an employee is acting in / holding a higher
+-- responsibility role. Fully taxable.
+(@org_id, 'Responsibility Allowance', 'RESPONSIBILITY_ALLOW',
+  'Monthly allowance for staff carrying additional responsibility or acting in a higher role, as a percentage of basic salary.',
+  'responsibility', 'cash', 'monthly', 'PERCENTAGE_OF_BASIC',
+  NULL, 10.00,
+  1, 0,
+  1, NULL,
+  'ACTIVE', @created_by);
+
+
+-- -----------------------------------------------------------------------------
+-- employee_allowance — sample grants for employees 133-137
+-- Status APPROVED so they're immediately eligible to be attached to a payrun
+-- via POST /employee-allowances/{id}/attach-payrun. Adjust start_date /
+-- employee-to-allowance pairing as needed — this is illustrative seed data,
+-- not a real onboarding batch.
+-- -----------------------------------------------------------------------------
+
+INSERT INTO `employee_allowance`
+  (`organization_id`, `employee_id`, `allowance_type_id`,
+   `amount`, `percentage`,
+   `start_date`, `end_date`,
+   `eligibility_reason`,
+   `status`, `requested_by`, `requested_at`, `approved_by`, `approved_at`)
+VALUES
+
+-- Employee 133 — House Allowance (uses the type default 15% — no override)
+(@org_id, 133, (SELECT id FROM allowance_types WHERE organization_id = @org_id AND code = 'HOUSE_ALLOW'),
+  NULL, NULL,
+  '2026-01-01', NULL,
+  'Standard housing allowance on hire.',
+  'APPROVED', @created_by, NOW(), @created_by, NOW()),
+
+-- Employee 133 — Transport Allowance (uses the type default KES 5,000)
+(@org_id, 133, (SELECT id FROM allowance_types WHERE organization_id = @org_id AND code = 'TRANSPORT_ALLOW'),
+  NULL, NULL,
+  '2026-01-01', NULL,
+  'Standard commuter allowance on hire.',
+  'APPROVED', @created_by, NOW(), @created_by, NOW()),
+
+-- Employee 134 — House Allowance
+(@org_id, 134, (SELECT id FROM allowance_types WHERE organization_id = @org_id AND code = 'HOUSE_ALLOW'),
+  NULL, NULL,
+  '2026-01-01', NULL,
+  'Standard housing allowance on hire.',
+  'APPROVED', @created_by, NOW(), @created_by, NOW()),
+
+-- Employee 134 — Meal Allowance
+(@org_id, 134, (SELECT id FROM allowance_types WHERE organization_id = @org_id AND code = 'MEAL_ALLOW'),
+  NULL, NULL,
+  '2026-01-01', NULL,
+  'Standard meal allowance on hire.',
+  'APPROVED', @created_by, NOW(), @created_by, NOW()),
+
+-- Employee 135 — Transport Allowance, overridden to KES 7,500 for this employee
+(@org_id, 135, (SELECT id FROM allowance_types WHERE organization_id = @org_id AND code = 'TRANSPORT_ALLOW'),
+  7500.00, NULL,
+  '2026-01-01', NULL,
+  'Negotiated transport allowance above the org default.',
+  'APPROVED', @created_by, NOW(), @created_by, NOW()),
+
+-- Employee 136 — Responsibility Allowance (acting Team Lead, fixed 6-month window)
+(@org_id, 136, (SELECT id FROM allowance_types WHERE organization_id = @org_id AND code = 'RESPONSIBILITY_ALLOW'),
+  NULL, NULL,
+  '2026-02-01', '2026-07-31',
+  'Acting Team Lead cover while substantive holder is on secondment.',
+  'APPROVED', @created_by, NOW(), @created_by, NOW()),
+
+-- Employee 137 — Medical Allowance
+(@org_id, 137, (SELECT id FROM allowance_types WHERE organization_id = @org_id AND code = 'MEDICAL_ALLOW'),
+  NULL, NULL,
+  '2026-01-01', NULL,
+  'Standard medical allowance on hire.',
+  'APPROVED', @created_by, NOW(), @created_by, NOW()),
+
+-- Employee 137 — Travel Allowance, still PENDING_APPROVAL (shows the workflow
+-- mid-flight rather than every seed row being pre-approved)
+(@org_id, 137, (SELECT id FROM allowance_types WHERE organization_id = @org_id AND code = 'TRAVEL_ALLOW'),
+  NULL, NULL,
+  '2026-03-01', NULL,
+  'Requested for upcoming field assignment.',
+  'PENDING_APPROVAL', @created_by, NOW(), NULL, NULL);

@@ -197,6 +197,12 @@ const data = {
       icon: IconReportMoney,
       roles: ["super_admin", "admin", "hr_manager", "finance_manager"],
     },
+    {
+      title: "Allowance",
+      url: "/allowance",
+      icon: IconReportMoney,
+      roles: ["super_admin", "admin", "hr_manager", "finance_manager"],
+    },
   ],
 
   // Employee Management section

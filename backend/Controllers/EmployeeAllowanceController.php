@@ -499,7 +499,10 @@ class EmployeeAllowanceController
 
     /**
      * POST /api/v1/organizations/{org_id}/employee-allowances/{id}/attach-payrun
-     * Body: { payrun_id }
+     * Body: { payrun_id? } — optional. When omitted, auto-resolves to the
+     * organisation's current single 'draft' payrun (same one-click UX as
+     * ReimbursementController::attachToPayrun()). Returns 409 if there's
+     * more than one draft payrun to disambiguate, 404 if there's none.
      *
      * Inserts an 'attached' row into employee_allowance_payrun_lines, then
      * immediately recomputes that employee's payrun_details via
@@ -511,8 +514,10 @@ class EmployeeAllowanceController
     {
         try {
             $data = json_decode(file_get_contents('php://input'), true) ?? [];
-            if (empty($data['payrun_id']) || !is_numeric($data['payrun_id'])) {
-                return responseJson(success: false, data: null, message: "payrun_id is required", code: 400);
+
+            $payrunId = $this->resolvePayrunId($org_id, $data);
+            if ($payrunId instanceof \stdClass && isset($payrunId->_error)) {
+                return responseJson(success: false, data: null, message: $payrunId->_error, code: $payrunId->_code);
             }
 
             $allowanceRows = DB::raw(
@@ -535,7 +540,7 @@ class EmployeeAllowanceController
 
             $payrunRows = DB::raw(
                 "SELECT * FROM payruns WHERE id = :id AND organization_id = :org_id",
-                [':id' => $data['payrun_id'], ':org_id' => $org_id]
+                [':id' => $payrunId, ':org_id' => $org_id]
             );
             if (empty($payrunRows)) {
                 return responseJson(success: false, data: null, message: "Payrun not found for this organisation", code: 404);
@@ -563,7 +568,7 @@ class EmployeeAllowanceController
             $existingLine = DB::raw(
                 "SELECT id, status FROM employee_allowance_payrun_lines
                   WHERE employee_allowance_id = :ea_id AND payrun_id = :payrun_id",
-                [':ea_id' => $id, ':payrun_id' => $data['payrun_id']]
+                [':ea_id' => $id, ':payrun_id' => $payrunId]
             );
 
             $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
@@ -589,7 +594,7 @@ class EmployeeAllowanceController
                 DB::table('employee_allowance_payrun_lines')->insert([
                     'organization_id'       => $org_id,
                     'employee_allowance_id' => $id,
-                    'payrun_id'             => $data['payrun_id'],
+                    'payrun_id'             => $payrunId,
                     'employee_id'           => $allowance->employee_id,
                     'status'                => 'attached',
                     'attached_by'           => $currentUser['id'] ?? null,
@@ -601,14 +606,14 @@ class EmployeeAllowanceController
             $service = new PayrunProcessingService();
             $result  = $service->processSingleEmployee(
                 (int) $org_id,
-                (int) $data['payrun_id'],
+                (int) $payrunId,
                 (int) $allowance->employee_id,
                 (int) ($currentUser['id'] ?? 0)
             );
 
             return responseJson(
                 success: true,
-                data: ['recomputed' => $result],
+                data: ['payrun_id' => (int) $payrunId, 'recomputed' => $result],
                 message: "Allowance attached to payrun and payrun details recomputed"
             );
         } catch (\Exception $e) {
@@ -625,14 +630,16 @@ class EmployeeAllowanceController
 
     /**
      * POST /api/v1/organizations/{org_id}/employee-allowances/{id}/detach-payrun
-     * Body: { payrun_id }
+     * Body: { payrun_id? } — same auto-resolve as attachToPayrun() when omitted.
      */
     public function detachFromPayrun($org_id, $id)
     {
         try {
             $data = json_decode(file_get_contents('php://input'), true) ?? [];
-            if (empty($data['payrun_id']) || !is_numeric($data['payrun_id'])) {
-                return responseJson(success: false, data: null, message: "payrun_id is required", code: 400);
+
+            $payrunId = $this->resolvePayrunId($org_id, $data);
+            if ($payrunId instanceof \stdClass && isset($payrunId->_error)) {
+                return responseJson(success: false, data: null, message: $payrunId->_error, code: $payrunId->_code);
             }
 
             $line = DB::raw(
@@ -642,7 +649,7 @@ class EmployeeAllowanceController
                   WHERE eapl.employee_allowance_id = :ea_id
                     AND eapl.payrun_id = :payrun_id
                     AND eapl.status = 'attached'",
-                [':ea_id' => $id, ':payrun_id' => $data['payrun_id']]
+                [':ea_id' => $id, ':payrun_id' => $payrunId]
             );
 
             if (empty($line)) {
@@ -673,20 +680,70 @@ class EmployeeAllowanceController
             $service = new PayrunProcessingService();
             $result  = $service->processSingleEmployee(
                 (int) $org_id,
-                (int) $data['payrun_id'],
+                (int) $payrunId,
                 (int) $line->employee_id,
                 (int) ($currentUser['id'] ?? 0)
             );
 
             return responseJson(
                 success: true,
-                data: ['recomputed' => $result],
+                data: ['payrun_id' => (int) $payrunId, 'recomputed' => $result],
                 message: "Allowance detached from payrun and payrun details recomputed"
             );
         } catch (\Exception $e) {
             error_log("EmployeeAllowanceController::detachFromPayrun error: " . $e->getMessage());
             return responseJson(success: false, data: null, message: "Failed to detach allowance from payrun", code: 500);
         }
+    }
+
+    /**
+     * Resolves the target payrun_id for attach/detach: uses the one given in
+     * the body if present, otherwise falls back to the organisation's
+     * current 'draft' payrun (same one-click UX as
+     * ReimbursementController::attachToPayrun(), where payrun_id is also
+     * optional). Returns an int payrun_id on success, or a stdClass carrying
+     * ->_error / ->_code for the caller to turn into a responseJson().
+     *
+     * "Current draft payrun" = the most recently created payrun for this org
+     * still in 'draft' status. If none exists (or more than one — shouldn't
+     * normally happen, but we don't want to silently guess which one), the
+     * caller must pass payrun_id explicitly.
+     */
+    private function resolvePayrunId($org_id, array $data)
+    {
+        if (!empty($data['payrun_id'])) {
+            if (!is_numeric($data['payrun_id'])) {
+                $err = new \stdClass();
+                $err->_error = "payrun_id must be a number";
+                $err->_code  = 400;
+                return $err;
+            }
+            return (int) $data['payrun_id'];
+        }
+
+        $draftPayruns = DB::raw(
+            "SELECT id FROM payruns
+              WHERE organization_id = :org_id AND status = 'draft'
+              ORDER BY created_at DESC
+              LIMIT 2",
+            [':org_id' => $org_id]
+        );
+
+        if (empty($draftPayruns)) {
+            $err = new \stdClass();
+            $err->_error = "No draft payrun found for this organisation — create one first, or pass payrun_id explicitly to target a specific payrun.";
+            $err->_code  = 404;
+            return $err;
+        }
+
+        if (count($draftPayruns) > 1) {
+            $err = new \stdClass();
+            $err->_error = "This organisation has more than one draft payrun — pass payrun_id explicitly to disambiguate which one to attach to.";
+            $err->_code  = 409;
+            return $err;
+        }
+
+        return (int) $draftPayruns[0]->id;
     }
 
     /**
