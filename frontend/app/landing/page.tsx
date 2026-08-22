@@ -321,6 +321,12 @@ const PayrollLanding = () => {
               >
                 Docs
               </a>
+              <a
+                href="/calculator"
+                className="hover:text-gray-900 transition-colors flex items-center gap-1"
+              >
+                Calc Taxes
+              </a>
             </nav>
             {/* CTA */}
             <div className="flex items-center gap-3 shrink-0">
