@@ -10,7 +10,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Check, ChevronsUpDown } from "lucide-react";
 import { toast } from "sonner";
 import { attendanceAPI, PunchType } from "@/services/api/attendance";
 import { employeeAPI, MinimalEmployeeType } from "@/services/api/employee";
@@ -23,6 +23,21 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 interface ManualPunchDialogProps {
   open: boolean;
@@ -45,6 +60,7 @@ export function ManualPunchDialog({
   const [employeesLoading, setEmployeesLoading] = useState(false);
 
   const [employeeId, setEmployeeId] = useState<string>("");
+  const [employeeComboOpen, setEmployeeComboOpen] = useState(false);
   const [punchType, setPunchType] = useState<PunchType>("check_in");
   const [punchDate, setPunchDate] = useState(todayDate());
   const [punchTime, setPunchTime] = useState(nowTime());
@@ -73,6 +89,7 @@ export function ManualPunchDialog({
   useEffect(() => {
     if (open) {
       setEmployeeId("");
+      setEmployeeComboOpen(false);
       setPunchType("check_in");
       setPunchDate(todayDate());
       setPunchTime(nowTime());
@@ -81,6 +98,11 @@ export function ManualPunchDialog({
   }, [open]);
 
   const isValid = employeeId && punchDate && punchTime && reason.trim().length > 0;
+
+  const employeeName = (emp: MinimalEmployeeType) =>
+    [emp.firstname, emp.middlename, emp.surname].filter(Boolean).join(" ");
+
+  const selectedEmployee = employees.find((emp) => emp.id.toString() === employeeId);
 
   const handleSubmit = async () => {
     if (!isValid) {
@@ -131,27 +153,56 @@ export function ManualPunchDialog({
             <label className="block text-xs font-medium text-gray-700 mb-1">
               Employee
             </label>
-            <Select
-              value={employeeId}
-              onValueChange={(value) => setEmployeeId(value)}
-              disabled={employeesLoading}
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue
-                  placeholder={employeesLoading ? "Loading employees..." : "Select employee"}
-                />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectGroup>
-                  <SelectLabel>Employees</SelectLabel>
-                  {employees.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id.toString()}>
-                      {[emp.firstname, emp.middlename, emp.surname].filter(Boolean).join(" ")}
-                    </SelectItem>
-                  ))}
-                </SelectGroup>
-              </SelectContent>
-            </Select>
+            <Popover open={employeeComboOpen} onOpenChange={setEmployeeComboOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={employeeComboOpen}
+                  disabled={employeesLoading}
+                  className="w-full justify-between font-normal text-sm px-3 py-2 h-auto border-gray-300"
+                >
+                  {employeesLoading
+                    ? "Loading employees..."
+                    : selectedEmployee
+                    ? employeeName(selectedEmployee)
+                    : "Select employee"}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent
+                className="w-[--radix-popover-trigger-width] p-0"
+                align="start"
+              >
+                <Command>
+                  <CommandInput placeholder="Search employee..." />
+                  <CommandList>
+                    <CommandEmpty>No employee found.</CommandEmpty>
+                    <CommandGroup>
+                      {employees.map((emp) => (
+                        <CommandItem
+                          key={emp.id}
+                          value={employeeName(emp)}
+                          onSelect={() => {
+                            setEmployeeId(emp.id.toString());
+                            setEmployeeComboOpen(false);
+                          }}
+                        >
+                          <Check
+                            className={cn(
+                              "mr-2 h-4 w-4",
+                              employeeId === emp.id.toString() ? "opacity-100" : "opacity-0",
+                            )}
+                          />
+                          {employeeName(emp)}
+                        </CommandItem>
+                      ))}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Punch type */}
