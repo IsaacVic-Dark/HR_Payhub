@@ -384,9 +384,128 @@ class OvertimeApprovalController
             ]
         );
 
+        $this->retaxDraftDetail($orgId, $detail[0]->id);
+
         $this->markIncludedInPayroll($orgId, [$overtimeApproval->id]);
 
         return true;
+    }
+
+    /**
+     * Recomputes nssf/shif/housing_levy/paye/total_deductions/net_pay for a
+     * single payrun_details row against its CURRENT stored values, right
+     * after pushToDraftPayrun() raw-adds overtime to overtime_amount/gross_pay.
+     *
+     * Without this, gross_pay moves but the tax figures don't — this is
+     * what used to be silently deferred to a future processPayrun() call
+     * that, before getOvertimeAmount() was wired up, would have wiped the
+     * overtime back out to 0 instead of truing it up. Now both sides use
+     * the same real overtime total, so retaxing here and reprocessing
+     * later both land on the same numbers.
+     *
+     * Non-statutory deductions already on the row (loans, advances,
+     * attendance/lateness) are preserved as-is via extra_deductions —
+     * only the statutory figures and the totals are recalculated.
+     */
+    private function retaxDraftDetail($orgId, int $detailId): void
+    {
+        $row = DB::raw("SELECT * FROM payrun_details WHERE id = :id", [':id' => $detailId]);
+        if (empty($row)) {
+            return;
+        }
+        $row = $row[0];
+
+        // Sum whatever non-statutory deductions (loans/advances/attendance/
+        // benefits/refunds/per_diem) are already attached to this row —
+        // config_type='tax' rows are the statutory ones we're about to
+        // recompute from scratch, so they're excluded here.
+        $extraRows = DB::raw(
+            "SELECT COALESCE(SUM(pd.amount), 0) AS total
+             FROM payrun_deductions pd
+             JOIN organization_configs oc ON pd.config_id = oc.id
+             WHERE pd.payrun_detail_id = :id AND oc.config_type != 'tax'",
+            [':id' => $detailId]
+        );
+        $extraDeductions = (float) ($extraRows[0]->total ?? 0.0);
+
+        $config = loadTaxConfig($orgId);
+
+        $taxableOtherEarnings = (float) $row->overtime_amount
+            + (float) $row->bonus_amount
+            + (float) $row->commission_amount;
+
+        $calc = calculateNetPay(
+            (float) $row->basic_salary,
+            (float) $row->gross_pay,
+            $config,
+            $extraDeductions,
+            (float) ($row->taxable_reimbursement ?? 0.0),
+            (float) ($row->taxable_allowance ?? 0.0),
+            $taxableOtherEarnings
+        );
+
+        DB::raw(
+            "UPDATE payrun_details
+             SET nssf = :nssf, shif = :shif, housing_levy = :housing_levy,
+                 taxable_income = :taxable_income, tax_before_relief = :tax_before_relief,
+                 personal_relief = :personal_relief, paye = :paye,
+                 total_deductions = :total_deductions, net_pay = :net_pay,
+                 updated_at = NOW()
+             WHERE id = :id",
+            [
+                ':nssf' => $calc['nssf'], ':shif' => $calc['shif'], ':housing_levy' => $calc['housing_levy'],
+                ':taxable_income' => $calc['taxable_income'], ':tax_before_relief' => $calc['tax_before_relief'],
+                ':personal_relief' => $calc['personal_relief'], ':paye' => $calc['paye'],
+                ':total_deductions' => $calc['total_deductions'], ':net_pay' => $calc['net_pay'],
+                ':id' => $detailId,
+            ]
+        );
+
+        // Re-insert the statutory payrun_deductions lines so the itemized
+        // breakdown (deductions() endpoint) reflects the new figures too.
+        // SHIF is intentionally NOT inserted as its own bolt-on "minimum"
+        // line here or anywhere else — calculateSHIF()/calculateNetPay()
+        // already apply the statutory minimum as a floor on the single
+        // 'SHIF Rate' line. A separate flat deduction on top of it is the
+        // exact defect that produced the stray 300 lines found in
+        // payrun_deductions (config_id = 5) — never reintroduce that.
+        DB::raw(
+            "DELETE FROM payrun_deductions
+             WHERE payrun_detail_id = :id
+               AND config_id IN (
+                   SELECT id FROM organization_configs
+                   WHERE organization_id = :org AND config_type = 'tax'
+                     AND name IN ('NSSF Rate', 'SHIF Rate', 'Housing Levy Rate', 'Personal Relief', 'PAYE')
+               )",
+            [':id' => $detailId, ':org' => $orgId]
+        );
+
+        $statutory = [
+            'NSSF Rate'         => $calc['nssf'],
+            'SHIF Rate'         => $calc['shif'],
+            'Housing Levy Rate' => $calc['housing_levy'],
+            'Personal Relief'   => $calc['personal_relief'],
+            'PAYE'              => $calc['paye'],
+        ];
+
+        foreach ($statutory as $configName => $amount) {
+            if ($amount <= 0) continue;
+
+            $cfg = DB::raw(
+                "SELECT id FROM organization_configs
+                  WHERE organization_id = :org AND config_type = 'tax' AND name = :name AND is_active = 1
+                  LIMIT 1",
+                [':org' => $orgId, ':name' => $configName]
+            );
+
+            if (!empty($cfg)) {
+                DB::table('payrun_deductions')->insert([
+                    'payrun_detail_id' => $detailId,
+                    'config_id'        => $cfg[0]->id,
+                    'amount'           => round($amount, 2),
+                ]);
+            }
+        }
     }
 
     /**

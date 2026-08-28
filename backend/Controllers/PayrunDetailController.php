@@ -240,7 +240,14 @@ class PayrunDetailController
             // Load org tax config and calculate
             $orgId  = $payrun[0]->organization_id;
             $config = loadTaxConfig($orgId);
-            $tax    = calculateNetPay($basicSalary, $grossPay, $config, $extraDeductions, $taxableReimbursement);
+            // Overtime/bonus/commission are taxable under PAYE (unlike
+            // reimbursements) but not pensionable, so they go into the
+            // PAYE base only — same treatment as PayrunProcessingService.
+            $taxableOtherEarnings = $overtimeAmount + $bonusAmount + $commissionAmount;
+            $tax    = calculateNetPay(
+                $basicSalary, $grossPay, $config, $extraDeductions,
+                $taxableReimbursement, 0.0, $taxableOtherEarnings
+            );
 
             $insertData = [
                 'payrun_id'          => $payrunId,

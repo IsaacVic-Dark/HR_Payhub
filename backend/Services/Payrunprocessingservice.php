@@ -433,7 +433,16 @@ class PayrunProcessingService
         $extraDeductions      = $loanDeductions['total'] + $advanceDeductions['total'] + $attendanceDeductions['total'];
 
         // --- Statutory calculations ---
-        $calc = calculateNetPay($basicSalary, $grossPay, $taxConfig, $extraDeductions, $taxableReimbursement, $taxableAllowance);
+        // Overtime, bonus, and commission are taxable under PAYE — unlike
+        // reimbursements they're not expense repayments — but like
+        // reimbursements/allowances they're not pensionable pay, so they
+        // go into the PAYE base only, never into NSSF/SHIF/Housing Levy.
+        $taxableOtherEarnings = $overtimeAmount + $bonusAmount + $commissionAmount;
+
+        $calc = calculateNetPay(
+            $basicSalary, $grossPay, $taxConfig, $extraDeductions,
+            $taxableReimbursement, $taxableAllowance, $taxableOtherEarnings
+        );
 
         // --- Upsert payrun_details ---
         $detailData = [
@@ -539,11 +548,26 @@ class PayrunProcessingService
      */
     private function getOvertimeAmount(int $employeeId, string $start, string $end): float
     {
-        // TODO: replace with actual overtime query when timesheet module is ready
-        // Example:
-        // SELECT SUM(amount) FROM overtime_records
-        // WHERE employee_id = :emp AND record_date BETWEEN :start AND :end AND status = 'approved'
-        return 0.0;
+        // Sums overtime that has already been approved AND flagged
+        // salary_included = 1 (i.e. pushed into a payrun by
+        // OvertimeApprovalController::approve()/pushToDraftPayrun()).
+        // This must stay in sync with pushToDraftPayrun()'s eager
+        // overtime_amount/gross_pay update — this is the query that lets
+        // a full process()/reprocess "true up" the tax figures instead of
+        // wiping the overtime back out, since it returns the same total
+        // that was already added to gross_pay, not zero.
+        $rows = DB::raw(
+            "SELECT COALESCE(SUM(oa.overtime_amount), 0) AS total
+             FROM overtime_approvals oa
+             JOIN employee_attendance_days ad ON oa.attendance_day_id = ad.id
+             WHERE oa.employee_id = :emp
+               AND oa.status = 'approved'
+               AND oa.salary_included = 1
+               AND ad.attendance_date BETWEEN :start AND :end",
+            [':emp' => $employeeId, ':start' => $start, ':end' => $end]
+        );
+
+        return (float) ($rows[0]->total ?? 0.0);
     }
 
     /**

@@ -53,6 +53,7 @@ function loadTaxConfig(int $org_id): array
     return [
         'nssf_rate'        => $pct('NSSF Rate',         0.06),
         'shif_rate'        => $pct('SHIF Rate',          0.0275),
+        'shif_min_amount'  => $fixed('SHIF Min Amount',  300.00),
         'housing_levy_rate'=> $pct('Housing Levy Rate',  0.015),
         'personal_relief'  => $fixed('Personal Relief',  2400.00),
 
@@ -82,6 +83,23 @@ function calculateNSSF(float $salary, array $config): float
     }
 
     return $tier1 + $tier2;
+}
+
+/**
+ * Calculate SHIF contribution.
+ *
+ * SHIF is the greater of (salary * rate) and the statutory minimum
+ * contribution — it is a FLOOR, not an additional charge on top of the
+ * percentage-based amount. A separate flat "SHIF Min Amount" deduction
+ * must never be inserted alongside this; this function already accounts
+ * for it.
+ */
+function calculateSHIF(float $salary, array $config): float
+{
+    $percentageBased = $salary * $config['shif_rate'];
+    $minAmount        = $config['shif_min_amount'] ?? 0.0;
+
+    return max($percentageBased, $minAmount);
 }
 
 /**
@@ -185,6 +203,12 @@ function calculateProgressiveTax(float $taxableIncome): float
  *                                    Non-taxable allowances reach net pay via $grossPay only, exactly
  *                                    like non-taxable reimbursements, and never touch NSSF/SHIF/
  *                                    Housing Levy (those remain basic-salary-only per KRA rules).
+ * @param float $taxableOtherEarnings Overtime + bonus + commission already included in $grossPay.
+ *                                    These are taxable income under PAYE (unlike reimbursements,
+ *                                    which are expense repayments) but — like reimbursements and
+ *                                    allowances — they are NOT pensionable/statutory-deduction pay,
+ *                                    so they are added to the PAYE base only, never to the
+ *                                    NSSF/SHIF/Housing Levy bases, which remain basic-salary-only.
  *
  * @return array  Detailed breakdown of all figures
  */
@@ -194,7 +218,8 @@ function calculateNetPay(
     array $config,
     float $extraDeductions = 0.0,
     float $taxableReimbursement = 0.0,
-    float $taxableAllowance = 0.0
+    float $taxableAllowance = 0.0,
+    float $taxableOtherEarnings = 0.0
 ): array {
     if ($basicSalary <= 0) {
         throw new \InvalidArgumentException('Basic salary must be greater than zero');
@@ -203,14 +228,17 @@ function calculateNetPay(
     // Statutory deductions — all based on basic salary per KRA rules.
     // Reimbursements and allowances never touch NSSF/SHIF/Housing Levy, taxable or not.
     $nssf         = calculateNSSF($basicSalary, $config);
-    $shif         = $basicSalary * $config['shif_rate'];
+    $shif         = calculateSHIF($basicSalary, $config);
     $housingLevy  = $basicSalary * $config['housing_levy_rate'];
 
     // PAYE taxable income = basic − NSSF − SHIF − Housing Levy + taxable reimbursements
-    // + taxable allowances (already net of their own exemption thresholds).
+    // + taxable allowances (already net of their own exemption thresholds) + taxable
+    // other earnings (overtime/bonus/commission — taxable under PAYE but never part of
+    // the NSSF/SHIF/Housing Levy bases, same treatment as reimbursements/allowances).
     // Non-taxable reimbursements/allowances are excluded here — they still reach net pay
     // through $grossPay without ever being taxed.
-    $taxableIncome  = $basicSalary - $nssf - $shif - $housingLevy + $taxableReimbursement + $taxableAllowance;
+    $taxableIncome  = $basicSalary - $nssf - $shif - $housingLevy
+        + $taxableReimbursement + $taxableAllowance + $taxableOtherEarnings;
     $taxBeforeRelief = calculateProgressiveTax($taxableIncome);
     $paye           = max(0.0, $taxBeforeRelief - $config['personal_relief']);
 
@@ -224,6 +252,7 @@ function calculateNetPay(
         'gross_pay'             => round($grossPay, 2),
         'taxable_reimbursement' => round($taxableReimbursement, 2),
         'taxable_allowance'     => round($taxableAllowance, 2),
+        'taxable_other_earnings'=> round($taxableOtherEarnings, 2),
 
         // Statutory deductions
         'nssf'              => round($nssf, 2),
