@@ -245,6 +245,14 @@ const data = {
       ]
     },
     {
+      title: "My Reimbursement",
+      url: "/myreimbursements",
+      icon: IconCalendar,
+      roles: [
+        "employee"
+      ]
+    },
+    {
       title: "Attendance",
       url: "/attendance",
       icon: IconClipboardList,
