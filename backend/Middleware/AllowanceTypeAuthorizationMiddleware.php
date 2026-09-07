@@ -2,19 +2,13 @@
 
 namespace App\Middleware;
 
-use App\Services\DB;
+use App\Services\PermissionService;
 
 /**
  * AllowanceTypeAuthorizationMiddleware
  *
- * Guards api/v1/organizations/{org_id}/allowance-types* — the org-level
- * allowance catalogue (Housing, Transport, etc). Modeled on
- * OrganizationConfigAuthorizationMiddleware: this is configuration, not a
- * per-employee workflow, so access is simpler than EmployeeAllowanceAuthorizationMiddleware.
- *
- *   - Read (GET):            broad — anyone authenticated in the org can see
- *                             what allowance types exist.
- *   - Write (POST/PUT/PATCH/DELETE): admin, payroll_manager only.
+ * Guards api/v1/organizations/{org_id}/allowance-types* — org-level config,
+ * so there's no row-level scoping here, just "can you read" vs "can you write".
  */
 class AllowanceTypeAuthorizationMiddleware
 {
@@ -32,24 +26,16 @@ class AllowanceTypeAuthorizationMiddleware
             );
         }
 
-        if ($user['user_type'] === 'super_admin') {
+        $method     = $_SERVER['REQUEST_METHOD'] ?? '';
+        $permission = $method === 'GET' ? 'allowance_types.view' : 'allowance_types.manage';
+
+        if (!PermissionService::can($user['id'], $permission)) {
             return responseJson(
                 success: false,
                 data: null,
-                message: 'Access to organisation data is restricted',
-                code: 403
-            );
-        }
-
-        $method = $_SERVER['REQUEST_METHOD'] ?? '';
-
-        $writeRoles = ['admin', 'payroll_manager'];
-
-        if ($method !== 'GET' && !in_array($user['user_type'], $writeRoles, true)) {
-            return responseJson(
-                success: false,
-                data: null,
-                message: 'Only admins or payroll managers can manage allowance types',
+                message: $permission === 'allowance_types.manage'
+                    ? 'Only admins or payroll managers can manage allowance types'
+                    : 'You do not have permission to view allowance types',
                 code: 403
             );
         }
