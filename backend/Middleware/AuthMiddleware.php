@@ -1,10 +1,10 @@
 <?php
-// app/Middleware/AuthMiddleware.php
 
 namespace App\Middleware;
 
 use App\Services\JWTService;
 use App\Services\DB;
+use App\Services\PermissionService;
 use App\Models\User;
 
 class AuthMiddleware
@@ -51,21 +51,16 @@ class AuthMiddleware
                 );
             }
 
-            // Check if user is active
-            // if ($user['status'] !== 'active') {
-            //     return responseJson(
-            //         success: false,
-            //         data: null,
-            //         message: 'User account is inactive',
-            //         code: 403
-            //     );
-            // }
-
             // Store user in request context
             self::$currentUser = $user;
             self::$currentEmployee = self::getEmployeeByUserId($user['id']);
 
-            // Check role-based authorization
+            // NOTE: $roles here is legacy — routes.php still has some inline
+            // arrays like ['AuthMiddleware', ['super_admin']]. Those keep
+            // working (matched against user_type) until you migrate each
+            // route to a permission check instead. New routes should prefer
+            // gating via a module AuthorizationMiddleware backed by
+            // PermissionService rather than adding more of these.
             if (!empty($roles) && !self::checkRoles($roles, $user['user_type'])) {
                 return responseJson(
                     success: false,
@@ -134,15 +129,44 @@ class AuthMiddleware
         return in_array($userRole, (array)$allowedRoles);
     }
 
+    /**
+     * Was: `if ($user['user_type'] === 'super_admin') return false;`
+     *
+     * Now: users whose OWN organization is a 'platform' account (super_admin
+     * accounts live in a platform-type org — see organizations.account_type)
+     * are blocked from any tenant organization's data UNLESS they hold the
+     * 'organizations.access_tenant_data' permission. Nobody is granted that
+     * permission by default (see RoleSeederService), so behaviour is
+     * unchanged today — but it's no longer a hardcoded role name, and can be
+     * granted to a specific platform user later (e.g. for support access)
+     * without touching this file.
+     */
     private static function checkOrganizationAccess($orgId, $user)
     {
-        // Super admins don't have organization access for privacy
-        if ($user['user_type'] === 'super_admin') {
+        if (self::belongsToPlatformAccount($user) &&
+            !PermissionService::can($user['id'], 'organizations.access_tenant_data')) {
             return false;
         }
 
         // Users can only access their own organization
         return $user['organization_id'] == $orgId;
+    }
+
+    private static function belongsToPlatformAccount($user): bool
+    {
+        static $accountTypeCache = [];
+
+        $orgId = $user['organization_id'];
+
+        if (!array_key_exists($orgId, $accountTypeCache)) {
+            $result = DB::raw(
+                "SELECT account_type FROM organizations WHERE id = :id",
+                [':id' => $orgId]
+            );
+            $accountTypeCache[$orgId] = $result[0]->account_type ?? 'tenant';
+        }
+
+        return $accountTypeCache[$orgId] === 'platform';
     }
 
     public static function getCurrentUser()
@@ -154,7 +178,6 @@ class AuthMiddleware
     {
         return self::$currentEmployee;
     }
-
 
     public static function getCurrentOrganizationId()
     {
