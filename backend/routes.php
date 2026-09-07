@@ -29,6 +29,8 @@ use App\Controllers\CountryController;
 use App\Controllers\CountyController;
 use App\Controllers\AllowanceTypeController;
 use App\Controllers\EmployeeAllowanceController;
+use App\Controllers\RoleController;
+use App\Controllers\PermissionController;
 
 // Authentication routes - NO authentication required
 Router::post('/api/v1/auth/login', [AuthController::getInstance(), 'login']);
@@ -1741,4 +1743,59 @@ Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/attach-payr
 Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/detach-payrun', EmployeeAllowanceController::class . '@detachFromPayrun', [
     'AuthMiddleware',
     'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+Router::get('api/v1/organizations/{org_id}/roles', RoleController::class . '@index', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+ 
+Router::get('api/v1/organizations/{org_id}/roles/{id}', RoleController::class . '@show', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+ 
+Router::post('api/v1/organizations/{org_id}/roles', RoleController::class . '@store', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+ 
+Router::put('api/v1/organizations/{org_id}/roles/{id}', RoleController::class . '@update', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+ 
+Router::delete('api/v1/organizations/{org_id}/roles/{id}', RoleController::class . '@destroy', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+ 
+Router::post('api/v1/organizations/{org_id}/roles/{id}/assign', RoleController::class . '@assignToUser', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+ 
+Router::delete('api/v1/organizations/{org_id}/roles/{id}/assign/{user_id}', RoleController::class . '@unassignFromUser', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+ 
+Router::get('api/v1/organizations/{org_id}/permissions', PermissionController::class . '@index', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+ 
+Router::get('api/v1/organizations/{org_id}/users/{user_id}/permissions', PermissionController::class . '@forUser', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+ 
+Router::post('api/v1/organizations/{org_id}/users/{user_id}/permissions', PermissionController::class . '@grantOrRevoke', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
+]);
+ 
+Router::delete('api/v1/organizations/{org_id}/users/{user_id}/permissions/{permission_name}', PermissionController::class . '@clearOverride', [
+    ['AuthMiddleware', ['admin']],
+    'OrganizationAuthorizationMiddleware'
 ]);
