@@ -539,25 +539,23 @@ class LeaveController
         }
 
         $filters = ['organization' => $orgId];
+        $scope   = \App\Services\PermissionService::scopeOf($user['id'], 'leaves.view');
 
-        switch ($user['user_type']) {
-            case 'admin':
-            case 'hr_manager':
-            case 'hr_officer':
-                // Full org visibility
+        switch ($scope) {
+            case 'all':
+            case 'department': // no separate department-wide leave view today; treat as org-wide
                 break;
 
-            case 'department_manager':
-            case 'manager':
+            case 'team':
                 $filters['team_employees'] = $this->getTeamEmployeeIds($employee['id']);
                 break;
 
-            case 'employee':
+            case 'own':
                 $filters['employee_id'] = $employee['id'];
                 break;
 
             default:
-                throw new \Exception('Unknown user role');
+                throw new \Exception('You do not have permission to view leaves');
         }
 
         return $filters;
@@ -578,24 +576,23 @@ class LeaveController
         }
     }
 
-    private function canUserApproveLeave(int $currentEmployeeId, object $leaveData, string $userType): array
+private function canUserApproveLeave(int $currentEmployeeId, object $leaveData, int $currentUserId): array
     {
-        if (in_array($userType, ['admin', 'hr_manager', 'hr_officer'])) {
-            return ['allowed' => true, 'reason' => ''];
+        $scope = \App\Services\PermissionService::scopeOf($currentUserId, 'leaves.approve');
+
+        if ($scope === null) {
+            return ['allowed' => false, 'reason' => 'You do not have permission to approve leaves'];
         }
 
         if ($leaveData->employee_id == $currentEmployeeId) {
             return ['allowed' => false, 'reason' => 'You cannot approve your own leave'];
         }
 
-        if (in_array($userType, ['department_manager', 'manager'])) {
-            if (!$this->isEmployeeInTeam((int) $leaveData->employee_id, $currentEmployeeId)) {
-                return ['allowed' => false, 'reason' => 'You can only approve leaves from your team members'];
-            }
-            return ['allowed' => true, 'reason' => ''];
+        if ($scope === 'team' && !$this->isEmployeeInTeam((int) $leaveData->employee_id, $currentEmployeeId)) {
+            return ['allowed' => false, 'reason' => 'You can only approve leaves from your team members'];
         }
 
-        return ['allowed' => false, 'reason' => 'You do not have permission to approve leaves'];
+        return ['allowed' => true, 'reason' => ''];
     }
 
     private function isEmployeeInTeam(int $employeeId, int $managerId): bool
@@ -1226,7 +1223,7 @@ class LeaveController
             $canApprove = $this->canUserApproveLeave(
                 (int) $currentEmployee['id'],
                 $leaveData,
-                $currentUser['user_type']
+                $currentUser['id']
             );
             if (!$canApprove['allowed']) {
                 return responseJson(
@@ -1329,7 +1326,7 @@ class LeaveController
             $canApprove = $this->canUserApproveLeave(
                 (int) $currentEmployee['id'],
                 $leaveData,
-                $currentUser['user_type']
+                (int) $currentUser['id']
             );
             if (!$canApprove['allowed']) {
                 return responseJson(
