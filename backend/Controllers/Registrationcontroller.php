@@ -178,6 +178,8 @@ class RegistrationController
                 ]);
                 $orgId = (int) DB::lastInsertId();
 
+                \App\Services\RoleSeederService::seedForOrganization($orgId);
+
                 // 5b. INSERT admin user
                 $passwordHash = password_hash($password, PASSWORD_BCRYPT);
                 DB::table('users')->insert([
@@ -188,6 +190,15 @@ class RegistrationController
                     'user_type'       => 'admin',
                 ]);
                 $userId = (int) DB::lastInsertId();
+
+                $adminRole = DB::raw(
+                    "SELECT id FROM roles WHERE organization_id = :org_id AND slug = 'admin'",
+                    [':org_id' => $orgId]
+                );
+                DB::raw(
+                    "INSERT INTO model_has_roles (user_id, role_id, created_at) VALUES (:user_id, :role_id, NOW())",
+                    [':user_id' => $userId, ':role_id' => $adminRole[0]->id]
+                );
 
                 // 5c. UPDATE org — set primary_administrator_id now that we
                 //     have the user ID.

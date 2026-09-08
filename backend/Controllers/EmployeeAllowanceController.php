@@ -66,14 +66,16 @@ class EmployeeAllowanceController
             }
 
             // Row-level scoping for restricted roles
-            if ($currentUser && $currentUser['user_type'] === 'employee') {
+            $allowanceViewScope = $currentUser ? \App\Services\PermissionService::scopeOf($currentUser['id'], 'employee_allowances.view') : null;
+
+            if ($allowanceViewScope === 'own') {
                 $selfEmployee = DB::raw(
                     "SELECT id FROM employees WHERE user_id = :user_id AND organization_id = :org_id",
                     [':user_id' => $currentUser['id'], ':org_id' => $org_id]
                 );
                 $where[] = 'ea.employee_id = :self_employee_id';
                 $params[':self_employee_id'] = $selfEmployee[0]->id ?? 0;
-            } elseif ($currentUser && $currentUser['user_type'] === 'department_manager') {
+            } elseif ($allowanceViewScope === 'department') {
                 $where[] = 'e.department_id = (
                     SELECT department_id FROM employees WHERE user_id = :manager_user_id AND organization_id = :org_id LIMIT 1
                 )';

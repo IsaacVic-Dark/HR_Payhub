@@ -3,213 +3,100 @@
 namespace App\Middleware;
 
 use App\Services\DB;
+use App\Services\PermissionService;
 
 class EmployeeAuthorizationMiddleware
 {
     public function handle($request, $next, $scope = 'read')
     {
-        $user = AuthMiddleware::getCurrentUser();
+        $user     = AuthMiddleware::getCurrentUser();
         $employee = AuthMiddleware::getCurrentEmployee();
-        $orgId = AuthMiddleware::getCurrentOrganizationId();
+        $orgId    = AuthMiddleware::getCurrentOrganizationId();
 
         if (!$user || !$orgId) {
-            return responseJson(
-                success: false,
-                data: null,
-                message: 'Authentication required',
-                code: 401
-            );
+            return responseJson(success: false, data: null, message: 'Authentication required', code: 401);
         }
 
-        // Super admins cannot access organization data (privacy)
-        if ($user['user_type'] === 'super_admin') {
-            return responseJson(
-                success: false,
-                data: null,
-                message: 'Access to organization data is restricted',
-                code: 403
-            );
+        $permission = $this->resolvePermission($scope, $request);
+
+        if (!PermissionService::can($user['id'], $permission)) {
+            return responseJson(success: false, data: null, message: 'Access denied to this employee resource', code: 403);
         }
 
-        // Apply role-based access control
-        switch ($user['user_type']) {
-            case 'admin':
-                // Admins can access all employees in their organization
-                break;
-                
-            case 'hr_manager':
-                // HR Managers can access all employees for HR operations
-                break;
-                
-            case 'payroll_manager':
-            case 'payroll_officer':
-                // Payroll roles can access employee payroll-related data
-                if (!$this->canPayrollAccess($employee['id'], $request, $scope)) {
-                    return responseJson(
-                        success: false,
-                        data: null,
-                        message: 'Access denied to this employee resource',
-                        code: 403
-                    );
+        $permScope = PermissionService::scopeOf($user['id'], $permission);
+
+        if (isset($request['params'][1]) && is_numeric($request['params'][1])) {
+            $targetEmployeeId = (int) $request['params'][1];
+
+            $allowed = match ($permScope) {
+                'team'  => $this->isEmployeeInManagerTeam($targetEmployeeId, $employee['id']),
+                'own'   => (int) $targetEmployeeId === (int) $employee['id'],
+                default => $this->isEmployeeInOrganization($targetEmployeeId, $orgId), // department/all
+            };
+
+            // Extra write-field checks that used to live under
+            // canPayrollAccess()/canFinanceAccess() — unchanged, they inspect
+            // $request['data'] keys rather than the user's role.
+            if ($allowed && $scope === 'write') {
+                if ($permission === 'employees.update_payroll_fields' && !$this->isPayrollRelatedUpdate($request)) {
+                    $allowed = false;
                 }
-                break;
-                
-            case 'department_manager':
-                // Department managers can access their team members
-                if (!$this->canManagerAccess($employee['id'], $request, $scope)) {
-                    return responseJson(
-                        success: false,
-                        data: null,
-                        message: 'Access denied to this employee resource',
-                        code: 403
-                    );
+                if ($permission === 'employees.update_financial_fields' && !$this->isFinancialUpdate($request)) {
+                    $allowed = false;
                 }
-                break;
-                
-            case 'accountant':
-            case 'finance_manager':
-                // Finance roles can access financial data only
-                if (!$this->canFinanceAccess($employee['id'], $request, $scope)) {
-                    return responseJson(
-                        success: false,
-                        data: null,
-                        message: 'Access denied to this employee resource',
-                        code: 403
-                    );
-                }
-                break;
-                
-            case 'auditor':
-            case 'compliance_officer':
-                // Read-only access for auditors
-                if (!$this->canAuditAccess($employee['id'], $request, $scope)) {
-                    return responseJson(
-                        success: false,
-                        data: null,
-                        message: 'Access denied to this employee resource',
-                        code: 403
-                    );
-                }
-                break;
-                
-            case 'employee':
-                // Employees can only access their own data
-                if (!$this->canEmployeeAccess($employee['id'], $request, $scope)) {
-                    return responseJson(
-                        success: false,
-                        data: null,
-                        message: 'You can only access your own employee data',
-                        code: 403
-                    );
-                }
-                break;
-                
-            default:
-                return responseJson(
-                    success: false,
-                    data: null,
-                    message: 'Unknown user role',
-                    code: 403
-                );
+            }
+
+            if (!$allowed) {
+                return responseJson(success: false, data: null, message: 'Access denied to this employee resource', code: 403);
+            }
         }
+        // Listing endpoints — controller applies the row filter (see
+        // EmployeeController::applyRoleBasedFilters).
 
         return $next($request);
     }
 
-    private function canPayrollAccess($payrollUserId, $request, $scope)
+    /**
+     * The original middleware branched purely on $scope ('read'|'write') plus
+     * which role-group the user was in (payroll/finance/manager/etc.) to
+     * decide the applicable field-restriction message. Since PermissionService
+     * now tells us the role directly via which permission the user holds, we
+     * pick the most specific permission that's actually granted for reads;
+     * for writes we mirror employees.update vs the two narrower field-level
+     * permissions your matrix already encodes.
+     */
+    private function resolvePermission(string $scope, $request): string
     {
-        // Payroll roles can view all employees but with limited fields
-        // For specific employee access, check if it's within their payroll scope
-        if (isset($request['params'][1]) && is_numeric($request['params'][1])) {
-            $employeeId = $request['params'][1];
-            
-            // For write operations, payroll needs additional validation
-            if ($scope === 'write' && !$this->isPayrollActionAllowed($request)) {
-                return false;
-            }
-            
-            return $this->isEmployeeInOrganization($employeeId);
+        if ($scope !== 'write') {
+            return 'employees.view';
         }
 
-        // For listing, payroll can see all employees (with field restrictions in controller)
-        return true;
-    }
+        $user = AuthMiddleware::getCurrentUser();
 
-    private function canManagerAccess($managerId, $request, $scope)
-    {
-        // Department managers can access their direct reports
-        if (isset($request['params'][1]) && is_numeric($request['params'][1])) {
-            $employeeId = $request['params'][1];
-            return $this->isEmployeeInManagerTeam($employeeId, $managerId);
+        // Prefer the most specific write permission the user actually holds —
+        // this matches the old canFinanceAccess/canPayrollAccess split without
+        // needing to know the caller's role name.
+        if (PermissionService::can($user['id'], 'employees.update_financial_fields')
+            && !PermissionService::can($user['id'], 'employees.update')) {
+            return 'employees.update_financial_fields';
         }
 
-        // For listing, managers can see their team members
-        return true;
-    }
-
-    private function canFinanceAccess($financeUserId, $request, $scope)
-    {
-        // Finance roles can only access financial-related data
-        if (isset($request['params'][1]) && is_numeric($request['params'][1])) {
-            $employeeId = $request['params'][1];
-            
-            // Finance can view employee financial data but not personal HR data
-            if ($scope === 'write' && !$this->isFinanceActionAllowed($request)) {
-                return false;
-            }
-            
-            return $this->isEmployeeInOrganization($employeeId);
+        if (PermissionService::can($user['id'], 'employees.update_payroll_fields')
+            && !PermissionService::can($user['id'], 'employees.update')) {
+            return 'employees.update_payroll_fields';
         }
 
-        // For listing, finance can see all employees (with financial field restrictions)
-        return true;
-    }
-
-    private function canAuditAccess($auditorId, $request, $scope)
-    {
-        // Auditors have read-only access
-        if ($scope !== 'read') {
-            return false;
-        }
-
-        if (isset($request['params'][1]) && is_numeric($request['params'][1])) {
-            $employeeId = $request['params'][1];
-            return $this->isEmployeeInOrganization($employeeId);
-        }
-
-        // Auditors can list all employees for audit purposes
-        return true;
-    }
-
-    private function canEmployeeAccess($employeeId, $request, $scope)
-    {
-        // Employees can only access their own data
-        if (isset($request['params'][1]) && is_numeric($request['params'][1])) {
-            $targetEmployeeId = $request['params'][1];
-            return $this->isSameEmployee($targetEmployeeId, $employeeId);
-        }
-
-        // For listing, employees should only see themselves
-        // This will be handled in the controller with proper filtering
-        return true;
+        return 'employees.update';
     }
 
     private function isEmployeeInManagerTeam($employeeId, $managerId)
     {
         try {
-            $query = "
-                SELECT COUNT(*) as count 
-                FROM employees 
-                WHERE id = :employee_id 
-                AND reports_to = :manager_id
-                AND status = 'active'
-            ";
-            
-            $result = DB::raw($query, [
-                ':employee_id' => $employeeId,
-                ':manager_id' => $managerId
-            ]);
-            
+            $result = DB::raw(
+                "SELECT COUNT(*) as count FROM employees
+                 WHERE id = :employee_id AND reports_to = :manager_id AND status = 'active'",
+                [':employee_id' => $employeeId, ':manager_id' => $managerId]
+            );
             return $result[0]->count > 0;
         } catch (\Exception $e) {
             error_log('Manager team access check error: ' . $e->getMessage());
@@ -217,23 +104,13 @@ class EmployeeAuthorizationMiddleware
         }
     }
 
-    private function isEmployeeInOrganization($employeeId)
+    private function isEmployeeInOrganization($employeeId, $orgId)
     {
         try {
-            $orgId = AuthMiddleware::getCurrentOrganizationId();
-            
-            $query = "
-                SELECT COUNT(*) as count 
-                FROM employees 
-                WHERE id = :employee_id 
-                AND organization_id = :org_id
-            ";
-            
-            $result = DB::raw($query, [
-                ':employee_id' => $employeeId,
-                ':org_id' => $orgId
-            ]);
-            
+            $result = DB::raw(
+                "SELECT COUNT(*) as count FROM employees WHERE id = :employee_id AND organization_id = :org_id",
+                [':employee_id' => $employeeId, ':org_id' => $orgId]
+            );
             return $result[0]->count > 0;
         } catch (\Exception $e) {
             error_log('Organization employee check error: ' . $e->getMessage());
@@ -241,71 +118,33 @@ class EmployeeAuthorizationMiddleware
         }
     }
 
-    private function isSameEmployee($targetEmployeeId, $currentEmployeeId)
-    {
-        return $targetEmployeeId == $currentEmployeeId;
-    }
-
-    private function isPayrollActionAllowed($request)
-    {
-        // Payroll can only perform specific write operations
-        $allowedActions = ['update_salary', 'update_allowances', 'update_deductions'];
-        $method = $request['method'] ?? '';
-        $path = $request['path'] ?? '';
-        
-        // Implement logic to check if the current request is a payroll-allowed action
-        return $this->isPayrollRelatedUpdate($request);
-    }
-
-    private function isFinanceActionAllowed($request)
-    {
-        // Finance can only perform financial-related updates
-        $method = $request['method'] ?? '';
-        $path = $request['path'] ?? '';
-        
-        // Implement logic to check if the current request is finance-related
-        return $this->isFinancialUpdate($request);
-    }
-
     private function isPayrollRelatedUpdate($request)
     {
-        // Check if the update is related to payroll fields only
         $payrollFields = ['base_salary', 'allowances', 'deductions', 'bank_account_number', 'tax_id'];
-        
+
         if (isset($request['data'])) {
-            $data = $request['data'];
-            $updateFields = array_keys($data);
-            
-            // Check if all update fields are payroll-related
-            foreach ($updateFields as $field) {
-                if (!in_array($field, $payrollFields)) {
+            foreach (array_keys($request['data']) as $field) {
+                if (!in_array($field, $payrollFields, true)) {
                     return false;
                 }
             }
             return true;
         }
-        
         return false;
     }
 
     private function isFinancialUpdate($request)
     {
-        // Check if the update is related to financial fields only
         $financialFields = ['base_salary', 'bank_account_number', 'tax_id'];
-        
+
         if (isset($request['data'])) {
-            $data = $request['data'];
-            $updateFields = array_keys($data);
-            
-            // Check if all update fields are financial-related
-            foreach ($updateFields as $field) {
-                if (!in_array($field, $financialFields)) {
+            foreach (array_keys($request['data']) as $field) {
+                if (!in_array($field, $financialFields, true)) {
                     return false;
                 }
             }
             return true;
         }
-        
         return false;
     }
 }

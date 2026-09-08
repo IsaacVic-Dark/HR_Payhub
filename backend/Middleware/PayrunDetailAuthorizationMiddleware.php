@@ -1,78 +1,47 @@
 <?php
-// app/Middleware/PayrunDetailAuthorizationMiddleware.php
 
 namespace App\Middleware;
 
-use App\Services\DB;
+use App\Services\PermissionService;
 
 class PayrunDetailAuthorizationMiddleware
 {
     public function handle($request, $next)
     {
-        $user = AuthMiddleware::getCurrentUser();
-        $employee = AuthMiddleware::getCurrentEmployee();
+        $user  = AuthMiddleware::getCurrentUser();
         $orgId = AuthMiddleware::getCurrentOrganizationId();
 
         if (!$user || !$orgId) {
-            return responseJson(
-                success: false,
-                data: null,
-                message: 'Authentication required',
-                code: 401
-            );
+            return responseJson(success: false, data: null, message: 'Authentication required', code: 401);
         }
 
-        // Super admins cannot access organization data
-        if ($user['user_type'] === 'super_admin') {
+        $method     = $_SERVER['REQUEST_METHOD'] ?? '';
+        $permission = 'payrun_details.view';
+
+        // The original only ever allowed GET for department_manager/employee,
+        // and full read+write for everyone else who reaches this middleware.
+        // There's no separate "manage payrun details" permission in the
+        // catalog (nothing in routes.php actually writes through this
+        // endpoint independently of PayrunController), so: any non-GET
+        // request requires the broader payruns.process permission.
+        if ($method !== 'GET') {
+            $permission = 'payruns.process';
+        }
+
+        if (!PermissionService::can($user['id'], $permission)) {
             return responseJson(
                 success: false,
                 data: null,
-                message: 'Access to organization data is restricted',
+                message: $permission === 'payruns.process'
+                    ? 'You do not have permission to modify payrun details'
+                    : 'You do not have permission to view payrun details',
                 code: 403
             );
         }
 
-        // Apply role-based access control
-        switch ($user['user_type']) {
-            case 'admin':
-            case 'payroll_manager':
-            case 'payroll_officer':
-                // These roles can access all payrun details
-                break;
-
-            case 'finance_manager':
-            case 'accountant':
-                // Finance roles can view payrun details
-                break;
-
-            case 'department_manager':
-            case 'employee':
-                // These roles have limited access - only view
-                $method = $_SERVER['REQUEST_METHOD'] ?? '';
-                
-                // Only allow GET requests
-                if ($method !== 'GET') {
-                    return responseJson(
-                        success: false,
-                        data: null,
-                        message: 'You do not have permission to modify payrun details',
-                        code: 403
-                    );
-                }
-                break;
-
-            default:
-                return responseJson(
-                    success: false,
-                    data: null,
-                    message: 'Unknown user role',
-                    code: 403
-                );
-        }
+        // scope ('own' for department_manager/employee) is applied by
+        // PayrunController's own queries, same as before.
 
         return $next($request);
     }
 }
-
-
-

@@ -170,30 +170,20 @@ class AttendanceDeductionController
         }
 
         $filters = ['organization' => $orgId];
+        $scope   = \App\Services\PermissionService::scopeOf($user['id'], 'attendance_deductions.view');
 
-        switch ($user['user_type']) {
-            case 'admin':
-            case 'hr_manager':
-            case 'hr_officer':
-            case 'payroll_manager':
-            case 'payroll_officer':
-            case 'finance_manager':
-            case 'auditor':
-            case 'compliance_officer':
-                // Full org visibility
+        switch ($scope) {
+            case 'all':
+            case 'department':
                 break;
-
-            case 'department_manager':
-            case 'manager':
+            case 'team':
                 $filters['team_employees'] = $this->getTeamEmployeeIds($employee['id']);
                 break;
-
-            case 'employee':
+            case 'own':
                 $filters['employee_id'] = $employee['id'];
                 break;
-
             default:
-                throw new \Exception('Unknown user role');
+                throw new \Exception('You do not have permission to view attendance deductions');
         }
 
         return $filters;
@@ -331,8 +321,12 @@ class AttendanceDeductionController
                         code: 200,
                         metadata: [
                             'pagination' => [
-                                'current_page' => $page, 'per_page' => $perPage, 'total' => 0,
-                                'total_pages' => 0, 'has_next' => false, 'has_prev' => false,
+                                'current_page' => $page,
+                                'per_page' => $perPage,
+                                'total' => 0,
+                                'total_pages' => 0,
+                                'has_next' => false,
+                                'has_prev' => false,
                             ],
                         ]
                     );
@@ -385,8 +379,12 @@ class AttendanceDeductionController
                     code: 200,
                     metadata: [
                         'pagination' => [
-                            'current_page' => $page, 'per_page' => $perPage, 'total' => 0,
-                            'total_pages' => 0, 'has_next' => false, 'has_prev' => false,
+                            'current_page' => $page,
+                            'per_page' => $perPage,
+                            'total' => 0,
+                            'total_pages' => 0,
+                            'has_next' => false,
+                            'has_prev' => false,
                         ],
                         'statistics' => [
                             'total_records'            => 0,
@@ -634,7 +632,7 @@ class AttendanceDeductionController
                     success: false,
                     data: null,
                     message: "This deduction is already included in payrun_detail #{$row->payrun_detail_id}. " .
-                             "Reverse it through a payroll adjustment instead of directly here.",
+                        "Reverse it through a payroll adjustment instead of directly here.",
                     code: 409
                 );
             }

@@ -1,7 +1,9 @@
 <?php
 
 namespace App\Controllers;
+
 require_once __DIR__ . '/ReimbursementResponseWrapper.php';
+
 use App\Services\DB;
 use App\Services\PayrunProcessingService;
 use App\Middleware\AuthMiddleware;
@@ -47,8 +49,12 @@ class ReimbursementController
     {
         try {
             if (!$org_id || !is_numeric($org_id)) {
-                return responseJson(success: false, message: "Invalid or missing organization ID", code: 404,
-                    errors: ['org_id' => 'Organization ID is required and must be a valid number']);
+                return responseJson(
+                    success: false,
+                    message: "Invalid or missing organization ID",
+                    code: 404,
+                    errors: ['org_id' => 'Organization ID is required and must be a valid number']
+                );
             }
 
             $user = AuthMiddleware::getCurrentUser();
@@ -176,8 +182,12 @@ class ReimbursementController
             );
         } catch (\Exception $e) {
             error_log("Reimbursement index error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to fetch reimbursements", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to fetch reimbursements",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -223,8 +233,12 @@ class ReimbursementController
             );
         } catch (\Exception $e) {
             error_log("Reimbursement show error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to fetch reimbursement", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to fetch reimbursement",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -236,8 +250,12 @@ class ReimbursementController
     {
         try {
             if (!$org_id || !is_numeric($org_id)) {
-                return responseJson(success: false, message: "Invalid or missing organization ID", code: 404,
-                    errors: ['org_id' => 'Organization ID is required and must be a valid number']);
+                return responseJson(
+                    success: false,
+                    message: "Invalid or missing organization ID",
+                    code: 404,
+                    errors: ['org_id' => 'Organization ID is required and must be a valid number']
+                );
             }
 
             $user = AuthMiddleware::getCurrentUser();
@@ -250,7 +268,7 @@ class ReimbursementController
 
             // Employees submit for themselves; admin/hr/payroll roles may submit on behalf of another employee.
             $employeeId = $data['employee_id'] ?? null;
-            if ($user['user_type'] === 'employee') {
+            if (\App\Services\PermissionService::scopeOf($user['id'], 'reimbursements.create') === 'own') {
                 $employeeId = $currentEmployee['id'];
             } elseif (!$employeeId) {
                 return responseJson(success: false, message: "Field 'employee_id' is required", code: 400);
@@ -395,9 +413,24 @@ class ReimbursementController
             $reimbursementNumber = $this->generateReimbursementNumber($org_id);
 
             $result = DB::transaction(function () use (
-                $org_id, $employeeId, $reimbursementType, $payoutMethod, $amountRequested, $currency,
-                $originalCurrency, $currencyRate, $requestDate, $expenseDate, $description, $items,
-                $policyValidated, $policyErrors, $status, $reimbursementNumber, $user, $hardFail
+                $org_id,
+                $employeeId,
+                $reimbursementType,
+                $payoutMethod,
+                $amountRequested,
+                $currency,
+                $originalCurrency,
+                $currencyRate,
+                $requestDate,
+                $expenseDate,
+                $description,
+                $items,
+                $policyValidated,
+                $policyErrors,
+                $status,
+                $reimbursementNumber,
+                $user,
+                $hardFail
             ) {
                 DB::table('reimbursements')->insert([
                     'organization_id' => $org_id,
@@ -450,7 +483,10 @@ class ReimbursementController
                 ]);
 
                 $this->createAuditLog(
-                    $org_id, $user['id'], 'reimbursements', $reimbursementId,
+                    $org_id,
+                    $user['id'],
+                    'reimbursements',
+                    $reimbursementId,
                     $status === 'rejected' ? 'policy_failed' : 'policy_validated',
                     ['errors' => $policyErrors]
                 );
@@ -461,13 +497,18 @@ class ReimbursementController
             $reimbursementId = $result;
 
             if ($status === 'rejected') {
-                $this->notifyEmployee($org_id, $employeeId, 'reimbursement',
+                $this->notifyEmployee(
+                    $org_id,
+                    $employeeId,
+                    'reimbursement',
                     'Reimbursement rejected',
                     "Your reimbursement request $reimbursementNumber was rejected: " . implode('; ', $policyErrors),
                     ['reimbursement_id' => $reimbursementId]
                 );
             } else {
-                $this->notifyManagerOf($org_id, $employeeId,
+                $this->notifyManagerOf(
+                    $org_id,
+                    $employeeId,
                     'New reimbursement request',
                     "A reimbursement request ($reimbursementNumber, " . number_format($amountRequested, 2) . " $currency) is awaiting your approval.",
                     ['reimbursement_id' => $reimbursementId]
@@ -482,8 +523,12 @@ class ReimbursementController
             );
         } catch (\Exception $e) {
             error_log("Reimbursement store error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to submit reimbursement", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to submit reimbursement",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -520,8 +565,12 @@ class ReimbursementController
             return responseJson(success: true, message: "Reimbursement updated successfully");
         } catch (\Exception $e) {
             error_log("Reimbursement update error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to update reimbursement", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to update reimbursement",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -544,14 +593,24 @@ class ReimbursementController
             ], 'id', $id);
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'cancelled', ['reason' => $data['reason'] ?? null]);
-            $this->notifyEmployee($org_id, $reimbursement->employee_id, 'reimbursement', 'Reimbursement cancelled',
-                "Reimbursement {$reimbursement->reimbursement_number} was cancelled.", ['reimbursement_id' => $id]);
+            $this->notifyEmployee(
+                $org_id,
+                $reimbursement->employee_id,
+                'reimbursement',
+                'Reimbursement cancelled',
+                "Reimbursement {$reimbursement->reimbursement_number} was cancelled.",
+                ['reimbursement_id' => $id]
+            );
 
             return responseJson(success: true, data: null, message: "Reimbursement cancelled successfully");
         } catch (\Exception $e) {
             error_log("Reimbursement cancel error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to cancel reimbursement", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to cancel reimbursement",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -575,18 +634,19 @@ class ReimbursementController
                 return responseJson(success: false, message: "This claim is not awaiting approval (status: {$reimbursement->status})", code: 409);
             }
 
-            $roleMap = [
-                'manager' => self::MANAGER_STAGE_ROLES,
-                'hr' => self::HR_STAGE_ROLES,
-                'finance' => self::FINANCE_STAGE_ROLES,
+            $permissionMap = [
+                'manager' => 'reimbursements.approve_manager',
+                'hr' => 'reimbursements.approve_hr',
+                'finance' => 'reimbursements.approve_finance',
             ];
-            if (!in_array($user['user_type'], $roleMap[$stage])) {
+            if (!\App\Services\PermissionService::can($user['id'], $permissionMap[$stage])) {
                 return responseJson(success: false, message: "You are not authorized to approve at the $stage stage", code: 403);
             }
-            // A department_manager may only act at the manager stage for their
-            // own direct reports — admin/hr_manager/payroll_manager can override.
-            if ($stage === 'manager' && $user['user_type'] === 'department_manager'
-                && (int) $employee['id'] !== (int) $reimbursement->reports_to_manager_id) {
+            if (
+                $stage === 'manager'
+                && \App\Services\PermissionService::scopeOf($user['id'], 'reimbursements.approve_manager') === 'team'
+                && (int) $employee['id'] !== (int) $reimbursement->reports_to_manager_id
+            ) {
                 return responseJson(success: false, message: "You can only approve claims for your direct reports", code: 403);
             }
 
@@ -628,12 +688,16 @@ class ReimbursementController
             DB::table('reimbursements')->update($updateData, 'id', $id);
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, $auditAction, [
-                'stage' => $stage, 'approved_amount' => $approvedAmount, 'comments' => $comments, 'partial' => $isPartial,
+                'stage' => $stage,
+                'approved_amount' => $approvedAmount,
+                'comments' => $comments,
+                'partial' => $isPartial,
             ]);
 
             if ($isPartial) {
                 $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'partially_approved', [
-                    'requested' => $reimbursement->amount_requested, 'approved' => $approvedAmount,
+                    'requested' => $reimbursement->amount_requested,
+                    'approved' => $approvedAmount,
                 ]);
             }
 
@@ -641,16 +705,24 @@ class ReimbursementController
                 ? "Approved at $stage stage; forwarded for $nextStage approval"
                 : "Reimbursement fully approved and scheduled for payment";
 
-            $this->notifyEmployee($org_id, $reimbursement->employee_id, 'reimbursement',
+            $this->notifyEmployee(
+                $org_id,
+                $reimbursement->employee_id,
+                'reimbursement',
                 $nextStage ? 'Reimbursement approval in progress' : 'Reimbursement approved',
-                "{$reimbursement->reimbursement_number}: $message", ['reimbursement_id' => $id]
+                "{$reimbursement->reimbursement_number}: $message",
+                ['reimbursement_id' => $id]
             );
 
             return responseJson(success: true, data: ['status' => $updateData['status'], 'next_stage' => $nextStage], message: $message);
         } catch (\Exception $e) {
             error_log("Reimbursement approve error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to approve reimbursement", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to approve reimbursement",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -671,8 +743,10 @@ class ReimbursementController
             if (!in_array($user['user_type'], $roleMap[$stage])) {
                 return responseJson(success: false, message: "You are not authorized to reject at the $stage stage", code: 403);
             }
-            if ($stage === 'manager' && $user['user_type'] === 'department_manager'
-                && (int) $employee['id'] !== (int) $reimbursement->reports_to_manager_id) {
+            if (
+                $stage === 'manager' && $user['user_type'] === 'department_manager'
+                && (int) $employee['id'] !== (int) $reimbursement->reports_to_manager_id
+            ) {
                 return responseJson(success: false, message: "You can only reject claims for your direct reports", code: 403);
             }
 
@@ -688,14 +762,24 @@ class ReimbursementController
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'rejected', ['stage' => $stage, 'reason' => $reason]);
 
-            $this->notifyEmployee($org_id, $reimbursement->employee_id, 'reimbursement', 'Reimbursement rejected',
-                "{$reimbursement->reimbursement_number} was rejected at the $stage stage: $reason", ['reimbursement_id' => $id]);
+            $this->notifyEmployee(
+                $org_id,
+                $reimbursement->employee_id,
+                'reimbursement',
+                'Reimbursement rejected',
+                "{$reimbursement->reimbursement_number} was rejected at the $stage stage: $reason",
+                ['reimbursement_id' => $id]
+            );
 
             return responseJson(success: true, data: null, message: "Reimbursement rejected");
         } catch (\Exception $e) {
             error_log("Reimbursement reject error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to reject reimbursement", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to reject reimbursement",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -716,14 +800,24 @@ class ReimbursementController
             ], 'id', $id);
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'update', ['clarification_requested' => true, 'notes' => $notes]);
-            $this->notifyEmployee($org_id, $reimbursement->employee_id, 'reimbursement', 'Clarification requested',
-                "{$reimbursement->reimbursement_number}: $notes", ['reimbursement_id' => $id]);
+            $this->notifyEmployee(
+                $org_id,
+                $reimbursement->employee_id,
+                'reimbursement',
+                'Clarification requested',
+                "{$reimbursement->reimbursement_number}: $notes",
+                ['reimbursement_id' => $id]
+            );
 
             return responseJson(success: true, data: null, message: "Clarification requested");
         } catch (\Exception $e) {
             error_log("Reimbursement clarification error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to request clarification", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to request clarification",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -743,7 +837,8 @@ class ReimbursementController
 
             $user = AuthMiddleware::getCurrentUser();
             $employee = AuthMiddleware::getCurrentEmployee();
-            if ($user['user_type'] === 'employee' && (int) $employee['id'] !== (int) $reimbursement->employee_id) {
+            if (\App\Services\PermissionService::scopeOf($user['id'], 'reimbursements.dispute') === 'own'
+                && (int) $employee['id'] !== (int) $reimbursement->employee_id) {
                 return responseJson(success: false, message: "You can only dispute your own claim", code: 403);
             }
 
@@ -760,14 +855,24 @@ class ReimbursementController
             ], 'id', $id);
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'disputed', ['reason' => $reason]);
-            $this->notifyRole($org_id, ['hr_manager', 'admin'], 'reimbursement', 'Reimbursement disputed',
-                "{$reimbursement->reimbursement_number} was disputed: $reason", ['reimbursement_id' => $id]);
+            $this->notifyRole(
+                $org_id,
+                ['hr_manager', 'admin'],
+                'reimbursement',
+                'Reimbursement disputed',
+                "{$reimbursement->reimbursement_number} was disputed: $reason",
+                ['reimbursement_id' => $id]
+            );
 
             return responseJson(success: true, data: null, message: "Dispute recorded");
         } catch (\Exception $e) {
             error_log("Reimbursement dispute error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to record dispute", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to record dispute",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -782,7 +887,7 @@ class ReimbursementController
             }
 
             $user = AuthMiddleware::getCurrentUser();
-            if (!in_array($user['user_type'], ['hr_manager', 'admin'])) {
+            if (!\App\Services\PermissionService::can($user['id'], 'reimbursements.resolve_dispute')) {
                 return responseJson(success: false, message: "Only HR or an admin can resolve a dispute", code: 403);
             }
 
@@ -817,14 +922,24 @@ class ReimbursementController
             DB::table('reimbursements')->update($updateData, 'id', $id);
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'update', ['dispute_decision' => $decision]);
-            $this->notifyEmployee($org_id, $reimbursement->employee_id, 'reimbursement', 'Dispute resolved',
-                "{$reimbursement->reimbursement_number}: dispute resolved ($decision)", ['reimbursement_id' => $id]);
+            $this->notifyEmployee(
+                $org_id,
+                $reimbursement->employee_id,
+                'reimbursement',
+                'Dispute resolved',
+                "{$reimbursement->reimbursement_number}: dispute resolved ($decision)",
+                ['reimbursement_id' => $id]
+            );
 
             return responseJson(success: true, data: null, message: "Dispute resolved");
         } catch (\Exception $e) {
             error_log("Reimbursement resolveDispute error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to resolve dispute", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to resolve dispute",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -847,7 +962,7 @@ class ReimbursementController
             }
 
             $user = AuthMiddleware::getCurrentUser();
-            if (!in_array($user['user_type'], ['finance_manager', 'accountant', 'admin', 'payroll_manager'])) {
+            if (!\App\Services\PermissionService::can($user['id'], 'reimbursements.process_payment')) {
                 return responseJson(success: false, message: "You are not authorized to process payments", code: 403);
             }
 
@@ -886,14 +1001,19 @@ class ReimbursementController
             ], 'id', $id);
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'payment_initiated', [
-                'payment_transaction_id' => $paymentTxnId, 'method' => $reimbursement->payout_method,
+                'payment_transaction_id' => $paymentTxnId,
+                'method' => $reimbursement->payout_method,
             ]);
 
             return responseJson(success: true, data: ['payment_transaction_id' => $paymentTxnId], message: "Payment initiated");
         } catch (\Exception $e) {
             error_log("Reimbursement processPayment error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to initiate payment", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to initiate payment",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -914,7 +1034,7 @@ class ReimbursementController
             }
 
             $user = AuthMiddleware::getCurrentUser();
-            if (!in_array($user['user_type'], ['finance_manager', 'accountant', 'admin', 'payroll_manager'])) {
+            if (!\App\Services\PermissionService::can($user['id'], 'reimbursements.process_payment')) {
                 return responseJson(success: false, message: "You are not authorized to confirm payments", code: 403);
             }
 
@@ -945,18 +1065,28 @@ class ReimbursementController
             ], 'id', $id);
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'paid', [
-                'amount_paid' => $amountPaid, 'payment_reference' => $paymentReference,
+                'amount_paid' => $amountPaid,
+                'payment_reference' => $paymentReference,
             ]);
 
-            $this->notifyEmployee($org_id, $reimbursement->employee_id, 'reimbursement', 'Reimbursement paid',
+            $this->notifyEmployee(
+                $org_id,
+                $reimbursement->employee_id,
+                'reimbursement',
+                'Reimbursement paid',
                 "{$reimbursement->reimbursement_number}: " . number_format($amountPaid, 2) . " {$reimbursement->currency} has been paid.",
-                ['reimbursement_id' => $id]);
+                ['reimbursement_id' => $id]
+            );
 
             return responseJson(success: true, data: ['status' => $status], message: "Payment confirmed");
         } catch (\Exception $e) {
             error_log("Reimbursement confirmPayment error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to confirm payment", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to confirm payment",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -983,15 +1113,24 @@ class ReimbursementController
             ], 'id', $id);
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'payment_failed', ['reason' => $reason]);
-            $this->notifyEmployee($org_id, $reimbursement->employee_id, 'reimbursement', 'Reimbursement payment failed',
+            $this->notifyEmployee(
+                $org_id,
+                $reimbursement->employee_id,
+                'reimbursement',
+                'Reimbursement payment failed',
                 "{$reimbursement->reimbursement_number}: payment failed ($reason). Please update your payment details.",
-                ['reimbursement_id' => $id]);
+                ['reimbursement_id' => $id]
+            );
 
             return responseJson(success: true, data: null, message: "Payment marked as failed");
         } catch (\Exception $e) {
             error_log("Reimbursement failPayment error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to record payment failure", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to record payment failure",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -1006,7 +1145,7 @@ class ReimbursementController
             }
 
             $user = AuthMiddleware::getCurrentUser();
-            if (!in_array($user['user_type'], ['finance_manager', 'admin'])) {
+            if (!\App\Services\PermissionService::can($user['id'], 'reimbursements.reverse_payment')) {
                 return responseJson(success: false, message: "Only Finance or an admin can reverse a payment", code: 403);
             }
 
@@ -1019,17 +1158,32 @@ class ReimbursementController
             ], 'id', $id);
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'reversed', ['reason' => $reason]);
-            $this->notifyRole($org_id, ['hr_manager', 'finance_manager', 'admin'], 'reimbursement', 'Reimbursement reversed',
-                "{$reimbursement->reimbursement_number} was reversed: $reason", ['reimbursement_id' => $id]);
-            $this->notifyEmployee($org_id, $reimbursement->employee_id, 'reimbursement', 'Reimbursement reversed',
+            $this->notifyRole(
+                $org_id,
+                ['hr_manager', 'finance_manager', 'admin'],
+                'reimbursement',
+                'Reimbursement reversed',
+                "{$reimbursement->reimbursement_number} was reversed: $reason",
+                ['reimbursement_id' => $id]
+            );
+            $this->notifyEmployee(
+                $org_id,
+                $reimbursement->employee_id,
+                'reimbursement',
+                'Reimbursement reversed',
                 "{$reimbursement->reimbursement_number} has been reversed. Please contact HR/Finance for details.",
-                ['reimbursement_id' => $id]);
+                ['reimbursement_id' => $id]
+            );
 
             return responseJson(success: true, data: null, message: "Reimbursement reversed");
         } catch (\Exception $e) {
             error_log("Reimbursement reverse error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to reverse reimbursement", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to reverse reimbursement",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -1105,7 +1259,9 @@ class ReimbursementController
             }
 
             $this->createAuditLog($org_id, $user['id'], 'reimbursements', $id, 'scheduled', [
-                'payrun_id' => $payrun->id, 'amount' => $amount, 'taxable' => $isTaxable,
+                'payrun_id' => $payrun->id,
+                'amount' => $amount,
+                'taxable' => $isTaxable,
             ]);
 
             return responseJson(
@@ -1115,8 +1271,12 @@ class ReimbursementController
             );
         } catch (\Exception $e) {
             error_log("Reimbursement attachToPayrun error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to attach reimbursement to payrun", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to attach reimbursement to payrun",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 
@@ -1130,7 +1290,7 @@ class ReimbursementController
     {
         try {
             $user = AuthMiddleware::getCurrentUser();
-            if (!in_array($user['user_type'], ['admin', 'payroll_manager', 'finance_manager'])) {
+            if (!\App\Services\PermissionService::can($user['id'], 'reimbursements.process_payment')) {
                 return responseJson(success: false, message: "You are not authorized to confirm payroll payments", code: 403);
             }
 
@@ -1148,15 +1308,25 @@ class ReimbursementController
                 ], 'id', $r->id);
 
                 $this->createAuditLog($org_id, $user['id'], 'reimbursements', $r->id, 'paid', ['via' => 'payrun_finalize', 'payrun_id' => $payrun_id]);
-                $this->notifyEmployee($org_id, $r->employee_id, 'reimbursement', 'Reimbursement paid',
-                    "{$r->reimbursement_number} was paid with your salary.", ['reimbursement_id' => $r->id]);
+                $this->notifyEmployee(
+                    $org_id,
+                    $r->employee_id,
+                    'reimbursement',
+                    'Reimbursement paid',
+                    "{$r->reimbursement_number} was paid with your salary.",
+                    ['reimbursement_id' => $r->id]
+                );
             }
 
             return responseJson(success: true, data: ['count' => count($rows)], message: count($rows) . " reimbursement(s) marked paid");
         } catch (\Exception $e) {
             error_log("markPayrollReimbursementsPaid error: " . $e->getMessage());
-            return responseJson(success: false, message: "Failed to mark payroll reimbursements paid", code: 500,
-                errors: ['exception' => $e->getMessage()]);
+            return responseJson(
+                success: false,
+                message: "Failed to mark payroll reimbursements paid",
+                code: 500,
+                errors: ['exception' => $e->getMessage()]
+            );
         }
     }
 

@@ -78,7 +78,7 @@ class OrganizationController
                 metadata: [
                     'statistics' => $stats,
                     'user_role' => $user['user_type'],
-                    'can_edit' => in_array($user['user_type'], ['admin', 'hr_manager', 'finance_manager'])
+                    'can_edit' => \App\Services\PermissionService::can($user['id'], 'organizations.update')
                 ]
             );
         } catch (\Exception $e) {
@@ -144,7 +144,7 @@ class OrganizationController
         }
     }
 
-        /**
+    /**
      * Attach the currently active/trialing subscription plan to each organization row.
      * Batched into a single query keyed by organization_id — avoids N+1 queries.
      * If an org somehow has more than one active/trialing row, the most recently
@@ -392,6 +392,8 @@ class OrganizationController
             // Insert into db
             DB::table('organizations')->insert($insertData);
             $orgId = DB::lastInsertId();
+
+            \App\Services\RoleSeederService::seedForOrganization((int) $orgId);
 
             // Fetch the created organization
             $createdOrg = DB::table('organizations')

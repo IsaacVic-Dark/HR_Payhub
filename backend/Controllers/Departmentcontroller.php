@@ -187,7 +187,7 @@ class DepartmentController
 
             // department_manager can only view their own department
             $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
-            if ($currentUser && $currentUser['user_type'] === 'department_manager') {
+            if (\App\Services\PermissionService::scopeOf($currentUser['id'], 'departments.view') === 'own') {
                 $managed = DB::raw(
                     "SELECT id FROM departments
                      WHERE id = :id AND organization_id = :org_id AND head_employee_id = (
@@ -722,7 +722,7 @@ class DepartmentController
 
             // department_manager can only view their own department's employees
             $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
-            if ($currentUser && $currentUser['user_type'] === 'department_manager') {
+            if (\App\Services\PermissionService::scopeOf($currentUser['id'], 'departments.view_employees') === 'own') {
                 $managed = DB::raw(
                     "SELECT id FROM departments
                      WHERE id = :id AND organization_id = :org_id AND head_employee_id = (

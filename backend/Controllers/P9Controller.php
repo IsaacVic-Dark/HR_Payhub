@@ -168,7 +168,7 @@ class P9Controller
             $params      = [':org_id' => $org_id];
             $countParams = [':org_id' => $org_id];
 
-            if ($currentUser['user_type'] === 'employee') {
+            if (\App\Services\PermissionService::scopeOf($currentUser['id'], 'p9.view') === 'own') {
                 $conditions[]               = 'p9.employeeid = :scoped_emp';
                 $params[':scoped_emp']      = $currentEmployee['id'];
                 $countParams[':scoped_emp'] = $currentEmployee['id'];
@@ -178,7 +178,7 @@ class P9Controller
                 $params[':year']      = $year;
                 $countParams[':year'] = $year;
             }
-            if ($employeeId && $currentUser['user_type'] !== 'employee') {
+            if ($employeeId && \App\Services\PermissionService::scopeOf($currentUser['id'], 'p9.view') !== 'own') {
                 $conditions[]               = 'p9.employeeid = :filter_emp';
                 $params[':filter_emp']      = $employeeId;
                 $countParams[':filter_emp'] = $employeeId;

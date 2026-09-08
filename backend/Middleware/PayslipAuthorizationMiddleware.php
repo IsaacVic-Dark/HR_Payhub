@@ -1,9 +1,9 @@
 <?php
-// app/Middleware/PayslipAuthorizationMiddleware.php
 
 namespace App\Middleware;
 
 use App\Services\DB;
+use App\Services\PermissionService;
 
 class PayslipAuthorizationMiddleware
 {
@@ -14,156 +14,70 @@ class PayslipAuthorizationMiddleware
         $orgId    = AuthMiddleware::getCurrentOrganizationId();
 
         if (!$user || !$orgId) {
-            return responseJson(
-                success: false, data: null,
-                message: 'Authentication required', code: 401
-            );
+            return responseJson(success: false, data: null, message: 'Authentication required', code: 401);
         }
 
-        // Super admins get read-only, cross-tenant supervision — no mutations
-        if ($user['user_type'] === 'super_admin') {
-            if (!$this->isSafeReadMethod()) {
-                return responseJson(
-                    success: false, data: null,
-                    message: 'Super admins have read-only access to payslip data',
-                    code: 403
-                );
+        // super_admin's old "read-only, cross-tenant" carve-out is gone —
+        // AuthMiddleware::checkOrganizationAccess() already blocks platform
+        // accounts from any org-scoped route before this middleware runs.
+
+        $permission = $this->resolvePermission();
+
+        if (!PermissionService::can($user['id'], $permission)) {
+            return responseJson(success: false, data: null, message: $this->denyMessage($permission), code: 403);
+        }
+
+        $scope = PermissionService::scopeOf($user['id'], $permission);
+
+        if ($permission === 'payslips.view' && $this->isSinglePayslipRoute() && in_array($scope, ['own', 'team', 'department'], true)) {
+            if (!isset($request['params']['id']) || !is_numeric($request['params']['id'])) {
+                return $next($request); // listing — controller filters by scope
             }
-            // Allow read through — no further scope checks needed for super_admin
-            return $next($request);
-        }
 
-        $uri    = $_SERVER['REQUEST_URI'] ?? '';
-        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+            $payslipId = (int) $request['params']['id'];
 
-        // ── Route-level permission matrix ─────────────────────────────────────
-        switch ($user['user_type']) {
+            $allowed = match ($scope) {
+                'own'        => $this->isOwnPayslip($payslipId, $employee['id']),
+                'team'       => $this->isOwnPayslip($payslipId, $employee['id']) || $this->isPayslipInManagerTeam($payslipId, $employee['id']),
+                'department' => $this->isOwnPayslip($payslipId, $employee['id']) || $this->isPayslipInOfficerDept($payslipId, $employee['id']),
+            };
 
-            case 'admin':
-                // Full access: read, create (generate), send, bulk-send, pdf-path, stats
-                break;
-
-            case 'payroll_manager':
-                // Full access within org: same as admin for payslips
-                break;
-
-            case 'hr_manager':
-                // Read dept payslips, no generate/delete, no bulk ops
-                if ($this->isGenerateRoute($uri) && $method === 'POST') {
-                    return $this->deny('HR managers cannot generate payslips');
-                }
-                if ($this->isBulkSendRoute($uri)) {
-                    return $this->deny('HR managers cannot bulk-send payslips');
-                }
-                break;
-
-            case 'hr_officer':
-                // Read assigned-dept payslips, send (to distribute), no generate
-                if ($this->isGenerateRoute($uri) && $method === 'POST') {
-                    return $this->deny('HR officers cannot generate payslips');
-                }
-                if ($this->isStatisticsRoute($uri)) {
-                    return $this->deny('HR officers cannot access payslip statistics');
-                }
-                // Scope check for single payslip access
-                if ($this->isSinglePayslipRoute($uri) && $method === 'GET') {
-                    if (!$this->canOfficerAccessPayslip($employee['id'], $request)) {
-                        return $this->deny('Access denied to this payslip');
-                    }
-                }
-                break;
-
-            case 'payroll_officer':
-                // Read assigned-dept payslips, generate, send — no bulk-send, no delete
-                if ($this->isBulkSendRoute($uri)) {
-                    return $this->deny('Payroll officers cannot bulk-send payslips');
-                }
-                if ($this->isStatisticsRoute($uri)) {
-                    return $this->deny('Payroll officers cannot access payslip statistics');
-                }
-                if ($this->isSinglePayslipRoute($uri) && $method === 'GET') {
-                    if (!$this->canOfficerAccessPayslip($employee['id'], $request)) {
-                        return $this->deny('Access denied to this payslip');
-                    }
-                }
-                break;
-
-            case 'finance_manager':
-                // Read all in org + approve (statistics). No create/generate/send.
-                if ($this->isGenerateRoute($uri) && $method === 'POST') {
-                    return $this->deny('Finance managers cannot generate payslips');
-                }
-                if ($this->isSendRoute($uri) && $method === 'POST') {
-                    return $this->deny('Finance managers cannot send payslips');
-                }
-                if ($this->isBulkSendRoute($uri)) {
-                    return $this->deny('Finance managers cannot bulk-send payslips');
-                }
-                if ($this->isPdfPathRoute($uri) && $method === 'PATCH') {
-                    return $this->deny('Finance managers cannot update PDF paths');
-                }
-                break;
-
-            case 'auditor':
-                // Read-only for all payslips in org
-                if (!$this->isSafeReadMethod()) {
-                    return $this->deny('Auditors have read-only access to payslips');
-                }
-                break;
-
-            case 'department_manager':
-                // Read own + dept payslips; dept-level approve (acknowledge); no generate/send/delete
-                if ($this->isGenerateRoute($uri) && $method === 'POST') {
-                    return $this->deny('Department managers cannot generate payslips');
-                }
-                if ($this->isSendRoute($uri) || $this->isBulkSendRoute($uri)) {
-                    return $this->deny('Department managers cannot send payslips');
-                }
-                if ($this->isPdfPathRoute($uri) && $method === 'PATCH') {
-                    return $this->deny('Department managers cannot update PDF paths');
-                }
-                if ($this->isStatisticsRoute($uri)) {
-                    return $this->deny('Department managers cannot access org-wide payslip statistics');
-                }
-                // Scope check: can only see own + team payslips
-                if ($this->isSinglePayslipRoute($uri) && $method === 'GET') {
-                    if (!$this->canManagerAccessPayslip($employee['id'], $request)) {
-                        return $this->deny('Access denied to this payslip');
-                    }
-                }
-                break;
-
-            case 'employee':
-                // Own payslips only. Can read + acknowledge. No mutations.
-                if ($this->isGenerateRoute($uri) && $method === 'POST') {
-                    return $this->deny('Employees cannot generate payslips');
-                }
-                if ($this->isSendRoute($uri) || $this->isBulkSendRoute($uri)) {
-                    return $this->deny('Employees cannot send payslips');
-                }
-                if ($this->isPdfPathRoute($uri) && $method === 'PATCH') {
-                    return $this->deny('Employees cannot update PDF paths');
-                }
-                if ($this->isStatisticsRoute($uri)) {
-                    return $this->deny('Employees cannot access payslip statistics');
-                }
-                // Scope check: employees can only access their own payslips
-                if ($this->isSinglePayslipRoute($uri)) {
-                    if (!$this->canEmployeeAccessPayslip($employee['id'], $request)) {
-                        return $this->deny('You can only access your own payslips');
-                    }
-                }
-                break;
-
-            default:
-                return $this->deny('Unknown user role');
+            if (!$allowed) {
+                return responseJson(success: false, data: null, message: 'Access denied to this payslip', code: 403);
+            }
         }
 
         return $next($request);
     }
 
+    private function resolvePermission(): string
+    {
+        $uri    = $_SERVER['REQUEST_URI']    ?? '';
+        $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+
+        if ($this->isGenerateRoute($uri) && $method === 'POST') return 'payslips.generate';
+        if ($this->isBulkSendRoute($uri))                        return 'payslips.bulk_send';
+        if ($this->isSendRoute($uri) && $method === 'POST')      return 'payslips.send';
+        if ($this->isPdfPathRoute($uri) && $method === 'PATCH')  return 'payslips.update_pdf_path';
+        if ($this->isStatisticsRoute($uri))                      return 'payslips.statistics';
+
+        return 'payslips.view';
+    }
+
+    private function denyMessage(string $permission): string
+    {
+        return match ($permission) {
+            'payslips.generate'        => 'You cannot generate payslips',
+            'payslips.bulk_send'       => 'You cannot bulk-send payslips',
+            'payslips.send'            => 'You cannot send payslips',
+            'payslips.update_pdf_path' => 'You cannot update PDF paths',
+            'payslips.statistics'      => 'You cannot access payslip statistics',
+            default                    => 'Access denied to this payslip',
+        };
+    }
+
     // =========================================================================
-    // Route pattern helpers
+    // Route pattern helpers — unchanged from the original
     // =========================================================================
 
     private function isSafeReadMethod(): bool
@@ -171,10 +85,9 @@ class PayslipAuthorizationMiddleware
         return in_array($_SERVER['REQUEST_METHOD'] ?? 'GET', ['GET', 'HEAD', 'OPTIONS']);
     }
 
-    private function isSinglePayslipRoute(string $uri): bool
+    private function isSinglePayslipRoute(): bool
     {
-        // Matches /payslips/{id} or /payslips/{id}/... (not /payslips/generate or /payslips/bulk-send)
-        return (bool) preg_match('#/payslips/(\d+)#', $uri);
+        return (bool) preg_match('#/payslips/(\d+)#', $_SERVER['REQUEST_URI'] ?? '');
     }
 
     private function isGenerateRoute(string $uri): bool
@@ -203,68 +116,14 @@ class PayslipAuthorizationMiddleware
     }
 
     // =========================================================================
-    // Scope check helpers
-    // =========================================================================
-
-    /**
-     * Employee can only access their own payslips.
-     */
-    private function canEmployeeAccessPayslip(int $employeeId, $request): bool
-    {
-        if (!isset($request['params']['id']) || !is_numeric($request['params']['id'])) {
-            return false;
-        }
-
-        return $this->isOwnPayslip((int) $request['params']['id'], $employeeId);
-    }
-
-    /**
-     * Department manager can access own payslips + team payslips (reports_to).
-     */
-    private function canManagerAccessPayslip(int $managerId, $request): bool
-    {
-        if (!isset($request['params']['id']) || !is_numeric($request['params']['id'])) {
-            return true; // listing — filtered in controller
-        }
-
-        $payslipId = (int) $request['params']['id'];
-
-        // Own payslip is always accessible
-        if ($this->isOwnPayslip($payslipId, $managerId)) {
-            return true;
-        }
-
-        return $this->isPayslipInManagerTeam($payslipId, $managerId);
-    }
-
-    /**
-     * HR/Payroll officers can access payslips of employees in their department.
-     */
-    private function canOfficerAccessPayslip(int $officerEmployeeId, $request): bool
-    {
-        if (!isset($request['params']['id']) || !is_numeric($request['params']['id'])) {
-            return true; // listing — filtered in controller
-        }
-
-        $payslipId = (int) $request['params']['id'];
-
-        if ($this->isOwnPayslip($payslipId, $officerEmployeeId)) {
-            return true;
-        }
-
-        return $this->isPayslipInOfficerDept($payslipId, $officerEmployeeId);
-    }
-
-    // =========================================================================
-    // DB checks
+    // DB checks — unchanged from the original
     // =========================================================================
 
     private function isOwnPayslip(int $payslipId, int $employeeId): bool
     {
         try {
             $result = DB::raw(
-                "SELECT COUNT(*) as count FROM payslips
-                 WHERE id = :payslip_id AND employee_id = :employee_id",
+                "SELECT COUNT(*) as count FROM payslips WHERE id = :payslip_id AND employee_id = :employee_id",
                 [':payslip_id' => $payslipId, ':employee_id' => $employeeId]
             );
             return ($result[0]->count ?? 0) > 0;
@@ -281,9 +140,7 @@ class PayslipAuthorizationMiddleware
                 "SELECT COUNT(*) as count
                  FROM payslips ps
                  INNER JOIN employees e ON ps.employee_id = e.id
-                 WHERE ps.id = :payslip_id
-                   AND e.reports_to = :manager_id
-                   AND e.status = 'active'",
+                 WHERE ps.id = :payslip_id AND e.reports_to = :manager_id AND e.status = 'active'",
                 [':payslip_id' => $payslipId, ':manager_id' => $managerId]
             );
             return ($result[0]->count ?? 0) > 0;
@@ -311,17 +168,5 @@ class PayslipAuthorizationMiddleware
             error_log("Officer dept check error: " . $e->getMessage());
             return false;
         }
-    }
-
-    // =========================================================================
-    // Helper
-    // =========================================================================
-
-    private function deny(string $message): mixed
-    {
-        return responseJson(
-            success: false, data: null,
-            message: $message, code: 403
-        );
     }
 }

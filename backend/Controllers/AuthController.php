@@ -242,6 +242,15 @@ class AuthController
 
             $userId = $db->lastInsertId();
 
+            // Assign the matching default role (user_type stays as a
+            // legacy/display field only from here on).
+            $roleStmt = $db->prepare("SELECT id FROM roles WHERE organization_id = :org_id AND slug = :slug");
+            $roleStmt->execute([':org_id' => $data['organization_id'], ':slug' => $userType]);
+            if ($role = $roleStmt->fetch(\PDO::FETCH_ASSOC)) {
+                $assignStmt = $db->prepare("INSERT IGNORE INTO model_has_roles (user_id, role_id, created_at) VALUES (:user_id, :role_id, NOW())");
+                $assignStmt->execute([':user_id' => $userId, ':role_id' => $role['id']]);
+            }
+
             // Generate employee number
             $employeeNumber = $this->generateEmployeeNumber($data['organization_id']);
 

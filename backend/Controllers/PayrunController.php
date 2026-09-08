@@ -59,9 +59,8 @@ class PayrunController
 
             if ($needsBootstrap) {
                 $currentUser = \App\Middleware\AuthMiddleware::getCurrentUser();
-                $allowedRoles = ['admin', 'super_admin', 'payroll_manager', 'payroll_officer'];
 
-                if ($currentUser && in_array($currentUser['user_type'], $allowedRoles)) {
+                if ($currentUser && \App\Services\PermissionService::can($currentUser['id'], 'payruns.process')) {
                     try {
                         $this->createAndProcessFirstPayrun((int) $org_id, $currentUser, []);
                     } catch (\RuntimeException $e) {
@@ -792,8 +791,7 @@ class PayrunController
             }
 
             // Only payroll managers, payroll officers, and admins may process
-            $allowedRoles = ['admin', 'super_admin', 'payroll_manager', 'payroll_officer'];
-            if (!in_array($currentUser['user_type'], $allowedRoles)) {
+            if (!\App\Services\PermissionService::can($currentUser['id'], 'payruns.process')) {
                 return responseJson(
                     success: false,
                     message: "You do not have permission to process payruns",
@@ -927,8 +925,7 @@ class PayrunController
                 );
             }
 
-            $allowedRoles = ['admin', 'payroll_manager', 'hr_manager', 'payroll_officer'];
-            if (!in_array($currentUser['user_type'], $allowedRoles)) {
+            if (!\App\Services\PermissionService::can($currentUser['id'], 'payruns.process')) {
                 return responseJson(
                     success: false,
                     message: "You do not have permission to review payruns",
@@ -1071,8 +1068,7 @@ class PayrunController
                 );
             }
 
-            $allowedRoles = ['admin', 'payroll_manager', 'hr_manager', 'payroll_officer'];
-            if (!in_array($currentUser['user_type'], $allowedRoles)) {
+            if (!\App\Services\PermissionService::can($currentUser['id'], 'payruns.process')) {
                 return responseJson(
                     success: false,
                     message: "You do not have permission to reopen payruns",
@@ -1224,8 +1220,7 @@ class PayrunController
                 );
             }
 
-            $allowedRoles = ['admin', 'payroll_manager', 'finance_manager'];
-            if (!in_array($currentUser['user_type'], $allowedRoles)) {
+            if (!\App\Services\PermissionService::can($currentUser['id'], 'payruns.finalize')) {
                 return responseJson(
                     success: false,
                     message: "You do not have permission to finalize payruns",

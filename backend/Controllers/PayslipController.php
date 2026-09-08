@@ -158,10 +158,10 @@ class PayslipController
     // -------------------------------------------------------------------------
     private function applyRoleBasedFilters(int $orgId, ?int $payrunId = null): array
     {
-        $user     = \App\Middleware\AuthMiddleware::getCurrentUser();
-        $employee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
+        $currentUser     = \App\Middleware\AuthMiddleware::getCurrentUser();
+        $currentEmployee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
 
-        if (!$user || !$employee) {
+        if (!$currentUser || !$currentEmployee) {
             throw new \Exception('User not authenticated');
         }
 
@@ -171,32 +171,25 @@ class PayslipController
             $filters['payrun_id'] = $payrunId;
         }
 
-        switch ($user['user_type']) {
-            // Full org visibility
-            case 'admin':
-            case 'payroll_manager':
-            case 'finance_manager':
-            case 'auditor':
-                break;
+        $scope = \App\Services\PermissionService::scopeOf($currentUser['id'], 'payslips.view');
 
-            // Dept/team visibility
-            case 'hr_manager':
-            case 'hr_officer':
-            case 'payroll_officer':
-                $filters['dept_employees'] = $this->getDeptEmployeeIds($employee['id']);
+        switch ($scope) {
+            case 'all':
                 break;
-
-            case 'department_manager':
-                $filters['team_employees'] = $this->getTeamEmployeeIds($employee['id']);
+            case 'department':
+                $conditions[] = 'e.department_id = (SELECT department_id FROM employees WHERE user_id = :scope_user_id LIMIT 1)';
+                $params[':scope_user_id'] = $currentUser['id'];
                 break;
-
-            // Own only
-            case 'employee':
-                $filters['employee_id'] = $employee['id'];
+            case 'team':
+                $teamIds = $this->getTeamEmployeeIds($currentEmployee['id']);
+                $conditions[] = 'ps.employee_id IN (' . (empty($teamIds) ? '0' : implode(',', array_map('intval', $teamIds))) . ')';
                 break;
-
+            case 'own':
+                $conditions[] = 'ps.employee_id = :scoped_emp';
+                $params[':scoped_emp'] = $currentEmployee['id'];
+                break;
             default:
-                throw new \Exception('Unknown user role');
+                throw new \Exception('You do not have permission to view payslips');
         }
 
         return $filters;
@@ -1010,17 +1003,11 @@ class PayslipController
             $currentUser     = \App\Middleware\AuthMiddleware::getCurrentUser();
             $currentEmployee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
 
-            // Determine if current user can see this employee's payslips
-            $canSeeAll = in_array($currentUser['user_type'], [
-                'admin',
-                'payroll_manager',
-                'finance_manager',
-                'auditor',
-                'hr_manager',
-            ]);
+            // Determine if current currentUser can see this employee's payslips
+            $scope = \App\Services\PermissionService::scopeOf($currentUser['id'], 'payslips.view');
 
-            if (!$canSeeAll) {
-                if (in_array($currentUser['user_type'], ['hr_officer', 'payroll_officer'])) {
+            if ($scope !== 'all') {
+                if ($scope === 'department') {
                     $deptIds = $this->getDeptEmployeeIds($currentEmployee['id']);
                     if (!in_array($empId, $deptIds)) {
                         return responseJson(
@@ -1030,7 +1017,7 @@ class PayslipController
                             code: 403
                         );
                     }
-                } elseif ($currentUser['user_type'] === 'department_manager') {
+                } elseif ($scope === 'team') {
                     $teamIds = $this->getTeamEmployeeIds($currentEmployee['id']);
                     if (!in_array($empId, $teamIds) && $currentEmployee['id'] != $empId) {
                         return responseJson(
@@ -1040,7 +1027,7 @@ class PayslipController
                             code: 403
                         );
                     }
-                } elseif ($currentEmployee['id'] != $empId) {
+                } elseif ((int) $currentEmployee['id'] !== (int) $empId) {
                     return responseJson(
                         success: false,
                         data: null,
