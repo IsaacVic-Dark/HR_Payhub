@@ -74,11 +74,11 @@ class AuthController
             $payload = [
                 'user_id' => $user['id'],
                 'email' => $user['email'],
-                'user_type' => $user['user_type'],
+                'user_type' => \App\Services\PermissionService::primaryRoleSlug($user['id']) ?? $user['user_type'],
+                'roles' => \App\Services\PermissionService::roleSlugsFor($user['id']),
                 'organization_id' => $user['organization_id'],
                 'employee_id' => $employee['id'] ?? null,
                 'setup_completed'  => (int) ($org['setup_completed'] ?? 0),
-
             ];
 
             $tokens = JWTService::generateToken($payload);
@@ -124,7 +124,8 @@ class AuthController
                     'id' => $user['id'],
                     'email' => $user['email'],
                     'username' => $user['username'],
-                    'user_type' => $user['user_type'],
+                    'user_type' => \App\Services\PermissionService::primaryRoleSlug($user['id']) ?? $user['user_type'],
+                    'roles' => \App\Services\PermissionService::roleSlugsFor($user['id']),
                     'organization_id' => $user['organization_id'],
                     'employee' => $employee ? [
                         'id' => $employee['id'],
@@ -436,7 +437,8 @@ class AuthController
             $payload = [
                 'user_id' => $user['id'],
                 'email' => $user['email'],
-                'user_type' => $user['user_type'],
+                'user_type' => \App\Services\PermissionService::primaryRoleSlug($user['id']) ?? $user['user_type'],
+                'roles' => \App\Services\PermissionService::roleSlugsFor($user['id']),
                 'organization_id' => $user['organization_id'],
                 'employee_id' => $employee['id'] ?? null
             ];
@@ -560,7 +562,8 @@ class AuthController
                     'id' => $user['id'],
                     'email' => $user['email'],
                     'username' => $user['username'],
-                    'user_type' => $user['user_type'],
+                    'user_type' => \App\Services\PermissionService::primaryRoleSlug($user['id']) ?? $user['user_type'],
+                    'roles' => \App\Services\PermissionService::roleSlugsFor($user['id']),
                     'organization_id' => $user['organization_id'],
                     'setup_completed'     => $setupCompleted,
                     'subscription_status' => 'trialing',

@@ -175,12 +175,16 @@ class EmployeeController
                 'has_user' => 'boolean'
             ]);
 
-            // Validate role against allowed user_type values
-            $allowedRoles = ['admin', 'hr_manager', 'hr_officer', 'payroll_manager', 'payroll_officer', 'finance_manager', 'auditor', 'department_manager', 'employee'];
-            if (!in_array($data['role'], $allowedRoles)) {
+            // Validate role against this organization's actual roles table —
+            // covers custom roles too, not just the original 9 defaults.
+            $roleExists = DB::raw(
+                "SELECT id FROM roles WHERE organization_id = :org_id AND slug = :slug",
+                [':org_id' => $orgId, ':slug' => $data['role']]
+            );
+            if (empty($roleExists)) {
                 return responseJson(
                     success: false,
-                    message: "Invalid role '{$data['role']}'. Allowed values: " . implode(', ', $allowedRoles),
+                    message: "Invalid role '{$data['role']}'.",
                     code: 400
                 );
             }
@@ -625,7 +629,7 @@ class EmployeeController
                          jt.grade  AS job_title_grade,
                          u.username,
                          u.email    AS user_email,
-                         u.user_type,
+                         (SELECT r.slug FROM model_has_roles mhr INNER JOIN roles r ON r.id = mhr.role_id WHERE mhr.user_id = u.id ORDER BY mhr.id ASC LIMIT 1) AS user_type,
                          mgr.firstname   AS manager_firstname,
                          mgr.middlename  AS manager_middlename,
                          mgr.surname     AS manager_surname,
@@ -904,7 +908,7 @@ class EmployeeController
                          jt.grade  AS job_title_grade,
                          u.username,
                          u.email    AS user_email,
-                         u.user_type,
+                         (SELECT r.slug FROM model_has_roles mhr INNER JOIN roles r ON r.id = mhr.role_id WHERE mhr.user_id = u.id ORDER BY mhr.id ASC LIMIT 1) AS user_type,
                          mgr.firstname   AS manager_firstname,
                          mgr.middlename  AS manager_middlename,
                          mgr.surname     AS manager_surname,
@@ -1121,7 +1125,7 @@ class EmployeeController
                  e.user_id,
                  u.username,
                  u.email    AS user_email,
-                 u.user_type,
+                 (SELECT r.slug FROM model_has_roles mhr INNER JOIN roles r ON r.id = mhr.role_id WHERE mhr.user_id = u.id ORDER BY mhr.id ASC LIMIT 1) AS user_type,
                  e.reports_to,
                  mgr.firstname   AS manager_firstname,
                  mgr.middlename  AS manager_middlename,
@@ -1146,7 +1150,7 @@ class EmployeeController
                  e.user_id,
                  u.username,
                  u.email    AS user_email,
-                 u.user_type,
+                 (SELECT r.slug FROM model_has_roles mhr INNER JOIN roles r ON r.id = mhr.role_id WHERE mhr.user_id = u.id ORDER BY mhr.id ASC LIMIT 1) AS user_type,
                  e.reports_to,
                  mgr.firstname   AS manager_firstname,
                  mgr.middlename  AS manager_middlename,
@@ -1325,7 +1329,7 @@ class EmployeeController
     {
         try {
             $user = \App\Middleware\AuthMiddleware::getCurrentUser();
-            if (!in_array($user['user_type'], ['admin', 'hr_manager'])) {
+            if (!\App\Services\PermissionService::can($user['id'], 'employees.import')) {
                 return responseJson(success: false, message: "Not permitted to import employees", code: 403);
             }
 
@@ -1548,10 +1552,10 @@ class EmployeeController
         }
 
         $user = \App\Middleware\AuthMiddleware::getCurrentUser();
-        if (!in_array($user['user_type'], ['admin', 'hr_manager'])) {
+        if (!\App\Services\PermissionService::can($user['id'], 'employees.export')) {
             return responseJson(success: false, message: "Not permitted to export employees", code: 403);
         }
-
+        
         $format = strtolower($_GET['format'] ?? 'csv');
         if ($format !== 'csv') {
             return responseJson(

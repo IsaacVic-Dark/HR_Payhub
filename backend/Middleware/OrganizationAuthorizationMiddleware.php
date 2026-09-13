@@ -1,16 +1,30 @@
 <?php
 // app/Middleware/OrganizationAuthorizationMiddleware.php
+//
+// This middleware's own allowedRoles list was the same for every HTTP
+// method, but the ACTUAL per-method restriction already lives one layer up,
+// in routes.php's own inline AuthMiddleware role arrays:
+//   GET    /organizations/{id}         -> no extra role restriction
+//   PUT    /organizations/{id}         -> ['admin', 'hr_manager', 'finance_manager']
+//   DELETE /organizations/{id}         -> ['admin']
+// Those inline arrays are untouched (still legacy user_type checks via
+// AuthMiddleware's $roles param) — so the permission grants below are
+// calibrated to match them exactly: organizations.view is held by the
+// original 5-role read list, organizations.update by admin+hr_manager+
+// finance_manager (matching the PUT route's array), organizations.delete
+// by admin only (matching the DELETE route's array). If routes.php's inline
+// arrays are ever removed in favor of this middleware alone, double check
+// they still agree.
 
 namespace App\Middleware;
 
-use App\Services\DB;
+use App\Services\PermissionService;
 
 class OrganizationAuthorizationMiddleware
 {
     public function handle($request, $next)
     {
-        $user = AuthMiddleware::getCurrentUser();
-        // $orgId = isset($request['params']['org_id']) ? $request['params']['org_id'] : null;
+        $user  = AuthMiddleware::getCurrentUser();
         $orgId = AuthMiddleware::getCurrentOrganizationId();
 
         if (!$user || !$orgId) {
@@ -22,30 +36,19 @@ class OrganizationAuthorizationMiddleware
             );
         }
 
-        // Super admins cannot access organization data (privacy)
-        if ($user['user_type'] === 'super_admin') {
-            return responseJson(
-                success: false,
-                data: null,
-                message: 'Access to organization data is restricted',
-                code: 403
-            );
-        }
+        // The old "super_admin blocked from org data" + "user belongs to
+        // this org" checks are now both handled once, centrally, by
+        // AuthMiddleware::checkOrganizationAccess() before this middleware
+        // ever runs — no need to repeat either here.
 
-        // Verify user belongs to the requested organization
-        if ($user['organization_id'] != $orgId) {
-            return responseJson(
-                success: false,
-                data: null,
-                message: 'Access denied to this organization',
-                code: 403
-            );
-        }
+        $method     = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+        $permission = match ($method) {
+            'PUT', 'PATCH' => 'organizations.update',
+            'DELETE'       => 'organizations.delete',
+            default        => 'organizations.view',
+        };
 
-        // Apply role-based access control
-        $allowedRoles = ['admin', 'hr_manager', 'payroll_manager', 'finance_manager', 'auditor'];
-        
-        if (!in_array($user['user_type'], $allowedRoles)) {
+        if (!PermissionService::can($user['id'], $permission)) {
             return responseJson(
                 success: false,
                 data: null,

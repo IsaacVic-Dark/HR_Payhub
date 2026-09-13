@@ -134,8 +134,8 @@ class LoanController
             'id'              => $loan->employee_id,
             'full_name'       => trim(
                 ($loan->employee_firstname ?? '') . ' ' .
-                ($loan->employee_middlename ? $loan->employee_middlename . ' ' : '') .
-                ($loan->employee_surname ?? '')
+                    ($loan->employee_middlename ? $loan->employee_middlename . ' ' : '') .
+                    ($loan->employee_surname ?? '')
             ),
             'employee_number' => $loan->employee_number,
             'email'           => $loan->employee_email,
@@ -171,12 +171,24 @@ class LoanController
 
         // Remove flat fields
         unset(
-            $loan->employee_firstname, $loan->employee_middlename, $loan->employee_surname,
-            $loan->employee_number, $loan->employee_email,
-            $loan->loan_type_name, $loan->loan_type_interest_rate,
-            $loan->loan_type_max_amount, $loan->loan_type_finance_threshold, $loan->loan_type_settings,
-            $loan->approver_username, $loan->approver_firstname, $loan->approver_surname, $loan->approver_email,
-            $loan->rejecter_username, $loan->rejecter_firstname, $loan->rejecter_surname, $loan->rejecter_email
+            $loan->employee_firstname,
+            $loan->employee_middlename,
+            $loan->employee_surname,
+            $loan->employee_number,
+            $loan->employee_email,
+            $loan->loan_type_name,
+            $loan->loan_type_interest_rate,
+            $loan->loan_type_max_amount,
+            $loan->loan_type_finance_threshold,
+            $loan->loan_type_settings,
+            $loan->approver_username,
+            $loan->approver_firstname,
+            $loan->approver_surname,
+            $loan->approver_email,
+            $loan->rejecter_username,
+            $loan->rejecter_firstname,
+            $loan->rejecter_surname,
+            $loan->rejecter_email
         );
 
         return $loan;
@@ -197,26 +209,23 @@ class LoanController
 
         $filters = ['organization_id' => $orgId];
 
-        switch ($user['user_type']) {
-            case 'admin':
-            case 'hr_manager':
-            case 'hr_officer':
-            case 'finance_manager':
-            case 'payroll_manager':
-            case 'payroll_officer':
-            case 'auditor':
+        $scope = \App\Services\PermissionService::scopeOf($user['id'], 'loans.view');
+
+        switch ($scope) {
+            case 'all':
+            case 'department':
                 break;
 
-            case 'department_manager':
+            case 'team':
                 $filters['team_employees'] = $this->getTeamEmployeeIds((int) $employee['id']);
                 break;
 
-            case 'employee':
+            case 'own':
                 $filters['employee_id'] = (int) $employee['id'];
                 break;
 
             default:
-                throw new \Exception('Unknown user role');
+                throw new \Exception('You do not have permission to view loans');
         }
 
         return $filters;
@@ -376,8 +385,10 @@ class LoanController
                 "SELECT u.email, CONCAT(e.firstname,' ',e.surname) AS full_name
                  FROM users u
                  LEFT JOIN employees e ON e.user_id = u.id
+                 INNER JOIN model_has_roles mhr ON mhr.user_id = u.id
+                 INNER JOIN roles r ON r.id = mhr.role_id AND r.organization_id = u.organization_id
                  WHERE u.organization_id = :org_id
-                   AND u.user_type = 'hr_manager'",
+                   AND r.slug = 'hr_manager'",
                 [':org_id' => $orgId]
             );
 
@@ -405,8 +416,10 @@ class LoanController
                 "SELECT u.email, CONCAT(e.firstname,' ',e.surname) AS full_name
                  FROM users u
                  LEFT JOIN employees e ON e.user_id = u.id
+                 INNER JOIN model_has_roles mhr ON mhr.user_id = u.id
+                 INNER JOIN roles r ON r.id = mhr.role_id AND r.organization_id = u.organization_id
                  WHERE u.organization_id = :org_id
-                   AND u.user_type = 'finance_manager'",
+                   AND r.slug = 'finance_manager'",
                 [':org_id' => $orgId]
             );
 
@@ -528,11 +541,21 @@ class LoanController
             $offset  = ($page - 1) * $perPage;
 
             $allowedStatuses = [
-                'pending','validated','system_rejected',
-                'manager_approved','manager_rejected',
-                'hr_approved','hr_rejected','compliance_review',
-                'finance_approved','finance_rejected',
-                'approved','active','rejected','repaid','appealed',
+                'pending',
+                'validated',
+                'system_rejected',
+                'manager_approved',
+                'manager_rejected',
+                'hr_approved',
+                'hr_rejected',
+                'compliance_review',
+                'finance_approved',
+                'finance_rejected',
+                'approved',
+                'active',
+                'rejected',
+                'repaid',
+                'appealed',
             ];
 
             $status     = $_GET['status']      ?? null;
@@ -566,13 +589,26 @@ class LoanController
                 foreach ($ids as $i => $empId) $params[":team_$i"] = $empId;
             }
 
-            if ($status)     { $where[] = "l.status = :f_status";    $params[':f_status']  = $status; }
-            if ($configId)   { $where[] = "l.config_id = :f_cfg";    $params[':f_cfg']     = (int) $configId; }
-            if ($employeeId && !isset($filters['employee_id'])) {
-                $where[] = "l.employee_id = :f_emp"; $params[':f_emp'] = (int) $employeeId;
+            if ($status) {
+                $where[] = "l.status = :f_status";
+                $params[':f_status']  = $status;
             }
-            if ($month) { $where[] = "MONTH(l.start_date) = :f_month"; $params[':f_month'] = (int) $month; }
-            if ($year)  { $where[] = "YEAR(l.start_date) = :f_year";   $params[':f_year']  = (int) $year;  }
+            if ($configId) {
+                $where[] = "l.config_id = :f_cfg";
+                $params[':f_cfg']     = (int) $configId;
+            }
+            if ($employeeId && !isset($filters['employee_id'])) {
+                $where[] = "l.employee_id = :f_emp";
+                $params[':f_emp'] = (int) $employeeId;
+            }
+            if ($month) {
+                $where[] = "MONTH(l.start_date) = :f_month";
+                $params[':f_month'] = (int) $month;
+            }
+            if ($year) {
+                $where[] = "YEAR(l.start_date) = :f_year";
+                $params[':f_year']  = (int) $year;
+            }
 
             $whereClause = "WHERE " . implode(" AND ", $where);
 
@@ -682,7 +718,7 @@ class LoanController
                 return responseJson(success: false, data: null, message: "Authentication required", code: 401);
             }
 
-            $isPrivileged = in_array($currentUser['user_type'], ['admin', 'hr_manager', 'hr_officer', 'payroll_manager']);
+            $isPrivileged = \App\Services\PermissionService::scopeOf($currentUser['id'], 'loans.create') === 'all';
             if (!$isPrivileged && (int) $currentEmployee['id'] !== $empId) {
                 return responseJson(success: false, data: null, message: "You can only apply for a loan for yourself", code: 403);
             }
@@ -742,7 +778,9 @@ class LoanController
                 $loanId = DB::lastInsertId();
 
                 $this->notify(
-                    $empId, $orgId, $loanId,
+                    $empId,
+                    $orgId,
+                    $loanId,
                     'Loan Application Rejected',
                     "Your loan application was automatically rejected: {$validation['reason']}",
                     'system_rejected'
@@ -763,8 +801,8 @@ class LoanController
                 'config_id'        => (int) $data['config_id'],
                 'amount'           => $amount,
                 'interest_rate'    => $interestRate !== null ? (float) $interestRate : null,
-                'monthly_deduction'=> $monthlyDeduction !== null ? (float) $monthlyDeduction : null,
-                'balance_remaining'=> $amount,
+                'monthly_deduction' => $monthlyDeduction !== null ? (float) $monthlyDeduction : null,
+                'balance_remaining' => $amount,
                 'total_repaid'     => 0.00,
                 'start_date'       => $data['start_date'],
                 'end_date'         => $data['end_date'] ?? null,
@@ -777,7 +815,9 @@ class LoanController
             // Notify employee their application is in review
             $employeeName = trim(($employee->firstname ?? '') . ' ' . ($employee->middlename ? $employee->middlename . ' ' : '') . ($employee->surname ?? ''));
             $this->notify(
-                $empId, $orgId, $loanId,
+                $empId,
+                $orgId,
+                $loanId,
                 'Loan Application Submitted',
                 "Your loan application has been submitted successfully and is now awaiting your line manager's review.",
                 'validated'
@@ -863,8 +903,14 @@ class LoanController
                 ]);
                 $loanId = DB::lastInsertId();
 
-                $this->notify((int) $data['employee_id'], $orgId, $loanId, 'Loan Application Rejected',
-                    "Your loan application was rejected: {$validation['reason']}", 'system_rejected');
+                $this->notify(
+                    (int) $data['employee_id'],
+                    $orgId,
+                    $loanId,
+                    'Loan Application Rejected',
+                    "Your loan application was rejected: {$validation['reason']}",
+                    'system_rejected'
+                );
 
                 return responseJson(
                     success: false,
@@ -880,8 +926,8 @@ class LoanController
                 'config_id'        => (int) $data['config_id'],
                 'amount'           => $amount,
                 'interest_rate'    => $interestRate !== null ? (float) $interestRate : null,
-                'monthly_deduction'=> $monthlyDeduction !== null ? (float) $monthlyDeduction : null,
-                'balance_remaining'=> $amount,
+                'monthly_deduction' => $monthlyDeduction !== null ? (float) $monthlyDeduction : null,
+                'balance_remaining' => $amount,
                 'total_repaid'     => 0.00,
                 'start_date'       => $data['start_date'],
                 'end_date'         => $data['end_date'] ?? null,
@@ -890,8 +936,14 @@ class LoanController
             ]);
             $loanId = DB::lastInsertId();
 
-            $this->notify((int) $data['employee_id'], $orgId, $loanId, 'Loan Application Created',
-                "A loan application has been created on your behalf and is awaiting line manager review.", 'validated');
+            $this->notify(
+                (int) $data['employee_id'],
+                $orgId,
+                $loanId,
+                'Loan Application Created',
+                "A loan application has been created on your behalf and is awaiting line manager review.",
+                'validated'
+            );
 
             $this->notifyLineManager((int) $data['employee_id'], $orgId, $loanId, $amount);
 
@@ -936,7 +988,8 @@ class LoanController
 
             if ($loan->status !== 'validated') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Loan is not awaiting manager approval.",
                     code: 400
                 );
@@ -953,7 +1006,9 @@ class LoanController
             $employeeName = $this->getEmployeeName((int) $loan->employee_id);
 
             $this->notify(
-                (int) $loan->employee_id, $orgId, $loanId,
+                (int) $loan->employee_id,
+                $orgId,
+                $loanId,
                 'Loan Approved by Your Manager',
                 "Your loan application has been approved by your line manager and has been forwarded to HR for review.",
                 'manager_approved'
@@ -999,7 +1054,8 @@ class LoanController
 
             if ($loan->status !== 'validated') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Loan is not awaiting manager approval (current status: {$loan->status})",
                     code: 400
                 );
@@ -1015,10 +1071,12 @@ class LoanController
             ], 'id', $loanId);
 
             $this->notify(
-                (int) $loan->employee_id, $orgId, $loanId,
+                (int) $loan->employee_id,
+                $orgId,
+                $loanId,
                 'Loan Rejected by Your Manager',
                 "Your loan application has been rejected by your line manager. Reason: {$rejectionReason}. "
-                . "You may submit an appeal if you disagree with this decision.",
+                    . "You may submit an appeal if you disagree with this decision.",
                 'manager_rejected'
             );
 
@@ -1055,7 +1113,8 @@ class LoanController
 
             if ($loan->status !== 'manager_approved') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Loan is not awaiting HR approval (current status: {$loan->status})",
                     code: 400
                 );
@@ -1077,7 +1136,9 @@ class LoanController
 
             if ($needsFinance) {
                 $this->notify(
-                    (int) $loan->employee_id, $orgId, $loanId,
+                    (int) $loan->employee_id,
+                    $orgId,
+                    $loanId,
                     'Loan Approved by HR',
                     "Your loan application has been approved by HR and is now awaiting Finance Manager approval.",
                     'hr_approved'
@@ -1093,7 +1154,9 @@ class LoanController
 
             // Skip Finance — loan is now fully approved, awaiting disbursement
             $this->notify(
-                (int) $loan->employee_id, $orgId, $loanId,
+                (int) $loan->employee_id,
+                $orgId,
+                $loanId,
                 'Loan Fully Approved',
                 "Your loan application has been fully approved and is now being set up for disbursement.",
                 'finance_approved'
@@ -1135,7 +1198,8 @@ class LoanController
 
             if ($loan->status !== 'manager_approved') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Loan is not awaiting HR approval (current status: {$loan->status})",
                     code: 400
                 );
@@ -1151,10 +1215,12 @@ class LoanController
             ], 'id', $loanId);
 
             $this->notify(
-                (int) $loan->employee_id, $orgId, $loanId,
+                (int) $loan->employee_id,
+                $orgId,
+                $loanId,
                 'Loan Rejected by HR',
                 "Your loan application has been rejected by HR. Reason: {$rejectionReason}. "
-                . "You may submit an appeal if you disagree with this decision.",
+                    . "You may submit an appeal if you disagree with this decision.",
                 'hr_rejected'
             );
 
@@ -1191,7 +1257,8 @@ class LoanController
 
             if ($loan->status !== 'manager_approved') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Loan is not awaiting HR approval (current status: {$loan->status})",
                     code: 400
                 );
@@ -1205,10 +1272,12 @@ class LoanController
             ], 'id', $loanId);
 
             $this->notify(
-                (int) $loan->employee_id, $orgId, $loanId,
+                (int) $loan->employee_id,
+                $orgId,
+                $loanId,
                 'Loan Under Compliance Review',
                 "Your loan application has been flagged for a compliance review. "
-                . "You will be notified once the review is complete." . ($reason ? " Note: {$reason}" : ""),
+                    . "You will be notified once the review is complete." . ($reason ? " Note: {$reason}" : ""),
                 'compliance_review'
             );
 
@@ -1245,7 +1314,8 @@ class LoanController
 
             if ($loan->status !== 'hr_approved') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Loan is not awaiting Finance approval (current status: {$loan->status})",
                     code: 400
                 );
@@ -1260,10 +1330,12 @@ class LoanController
             ], 'id', $loanId);
 
             $this->notify(
-                (int) $loan->employee_id, $orgId, $loanId,
+                (int) $loan->employee_id,
+                $orgId,
+                $loanId,
                 'Loan Fully Approved',
                 "Your loan application has been approved by Finance and is now being set up for disbursement. "
-                . "You will receive further details shortly.",
+                    . "You will receive further details shortly.",
                 'finance_approved'
             );
 
@@ -1303,7 +1375,8 @@ class LoanController
 
             if ($loan->status !== 'hr_approved') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Loan is not awaiting Finance approval (current status: {$loan->status})",
                     code: 400
                 );
@@ -1319,10 +1392,12 @@ class LoanController
             ], 'id', $loanId);
 
             $this->notify(
-                (int) $loan->employee_id, $orgId, $loanId,
+                (int) $loan->employee_id,
+                $orgId,
+                $loanId,
                 'Loan Rejected by Finance',
                 "Your loan application has been rejected by the Finance Manager. Reason: {$rejectionReason}. "
-                . "You may submit an appeal if you disagree.",
+                    . "You may submit an appeal if you disagree.",
                 'finance_rejected'
             );
 
@@ -1359,9 +1434,10 @@ class LoanController
             }
 
             // Only disburse-capable roles
-            if (!in_array($currentUser['user_type'], self::DISBURSE_ROLES)) {
+            if (!\App\Services\PermissionService::can($currentUser['id'], 'loans.disburse')) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Only Finance Managers and Payroll Managers can set up disbursement",
                     code: 403
                 );
@@ -1374,7 +1450,8 @@ class LoanController
             // Loan must be in 'finance_approved' status — all approvals complete
             if ($loan->status !== 'finance_approved') {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Loan is not ready for disbursement. All approval steps must be completed first (current status: {$loan->status})",
                     code: 400
                 );
@@ -1383,7 +1460,8 @@ class LoanController
             // Monthly deduction is required before disbursement
             if (empty($data['monthly_deduction']) && empty($loan->monthly_deduction)) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "monthly_deduction is required to set up the repayment schedule",
                     code: 400
                 );
@@ -1412,11 +1490,13 @@ class LoanController
             $monthlyDeduction = $data['monthly_deduction'] ?? $loan->monthly_deduction;
 
             $this->notify(
-                (int) $loan->employee_id, $orgId, $loanId,
+                (int) $loan->employee_id,
+                $orgId,
+                $loanId,
                 'Loan Disbursement Confirmed',
                 "Your loan of " . number_format((float) $loan->amount, 2)
-                . " has been confirmed for disbursement on " . ($disbursementDate ?? date('Y-m-d')) . ". "
-                . "Monthly repayment deduction: " . number_format((float) $monthlyDeduction, 2) . ".",
+                    . " has been confirmed for disbursement on " . ($disbursementDate ?? date('Y-m-d')) . ". "
+                    . "Monthly repayment deduction: " . number_format((float) $monthlyDeduction, 2) . ".",
                 'approved'
             );
 
@@ -1469,7 +1549,8 @@ class LoanController
             $appealableStatuses = ['manager_rejected', 'hr_rejected', 'finance_rejected', 'system_rejected', 'rejected'];
             if (!in_array($loan->status, $appealableStatuses)) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Appeals can only be submitted for rejected loans (current status: {$loan->status})",
                     code: 400
                 );
@@ -1509,7 +1590,9 @@ class LoanController
             $hrs = DB::raw(
                 "SELECT u.email, CONCAT(e.firstname,' ',e.surname) AS full_name
                  FROM users u LEFT JOIN employees e ON e.user_id = u.id
-                 WHERE u.organization_id = :org_id AND u.user_type = 'hr_manager'",
+                 INNER JOIN model_has_roles mhr ON mhr.user_id = u.id
+                 INNER JOIN roles r ON r.id = mhr.role_id AND r.organization_id = u.organization_id
+                 WHERE u.organization_id = :org_id AND r.slug = 'hr_manager'",
                 [':org_id' => $orgId]
             );
             foreach ($hrs as $hr) {
@@ -1594,7 +1677,9 @@ class LoanController
                 ], 'id', $loanId);
 
                 $this->notify(
-                    (int) $loan->employee_id, $orgId, $loanId,
+                    (int) $loan->employee_id,
+                    $orgId,
+                    $loanId,
                     'Loan Appeal Overturned — Re-evaluation in Progress',
                     "Your loan appeal has been reviewed. HR has overturned the previous rejection and your application will be re-evaluated.",
                     'manager_approved'
@@ -1608,7 +1693,9 @@ class LoanController
                 DB::table('loans')->update(['status' => 'rejected'], 'id', $loanId);
 
                 $this->notify(
-                    (int) $loan->employee_id, $orgId, $loanId,
+                    (int) $loan->employee_id,
+                    $orgId,
+                    $loanId,
                     'Loan Appeal Decision — Rejection Upheld',
                     "Your loan appeal has been reviewed. Unfortunately, the rejection decision has been upheld. Reason: {$reason}.",
                     'rejected'
@@ -1646,9 +1733,10 @@ class LoanController
                 return responseJson(success: false, data: null, message: "Authentication required", code: 401);
             }
 
-            if ($currentUser['user_type'] !== 'admin') {
+            if (!\App\Services\PermissionService::canAll($currentUser['id'], ['loans.approve_manager', 'loans.approve_hr', 'loans.approve_finance'])) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Direct approval is restricted to admins. Use the step-by-step workflow.",
                     code: 403
                 );
@@ -1661,7 +1749,8 @@ class LoanController
             $terminalStatuses = ['approved', 'active', 'repaid', 'rejected'];
             if (in_array($loan->status, $terminalStatuses)) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Loan cannot be approved in its current state: {$loan->status}",
                     code: 400
                 );
@@ -1676,7 +1765,9 @@ class LoanController
             ], 'id', $loanId);
 
             $this->notify(
-                (int) $loan->employee_id, $orgId, $loanId,
+                (int) $loan->employee_id,
+                $orgId,
+                $loanId,
                 'Loan Approved',
                 "Your loan application has been approved.",
                 'approved'
@@ -1709,9 +1800,10 @@ class LoanController
                 return responseJson(success: false, data: null, message: "Authentication required", code: 401);
             }
 
-            if ($currentUser['user_type'] !== 'admin') {
+            if (!\App\Services\PermissionService::canAll($currentUser['id'], ['loans.approve_manager', 'loans.approve_hr', 'loans.approve_finance'])) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Direct rejection is restricted to admins. Use the step-by-step workflow.",
                     code: 403
                 );
@@ -1724,7 +1816,8 @@ class LoanController
             $terminalStatuses = ['approved', 'active', 'repaid', 'rejected'];
             if (in_array($loan->status, $terminalStatuses)) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Loan cannot be rejected in its current state: {$loan->status}",
                     code: 400
                 );
@@ -1740,7 +1833,9 @@ class LoanController
             ], 'id', $loanId);
 
             $this->notify(
-                (int) $loan->employee_id, $orgId, $loanId,
+                (int) $loan->employee_id,
+                $orgId,
+                $loanId,
                 'Loan Rejected',
                 "Your loan application has been rejected" . ($rejectionReason ? ": {$rejectionReason}" : "."),
                 'rejected'
@@ -1776,7 +1871,8 @@ class LoanController
 
             if (!in_array($loan->status, ['pending', 'validated'])) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Only pending or validated loans can be updated (current status: {$loan->status})",
                     code: 400
                 );
@@ -1792,8 +1888,10 @@ class LoanController
                 $config = $this->getLoanConfig((int) $loan->config_id, $orgId);
                 if ($config && $config->fixed_amount && $amount > (float) $config->fixed_amount) {
                     return responseJson(
-                        success: false, data: null,
-                        message: "Amount exceeds the maximum allowed: {$config->fixed_amount}", code: 400
+                        success: false,
+                        data: null,
+                        message: "Amount exceeds the maximum allowed: {$config->fixed_amount}",
+                        code: 400
                     );
                 }
                 $updateData['amount']            = $amount;
@@ -1832,7 +1930,8 @@ class LoanController
 
             if (!in_array($loan->status, ['pending', 'validated'])) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Only pending or validated loans can be deleted",
                     code: 400
                 );
@@ -1869,7 +1968,8 @@ class LoanController
 
             if (!in_array($loan->status, ['approved', 'active'])) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Repayments can only be recorded against approved/active loans (current status: {$loan->status})",
                     code: 400
                 );
@@ -1884,7 +1984,8 @@ class LoanController
 
             if ($repaymentAmount > $currentBalance) {
                 return responseJson(
-                    success: false, data: null,
+                    success: false,
+                    data: null,
                     message: "Repayment amount ({$repaymentAmount}) exceeds the remaining balance ({$currentBalance})",
                     code: 400,
                     errors: ['balance_remaining' => $currentBalance]
@@ -1925,7 +2026,9 @@ class LoanController
 
             if ($isFullyPaid) {
                 $this->notify(
-                    (int) $loan->employee_id, $orgId, $loanId,
+                    (int) $loan->employee_id,
+                    $orgId,
+                    $loanId,
                     'Loan Fully Repaid',
                     "Congratulations! Your loan has been fully repaid.",
                     'repaid'
@@ -1966,9 +2069,7 @@ class LoanController
             $currentUser     = \App\Middleware\AuthMiddleware::getCurrentUser();
             $currentEmployee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
 
-            $isPrivileged = in_array($currentUser['user_type'], [
-                'admin', 'hr_manager', 'finance_manager', 'payroll_manager', 'payroll_officer', 'auditor',
-            ]);
+            $isPrivileged = \App\Services\PermissionService::scopeOf($currentUser['id'], 'loans.view') === 'all';
 
             if (!$isPrivileged && (int) $currentEmployee['id'] !== (int) $loan->employee_id) {
                 return responseJson(success: false, data: null, message: "You can only view repayments for your own loans", code: 403);
@@ -2030,10 +2131,11 @@ class LoanController
             $currentUser     = \App\Middleware\AuthMiddleware::getCurrentUser();
             $currentEmployee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
 
-            $canSeeAll = in_array($currentUser['user_type'], ['admin', 'hr_manager', 'finance_manager', 'payroll_manager', 'auditor']);
+            $loanViewScope = \App\Services\PermissionService::scopeOf($currentUser['id'], 'loans.view');
+            $canSeeAll = $loanViewScope === 'all';
 
             if (!$canSeeAll) {
-                if (in_array($currentUser['user_type'], ['hr_officer', 'payroll_officer', 'department_manager'])) {
+                if ($loanViewScope === 'team') {
                     $teamIds = $this->getTeamEmployeeIds((int) $currentEmployee['id']);
                     if (!in_array($empId, $teamIds)) {
                         return responseJson(success: false, data: null, message: "Access denied to this employee's loans", code: 403);
@@ -2058,15 +2160,21 @@ class LoanController
             $whereClause = "WHERE " . implode(" AND ", $where);
 
             $total = DB::raw(
-                "SELECT COUNT(*) as total FROM loans l {$this->loanJoins()} $whereClause", $params
+                "SELECT COUNT(*) as total FROM loans l {$this->loanJoins()} $whereClause",
+                $params
             )[0]->total ?? 0;
 
             if ((int) $total === 0) {
-                return responseJson(success: true, data: [], message: "No loans found", code: 200,
+                return responseJson(
+                    success: true,
+                    data: [],
+                    message: "No loans found",
+                    code: 200,
                     metadata: ['pagination' => ['total' => 0], 'employee_info' => [
                         'employee_id'   => $empId,
                         'employee_name' => trim(($employeeCheck[0]->firstname ?? '') . ' ' . ($employeeCheck[0]->surname ?? '')),
-                    ]]);
+                    ]]
+                );
             }
 
             $summary = DB::raw(

@@ -66,23 +66,20 @@ class ReimbursementController
             $where = ["reimbursements.organization_id = :org_id"];
             $params = [':org_id' => $org_id];
 
-            // Role-based scoping (mirrors NotificationController's pattern)
-            switch ($user['user_type']) {
-                case 'admin':
-                case 'hr_manager':
-                case 'payroll_manager':
-                case 'payroll_officer':
-                case 'finance_manager':
-                case 'accountant':
+$reimbursementScope = \App\Services\PermissionService::scopeOf($user['id'], 'reimbursements.view');
+
+            switch ($reimbursementScope) {
+                case 'all':
+                case 'department':
                     // Full visibility within the organization
                     break;
 
-                case 'department_manager':
+                case 'team':
                     $where[] = "employees.reports_to = :manager_id";
                     $params[':manager_id'] = $employee['id'];
                     break;
 
-                case 'employee':
+                case 'own':
                     $where[] = "reimbursements.employee_id = :employee_id";
                     $params[':employee_id'] = $employee['id'];
                     break;
@@ -739,12 +736,12 @@ class ReimbursementController
 
             $user = AuthMiddleware::getCurrentUser();
             $employee = AuthMiddleware::getCurrentEmployee();
-            $roleMap = ['manager' => self::MANAGER_STAGE_ROLES, 'hr' => self::HR_STAGE_ROLES, 'finance' => self::FINANCE_STAGE_ROLES];
-            if (!in_array($user['user_type'], $roleMap[$stage])) {
+$permissionMap = ['manager' => 'reimbursements.approve_manager', 'hr' => 'reimbursements.approve_hr', 'finance' => 'reimbursements.approve_finance'];
+            if (!\App\Services\PermissionService::can($user['id'], $permissionMap[$stage])) {
                 return responseJson(success: false, message: "You are not authorized to reject at the $stage stage", code: 403);
             }
             if (
-                $stage === 'manager' && $user['user_type'] === 'department_manager'
+                $stage === 'manager' && \App\Services\PermissionService::scopeOf($user['id'], 'reimbursements.approve_manager') === 'team'
                 && (int) $employee['id'] !== (int) $reimbursement->reports_to_manager_id
             ) {
                 return responseJson(success: false, message: "You can only reject claims for your direct reports", code: 403);
@@ -1467,18 +1464,20 @@ class ReimbursementController
     }
 
     /** Notify every employee whose linked user account has one of the given roles. */
-    private function notifyRole($orgId, array $userTypes, $type, $title, $message, $metadata = null)
+private function notifyRole($orgId, array $roleSlugs, $type, $title, $message, $metadata = null)
     {
         $named = [':org_id' => $orgId];
         $namedPlaceholders = [];
-        foreach ($userTypes as $i => $type_) {
+        foreach ($roleSlugs as $i => $slug) {
             $key = ":role_$i";
-            $named[$key] = $type_;
+            $named[$key] = $slug;
             $namedPlaceholders[] = $key;
         }
-        $namedSql = "SELECT employees.id FROM employees
+        $namedSql = "SELECT DISTINCT employees.id FROM employees
                      INNER JOIN users ON employees.user_id = users.id
-                     WHERE employees.organization_id = :org_id AND users.user_type IN (" . implode(',', $namedPlaceholders) . ")";
+                     INNER JOIN model_has_roles ON model_has_roles.user_id = users.id
+                     INNER JOIN roles ON roles.id = model_has_roles.role_id AND roles.organization_id = users.organization_id
+                     WHERE employees.organization_id = :org_id AND roles.slug IN (" . implode(',', $namedPlaceholders) . ")";
         $recipients = DB::raw($namedSql, $named);
         foreach ($recipients as $r) {
             $this->notifyEmployee($orgId, $r->id, $type, $title, $message, $metadata);

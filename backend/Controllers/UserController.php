@@ -4,8 +4,10 @@ namespace App\Controllers;
 
 use App\Services\DB;
 
-class UserController {
-    public function index() {
+class UserController
+{
+    public function index()
+    {
         $orgId = $_GET['organization_id'] ?? null;
         $query = DB::table('users');
         if ($orgId) {
@@ -14,7 +16,7 @@ class UserController {
             $users = $query->selectAll();
         }
         // Remove password_hash from all users
-        $users = array_map(function($u) {
+        $users = array_map(function ($u) {
             unset($u->password_hash);
             return $u;
         }, $users);
@@ -24,7 +26,8 @@ class UserController {
             metadata: ['dev_mode' => true]
         );
     }
-    public function create() {
+    public function create()
+    {
         $data = validate([
             'organization_id' => 'required,numeric',
             'username' => 'required,string',
@@ -41,9 +44,13 @@ class UserController {
         if ($existingEmail) {
             return responseJson(null, "Email already exists", 400);
         }
-        $allowedTypes = ['employee', 'admin', 'super_admin'];
-        if (isset($data['user_type']) && !in_array($data['user_type'], $allowedTypes)) {
-            return responseJson(null, "Invalid user_type", 400);
+        $roleSlug = $data['user_type'] ?? 'employee';
+        $roleRow = DB::raw(
+            "SELECT id FROM roles WHERE organization_id = :org_id AND slug = :slug",
+            [':org_id' => $data['organization_id'], ':slug' => $roleSlug]
+        );
+        if (empty($roleRow)) {
+            return responseJson(null, "Invalid user_type '{$roleSlug}' for this organization", 400);
         }
         // $passwordHash = password_hash($data['password'], PASSWORD_DEFAULT);
         $passwordHash = $data['password'];
@@ -52,8 +59,12 @@ class UserController {
             'username' => $data['username'],
             'password_hash' => $passwordHash,
             'email' => $data['email'],
-            'user_type' => $data['user_type'] ?? 'employee',
+            'user_type' => $roleSlug,
         ]);
+        DB::raw(
+            "INSERT IGNORE INTO model_has_roles (user_id, role_id, created_at) VALUES (:user_id, :role_id, NOW())",
+            [':user_id' => $inserted->id, ':role_id' => $roleRow[0]->id]
+        );
         // Return user without password_hash
         unset($inserted->password_hash);
         return responseJson(
@@ -62,7 +73,8 @@ class UserController {
             metadata: ['dev_mode' => true]
         );
     }
-    public function show($id) {
+    public function show($id)
+    {
         $user = DB::table('users')->selectAllWhereID($id);
         if (!$user || count($user) === 0) {
             return responseJson(null, "User not found", 404);
@@ -75,7 +87,8 @@ class UserController {
             metadata: ['dev_mode' => true]
         );
     }
-    public function update($id) {
+    public function update($id)
+    {
         $data = validate([
             'organization_id' => 'numeric',
             'username' => 'string',
@@ -96,10 +109,6 @@ class UserController {
                 return responseJson(null, "Email already exists", 400);
             }
         }
-        $allowedTypes = ['employee', 'admin', 'super_admin'];
-        if (isset($updateData['user_type']) && !in_array($updateData['user_type'], $allowedTypes)) {
-            return responseJson(null, "Invalid user_type", 400);
-        }
         if (isset($updateData['password'])) {
             $updateData['password_hash'] = password_hash($updateData['password'], PASSWORD_DEFAULT);
             unset($updateData['password']);
@@ -107,12 +116,33 @@ class UserController {
         if (empty($updateData)) {
             return responseJson(null, "No data provided for update", 400);
         }
-        $user = DB::table('users')->selectAllWhereID($id);
-        if (!$user || count($user) === 0) {
+        $targetUser = DB::table('users')->selectAllWhereID($id);
+        if (!$targetUser || count($targetUser) === 0) {
             return responseJson(null, "User not found", 404);
         }
+
+        $newRole = null;
+        if (isset($updateData['user_type'])) {
+            $roleOrgId = $updateData['organization_id'] ?? $targetUser[0]->organization_id;
+            $roleRow = DB::raw(
+                "SELECT id FROM roles WHERE organization_id = :org_id AND slug = :slug",
+                [':org_id' => $roleOrgId, ':slug' => $updateData['user_type']]
+            );
+            if (empty($roleRow)) {
+                return responseJson(null, "Invalid user_type '{$updateData['user_type']}' for this organization", 400);
+            }
+            $newRole = $roleRow[0];
+        }
+
         $updated = DB::table('users')->update($updateData, 'id', $id);
         if ($updated) {
+            if ($newRole) {
+                DB::raw("DELETE FROM model_has_roles WHERE user_id = :user_id", [':user_id' => $id]);
+                DB::raw(
+                    "INSERT INTO model_has_roles (user_id, role_id, created_at) VALUES (:user_id, :role_id, NOW())",
+                    [':user_id' => $id, ':role_id' => $newRole->id]
+                );
+            }
             $user = DB::table('users')->selectAllWhereID($id);
             $user = $user[0];
             unset($user->password_hash);
@@ -126,6 +156,7 @@ class UserController {
         }
     }
     public function delete($id) {
+    {
         $user = DB::table('users')->selectAllWhereID($id);
         if (!$user || count($user) === 0) {
             return responseJson(null, "User not found", 404);
@@ -141,4 +172,4 @@ class UserController {
             return responseJson(null, "Failed to delete user", 500);
         }
     }
-} 
+}

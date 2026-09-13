@@ -239,7 +239,8 @@ class RegistrationController
                 $tokenData = JWTService::generateToken([
                     'user_id'             => $userId,
                     'organization_id'     => $orgId,
-                    'user_type'           => 'admin',
+                    'user_type'           => \App\Services\PermissionService::primaryRoleSlug($userId) ?? 'admin',
+                    'roles'               => \App\Services\PermissionService::roleSlugsFor($userId),
                     'setup_completed'     => 0,
                     'subscription_status' => 'trialing',
                 ]);

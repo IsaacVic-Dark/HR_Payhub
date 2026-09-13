@@ -168,4 +168,36 @@ class PermissionService
 
         return $best;
     }
+
+    /**
+     * All role slugs currently assigned to this user (via model_has_roles),
+     * in assignment order. Most users have exactly one; this is what should
+     * back any "what is this user's role" display or JWT claim now —
+     * never users.user_type, which is legacy/unused for authorization.
+     */
+    public static function roleSlugsFor(int $userId): array
+    {
+        $rows = DB::raw(
+            "SELECT r.slug
+             FROM model_has_roles mhr
+             INNER JOIN roles r ON r.id = mhr.role_id
+             WHERE mhr.user_id = :user_id
+             ORDER BY mhr.id ASC",
+            [':user_id' => $userId]
+        );
+
+        return array_column($rows, 'slug');
+    }
+
+    /**
+     * The single "primary" role slug for display/JWT purposes — the first
+     * role assigned. Returns null if the user has no role assigned yet
+     * (shouldn't normally happen once RoleSeederService/role-sync is wired
+     * in everywhere, but callers should have a fallback for it regardless).
+     */
+    public static function primaryRoleSlug(int $userId): ?string
+    {
+        $slugs = self::roleSlugsFor($userId);
+        return $slugs[0] ?? null;
+    }
 }

@@ -77,7 +77,7 @@ class OrganizationController
                 code: 200,
                 metadata: [
                     'statistics' => $stats,
-                    'user_role' => $user['user_type'],
+                    'user_role' => \App\Services\PermissionService::primaryRoleSlug($user['id']) ?? $user['user_type'],
                     'can_edit' => \App\Services\PermissionService::can($user['id'], 'organizations.update')
                 ]
             );
@@ -780,7 +780,8 @@ class OrganizationController
             $newPayload = [
                 'user_id'             => $userId,
                 'email'               => $authUser['email'],
-                'user_type'           => $authUser['user_type'],
+                'user_type'           => \App\Services\PermissionService::primaryRoleSlug($userId) ?? $authUser['user_type'],
+                'roles'               => \App\Services\PermissionService::roleSlugsFor($userId),
                 'organization_id'     => $orgId,
                 'setup_completed'     => 1,
                 'subscription_status' => $authUser['subscription_status'] ?? 'trialing',

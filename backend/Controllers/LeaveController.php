@@ -1412,7 +1412,7 @@ private function canUserApproveLeave(int $currentEmployeeId, object $leaveData, 
             $leaveData = $leave['data'];
 
             // Employees can only cancel their own leaves
-            $isAdmin = in_array($currentUser['user_type'], ['admin', 'hr_manager', 'hr_officer']);
+            $isAdmin = \App\Services\PermissionService::scopeOf($currentUser['id'], 'leaves.cancel') === 'all';
             if (!$isAdmin && $leaveData->employee_id != $currentEmployee['id']) {
                 return responseJson(
                     success: false,
@@ -1819,10 +1819,8 @@ private function canUserApproveLeave(int $currentEmployeeId, object $leaveData, 
             $currentUser     = \App\Middleware\AuthMiddleware::getCurrentUser();
             $currentEmployee = \App\Middleware\AuthMiddleware::getCurrentEmployee();
 
-            $canAccessAll = in_array(
-                $currentUser['user_type'],
-                ['admin', 'hr_manager', 'hr_officer', 'department_manager', 'manager']
-            );
+$leaveViewScope = \App\Services\PermissionService::scopeOf($currentUser['id'], 'leaves.view');
+            $canAccessAll = in_array($leaveViewScope, ['team', 'all'], true);
 
             if (!$canAccessAll && $currentEmployee['id'] != $empId) {
                 return responseJson(

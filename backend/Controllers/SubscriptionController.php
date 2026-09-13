@@ -231,7 +231,8 @@ class SubscriptionController
                             $tokenData = JWTService::generateToken([
                                 'user_id'             => (int) $user['id'],
                                 'organization_id'     => (int) $user['organization_id'],
-                                'user_type'           => $user['user_type'],
+                                'user_type'           => \App\Services\PermissionService::primaryRoleSlug((int) $user['id']) ?? $user['user_type'],
+                                'roles'               => \App\Services\PermissionService::roleSlugsFor((int) $user['id']),
                                 'setup_completed'     => 0,
                                 'subscription_status' => 'active',
                             ]);
