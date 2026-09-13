@@ -237,6 +237,12 @@ const data = {
       roles: ["super_admin", "admin", "hr_manager"],
     },
     {
+      title: "Roles & Permissions",
+      url: "/roles-permissions",
+      icon: IconBuilding,
+      roles: ["admin"],
+    },
+    {
       title: "My Leaves",
       url: "/myleave",
       icon: IconCalendar,
