@@ -994,18 +994,6 @@ CREATE TABLE IF NOT EXISTS `users` (
   `username` varchar(50) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
   `email` varchar(255) NOT NULL,
-  `user_type` enum(
-    'super_admin',
-    'admin',
-    'hr_manager',
-    'hr_officer',
-    'payroll_manager',
-    'payroll_officer',
-    'finance_manager',
-    'auditor',
-    'department_manager',
-    'employee'
-  ) DEFAULT 'employee',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -1730,6 +1718,102 @@ CREATE TABLE IF NOT EXISTS `employee_allowance_payrun_lines` (
     FOREIGN KEY (`detached_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- =============================================================================
+-- Roles & Permissions schema (Spatie-style, adapted for this project)
+-- =============================================================================
+
+CREATE TABLE IF NOT EXISTS `permissions` (
+  `id`          INT           NOT NULL AUTO_INCREMENT,
+  `name`        VARCHAR(150)  NOT NULL COMMENT 'module.action, e.g. leaves.approve',
+  `module`      VARCHAR(100)  NOT NULL COMMENT 'e.g. leaves — for grouping in the admin UI',
+  `description` VARCHAR(255)  DEFAULT NULL,
+  `created_at`  TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`  TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_permission_name` (`name`),
+  KEY `idx_permissions_module` (`module`)
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE IF NOT EXISTS `roles` (
+  `id`              INT           NOT NULL AUTO_INCREMENT,
+  `organization_id` INT           NOT NULL,
+  `name`            VARCHAR(100)  NOT NULL COMMENT 'Display name, e.g. "Payroll Manager" or "Regional Lead"',
+  `slug`            VARCHAR(100)  NOT NULL COMMENT 'Machine name, e.g. payroll_manager',
+  `description`     VARCHAR(255)  DEFAULT NULL,
+  `is_system`       TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '1 = one of the 10 seeded default roles (cannot be deleted, can still be re-permissioned)',
+  `created_at`      TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`      TIMESTAMP     NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_role_slug_per_org` (`organization_id`, `slug`),
+  KEY `idx_roles_org` (`organization_id`),
+
+  CONSTRAINT `roles_org_fk`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE IF NOT EXISTS `role_has_permissions` (
+  `id`             INT   NOT NULL AUTO_INCREMENT,
+  `role_id`        INT   NOT NULL,
+  `permission_id`  INT   NOT NULL,
+  `scope`          ENUM('own','team','department','all') NOT NULL DEFAULT 'all'
+                   COMMENT 'own = self only, team = direct reports (reports_to), department = same department_id, all = whole organization',
+  `created_at`     TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_role_permission` (`role_id`, `permission_id`),
+  KEY `idx_rhp_permission` (`permission_id`),
+
+  CONSTRAINT `rhp_role_fk`
+    FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `rhp_permission_fk`
+    FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE IF NOT EXISTS `model_has_roles` (
+  `id`         INT  NOT NULL AUTO_INCREMENT,
+  `user_id`    INT  NOT NULL,
+  `role_id`    INT  NOT NULL,
+  `created_at` TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_user_role` (`user_id`, `role_id`),
+  KEY `idx_mhr_role` (`role_id`),
+
+  CONSTRAINT `mhr_user_fk`
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `mhr_role_fk`
+    FOREIGN KEY (`role_id`) REFERENCES `roles` (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+
+CREATE TABLE IF NOT EXISTS `model_has_permissions` (
+  `id`             INT  NOT NULL AUTO_INCREMENT,
+  `user_id`        INT  NOT NULL,
+  `permission_id`  INT  NOT NULL,
+  `type`           ENUM('grant','revoke') NOT NULL DEFAULT 'grant',
+  `scope`          ENUM('own','team','department','all') DEFAULT NULL
+                   COMMENT 'Only meaningful when type=grant; ignored for revoke',
+  `created_at`     TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `unique_user_permission` (`user_id`, `permission_id`),
+  KEY `idx_mhp_permission` (`permission_id`),
+
+  CONSTRAINT `mhp_user_fk`
+    FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `mhp_permission_fk`
+    FOREIGN KEY (`permission_id`) REFERENCES `permissions` (`id`) ON DELETE CASCADE
+
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- -----------------------------------------------------------------------------
 -- 4. payrun_details — new allowance columns, mirroring the existing
@@ -2147,3 +2231,127 @@ VALUES
   '2026-03-01', NULL,
   'Requested for upcoming field assignment.',
   'PENDING_APPROVAL', @created_by, NOW(), NULL, NULL);
+  
+  -- =============================================================================
+-- Permissions catalog seed — ONE TIME, platform-wide (not per-org).
+-- Derived by auditing every middleware file you shared and every distinct
+-- action they gate. Run this once against the database.
+-- =============================================================================
+
+INSERT INTO `permissions` (`name`, `module`, `description`) VALUES
+-- organizations
+('organizations.view',              'organizations', 'View a single organization''s details'),
+('organizations.update',            'organizations', 'Update organization details'),
+('organizations.delete',            'organizations', 'Delete an organization'),
+('organizations.manage_platform',   'organizations', 'List/manage all organizations across the SaaS (platform-level)'),
+('organizations.access_tenant_data','organizations', 'Bypass the platform-account tenant-data restriction (not granted by default to anyone — see AuthMiddleware)'),
+
+-- organization_configs
+('organization_configs.view',    'organization_configs', 'View org configs (tax, deduction, loan, benefit, etc.)'),
+('organization_configs.manage',  'organization_configs', 'Create/update/delete org configs'),
+('organization_configs.approve', 'organization_configs', 'Approve/reject pending org configs'),
+
+-- departments
+('departments.view',           'departments', 'View departments'),
+('departments.manage',         'departments', 'Create/update/deactivate departments, assign head'),
+('departments.view_employees', 'departments', 'List employees within a department'),
+
+-- job_titles
+('job_titles.view',   'job_titles', 'View job titles'),
+('job_titles.manage', 'job_titles', 'Create/update/delete job titles'),
+
+-- employees
+('employees.view',                   'employees', 'View employee records'),
+('employees.create',                 'employees', 'Create employee records'),
+('employees.update',                 'employees', 'Update general employee fields'),
+('employees.update_payroll_fields',  'employees', 'Update payroll-specific fields (base_salary, allowances, deductions, bank_account_number, tax_id)'),
+('employees.update_financial_fields','employees', 'Update financial fields (base_salary, bank_account_number, tax_id)'),
+('employees.delete',                 'employees', 'Delete/deactivate employee records'),
+
+-- leaves
+('leaves.view',            'leaves', 'View leave requests'),
+('leaves.create',          'leaves', 'Submit a leave request'),
+('leaves.update',          'leaves', 'Update a leave request'),
+('leaves.delete',          'leaves', 'Delete a leave request'),
+('leaves.approve',         'leaves', 'Approve or reject a leave request'),
+('leaves.cancel',          'leaves', 'Cancel a leave request'),
+('leaves.assign_reliever', 'leaves', 'Assign a reliever to a leave request'),
+('leave_types.view',       'leaves', 'View leave type configuration'),
+('leave_types.manage',     'leaves', 'Create/update/delete leave types'),
+
+-- attendance
+('attendance.view',            'attendance', 'View attendance/punches/holidays'),
+('attendance.write',           'attendance', 'Edit attendance records / manual punches / corrections'),
+('attendance.check_in_out',    'attendance', 'Self check-in / check-out'),
+('attendance.approve_overtime','attendance', 'Approve/reject overtime and holiday-work requests'),
+
+-- attendance_deductions
+('attendance_deductions.view',    'attendance_deductions', 'View attendance-related deductions'),
+('attendance_deductions.waive',   'attendance_deductions', 'Waive an attendance deduction'),
+('attendance_deductions.reverse', 'attendance_deductions', 'Reverse an attendance deduction'),
+
+-- allowance_types
+('allowance_types.view',   'allowance_types', 'View the org allowance-type catalogue'),
+('allowance_types.manage', 'allowance_types', 'Create/update/delete allowance types'),
+
+-- employee_allowances
+('employee_allowances.view',          'employee_allowances', 'View employee allowance grants'),
+('employee_allowances.create',        'employee_allowances', 'Create an employee allowance grant'),
+('employee_allowances.update',        'employee_allowances', 'Update an employee allowance grant (while draft)'),
+('employee_allowances.submit',        'employee_allowances', 'Submit an allowance for approval'),
+('employee_allowances.approve',       'employee_allowances', 'Approve or reject an employee allowance'),
+('employee_allowances.suspend',       'employee_allowances', 'Suspend an employee allowance'),
+('employee_allowances.cancel',        'employee_allowances', 'Cancel an employee allowance'),
+('employee_allowances.attach_payrun', 'employee_allowances', 'Attach/detach an allowance to a payrun'),
+
+-- payruns
+('payruns.view',     'payruns', 'View payruns'),
+('payruns.process',  'payruns', 'Move a payrun from draft to reviewed'),
+('payruns.finalize', 'payruns', 'Finalize a reviewed payrun'),
+
+-- payrun_details
+('payrun_details.view', 'payrun_details', 'View per-employee payrun line items'),
+
+-- payslips
+('payslips.view',            'payslips', 'View payslips'),
+('payslips.generate',        'payslips', 'Generate payslips'),
+('payslips.send',            'payslips', 'Send a single payslip'),
+('payslips.bulk_send',       'payslips', 'Bulk-send payslips'),
+('payslips.update_pdf_path', 'payslips', 'Update a payslip''s stored PDF path'),
+('payslips.statistics',      'payslips', 'View org-wide payslip statistics'),
+
+-- p9
+('p9.view',           'p9', 'View P9 tax certificates'),
+('p9.generate',       'p9', 'Generate P9 forms'),
+('p9.finalize',       'p9', 'Finalize a P9 form'),
+('p9.bulk_finalize',  'p9', 'Bulk-finalize P9 forms'),
+('p9.mark_submitted', 'p9', 'Mark a P9 as submitted to KRA'),
+
+-- reimbursements
+('reimbursements.view',            'reimbursements', 'View reimbursement claims'),
+('reimbursements.create',          'reimbursements', 'Submit a reimbursement claim'),
+('reimbursements.update',          'reimbursements', 'Update a reimbursement claim'),
+('reimbursements.cancel',          'reimbursements', 'Cancel own reimbursement claim'),
+('reimbursements.approve_manager', 'reimbursements', 'Approve/reject a reimbursement at the line-manager stage'),
+('reimbursements.approve_hr',      'reimbursements', 'Approve/reject a reimbursement at the HR stage'),
+('reimbursements.approve_finance', 'reimbursements', 'Approve/reject a reimbursement at the finance stage'),
+('reimbursements.dispute',         'reimbursements', 'Dispute a reimbursement decision'),
+('reimbursements.resolve_dispute', 'reimbursements', 'Resolve a disputed reimbursement'),
+('reimbursements.process_payment', 'reimbursements', 'Process/confirm/fail a reimbursement payment, attach to payrun'),
+('reimbursements.reverse_payment', 'reimbursements', 'Reverse an already-paid reimbursement'),
+
+-- loans
+('loans.view',             'loans', 'View loan applications'),
+('loans.create',           'loans', 'Submit a loan application'),
+('loans.approve_manager',  'loans', 'Line-manager approval step'),
+('loans.approve_hr',       'loans', 'HR approval step'),
+('loans.approve_finance',  'loans', 'Finance approval step (above threshold)'),
+('loans.disburse',         'loans', 'Disburse an approved loan'),
+('loans.record_repayment', 'loans', 'Record a manual loan repayment'),
+('loans.review_appeal',    'loans', 'Review a loan appeal (uphold/overturn)'),
+
+-- roles & permissions management (this module itself)
+('roles.view',       'roles', 'View roles and their permissions'),
+('roles.manage',     'roles', 'Create/update/delete roles, change role permissions'),
+('permissions.view', 'roles', 'View the permission catalogue'),
+('users.manage_roles', 'roles', 'Assign/remove roles and direct permission grants for a user');
