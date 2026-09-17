@@ -246,8 +246,8 @@ export default function PayrunDocsPage() {
           </h1>
           <p className="text-gray-500 text-[15px] leading-7 mb-10">
             A payrun is the process PayKe runs to turn a pay period into paid, compliant
-            salaries. This page walks through what happens end to end — from opening a
-            payrun to statutory filing — so your finance and HR teams know exactly what to
+            salaries. This page walks through what happens end to end  from opening a
+            payrun to statutory filing  so your finance and HR teams know exactly what to
             expect at each step.
           </p>
 
@@ -285,7 +285,7 @@ export default function PayrunDocsPage() {
             <Callout kind="note" title="State changes are one-directional">
               A payrun cannot move backwards once approved. To correct an error after
               approval, PayKe creates a linked adjustment payrun rather than reopening the
-              original — this keeps every disbursed run auditable.
+              original  this keeps every disbursed run auditable.
             </Callout>
           </Section>
 
@@ -293,7 +293,7 @@ export default function PayrunDocsPage() {
             <p>Opening a new payrun requires three inputs:</p>
             <ul className="list-disc pl-5 space-y-1.5">
               <li>A <strong>pay period</strong> (e.g. monthly, bi-weekly) with start and end dates.</li>
-              <li>The <strong>employee scope</strong> — all active employees by default, or a filtered subset (e.g. one branch or department).</li>
+              <li>The <strong>employee scope</strong>  all active employees by default, or a filtered subset (e.g. one branch or department).</li>
               <li>A <strong>pay date</strong>, which drives disbursement scheduling and payslip timestamps.</li>
             </ul>
             <p>
@@ -306,7 +306,7 @@ export default function PayrunDocsPage() {
           <Section id="reviewing" title="Reviewing & editing">
             <p>
               Once calculated, the payrun opens for review. Every line item is editable at
-              this stage — gross pay, allowances, deductions, and one-off adjustments — and
+              this stage  gross pay, allowances, deductions, and one-off adjustments  and
               PayKe recalculates statutory deductions automatically whenever a figure
               changes.
             </p>
@@ -328,7 +328,7 @@ export default function PayrunDocsPage() {
             <Callout kind="warning" title="Approval is final">
               Approving a payrun locks every line item. If an error is found after
               approval but before disbursement, an approver can cancel the run, which
-              returns it to draft — disbursed runs cannot be cancelled and require an
+              returns it to draft  disbursed runs cannot be cancelled and require an
               adjustment payrun instead.
             </Callout>
           </Section>
@@ -396,8 +396,8 @@ export default function PayrunDocsPage() {
 
           <Section id="filing" title="Filing & remittance">
             <p>
-              After disbursement, PayKe generates the statutory returns for the period —
-              PAYE (P10), NSSF, and SHIF schedules — in the format required for submission.
+              After disbursement, PayKe generates the statutory returns for the period 
+              PAYE (P10), NSSF, and SHIF schedules  in the format required for submission.
               Remittance itself is a finance-team action: PayKe prepares the figures and
               filing files, and marks the period as filed once you confirm submission.
             </p>
@@ -418,7 +418,7 @@ export default function PayrunDocsPage() {
                   A payment failed during disbursement
                 </p>
                 <p>
-                  Open the payrun's disbursement tab — failed items are listed with a
+                  Open the payrun's disbursement tab  failed items are listed with a
                   reason (e.g. invalid account, insufficient float). Fix the underlying
                   detail on the employee's profile, then retry just that line item.
                 </p>
@@ -442,7 +442,7 @@ export default function PayrunDocsPage() {
                 <p className="font-semibold text-gray-900 text-sm mb-1">
                   Can I run payroll for a subset of employees?
                 </p>
-                <p>Yes — scope a payrun to a branch, department, or a manual selection when creating it.</p>
+                <p>Yes  scope a payrun to a branch, department, or a manual selection when creating it.</p>
               </div>
               <div>
                 <p className="font-semibold text-gray-900 text-sm mb-1">
