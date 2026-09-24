@@ -88,6 +88,58 @@ class PermissionService
     }
 
     /**
+     * All permissions the user currently holds, each with its effective
+     * scope ('own'|'team'|'department'|'all'), role-derived + direct grants,
+     * minus direct revokes. This is what /auth/me should return — the
+     * frontend needs the scope (not just the name) to decide things like
+     * "show Approve for my team" vs "show Approve for everyone".
+     *
+     * @return array<int, array{name: string, scope: string}>
+     */
+    public static function effectivePermissionsWithScope(int $userId): array
+    {
+        $rows = DB::raw(
+            "SELECT p.name, rhp.scope
+         FROM permissions p
+         INNER JOIN role_has_permissions rhp ON rhp.permission_id = p.id
+         INNER JOIN model_has_roles mhr ON mhr.role_id = rhp.role_id
+         WHERE mhr.user_id = :user_id",
+            [':user_id' => $userId]
+        );
+
+        // Collapse to best (broadest) scope per permission name — same rule as scopeFromRoles().
+        $byName = [];
+        foreach ($rows as $row) {
+            $rank = self::SCOPE_RANK[$row->scope] ?? 0;
+            if (!isset($byName[$row->name]) || $rank > self::SCOPE_RANK[$byName[$row->name]]) {
+                $byName[$row->name] = $row->scope;
+            }
+        }
+
+        $overrides = DB::raw(
+            "SELECT p.name, mhp.type, mhp.scope
+         FROM permissions p
+         INNER JOIN model_has_permissions mhp ON mhp.permission_id = p.id
+         WHERE mhp.user_id = :user_id",
+            [':user_id' => $userId]
+        );
+
+        foreach ($overrides as $o) {
+            if ($o->type === 'grant') {
+                $byName[$o->name] = $o->scope;
+            } elseif ($o->type === 'revoke') {
+                unset($byName[$o->name]);
+            }
+        }
+
+        $result = [];
+        foreach ($byName as $name => $scope) {
+            $result[] = ['name' => $name, 'scope' => $scope];
+        }
+        return $result;
+    }
+
+    /**
      * All permission names the user currently holds (role-derived + direct
      * grants, minus direct revokes). Useful for a /auth/me payload so the
      * frontend can show/hide UI without guessing.
