@@ -1,52 +1,67 @@
+import { useMemo } from 'react';
 import { useAuth } from '@/lib/AuthContext';
-import { canAccessPage, getAccessiblePages, hasAnyRole } from '@/utils/permissions';
+
+export type PermissionScope = 'own' | 'team' | 'department' | 'all';
 
 export function usePermissions() {
   const { user } = useAuth();
+  const userRole = user?.role ?? null; // was user?.user_type
 
-  const userRole = user?.user_type || null;
+  const permMap = useMemo(() => {
+    const map = new Map<string, PermissionScope>();
+    (user?.permissions ?? []).forEach(p => map.set(p.name, p.scope));
+    return map;
+  }, [user?.permissions]);
+
+  const hasPermission = (name: string) => permMap.has(name);
+  const hasAnyPermission = (names: string[]) => names.some(hasPermission);
+  const hasAllPermissions = (names: string[]) => names.every(hasPermission);
+  const scopeOf = (name: string): PermissionScope | null => permMap.get(name) ?? null;
 
   const permissions = {
-    // Core permission checker
-    canAccessPage: (path: string) => canAccessPage(userRole, path),
-    getAccessiblePages: () => getAccessiblePages(userRole),
-
-    // Super Admin can do everything
-    // canViewEverything: userRole === 'super_admin',
+    hasPermission,
+    hasAnyPermission,
+    hasAllPermissions,
+    scopeOf,
 
     // Organization Management
-    canManageOrganization: userRole === 'admin',
-    canViewOrganization: userRole === 'admin',
+    canManageOrganization: hasPermission('organizations.update'),
+    canViewOrganization: hasPermission('organizations.view'),
 
     // Employee Management
-    canManageEmployees: ['super_admin', 'admin', 'hr_manager'].includes(userRole || ''),
-    canViewEmployees: ['super_admin', 'admin', 'hr_manager', 'payroll_manager', 'department_manager'].includes(userRole || ''),
+    canManageEmployees: hasAnyPermission(['employees.create', 'employees.update', 'employees.delete']),
+    canViewEmployees: hasPermission('employees.view'),
 
     // Payroll Management
-    canManagePayroll: ['super_admin', 'admin', 'payroll_manager'].includes(userRole || ''),
-    canViewPayroll: ['super_admin', 'admin', 'payroll_manager', 'payroll_officer', 'finance_manager'].includes(userRole || ''),
-    canProcessPayments: ['super_admin', 'finance_manager'].includes(userRole || ''),
+    canManagePayroll: hasAnyPermission(['payruns.process', 'payruns.finalize']),
+    canViewPayroll: hasPermission('payruns.view'),
+    canProcessPayments: hasAnyPermission(['reimbursements.process_payment', 'loans.disburse']),
 
     // Leaves Management
-    canManageLeaves: ['super_admin', 'admin', 'hr_manager', 'department_manager'].includes(userRole || ''),
-    canViewLeaves: ['super_admin', 'admin', 'hr_manager', 'department_manager', 'employee'].includes(userRole || ''),
+    canManageLeaves: hasAnyPermission(['leaves.update', 'leaves.approve', 'leave_types.manage']),
+    canViewLeaves: hasPermission('leaves.view'),
 
-    // after canProcessPayments
-    canReviewPayrun: ['admin', 'payroll_manager', 'payroll_officer', 'hr_manager'].includes(userRole || ''),
-    canFinalizePayrun: ['admin', 'payroll_manager', 'finance_manager'].includes(userRole || ''),
-    // Matches PayrunController::reopenPayrun's allowed roles
-    canReopenPayrun: ['admin', 'payroll_manager', 'payroll_officer', 'hr_manager'].includes(userRole || ''),
-    // Matches OvertimeApprovalController approve/reject/resolve routes' allowed roles
-    canManageOvertimeApprovals: ['admin', 'hr_manager', 'payroll_manager'].includes(userRole || ''),
+    // Payrun lifecycle
+    canReviewPayrun: hasPermission('payruns.process'),
+    canFinalizePayrun: hasPermission('payruns.finalize'),
+    // TODO: no backend permission exists for "reopen" yet — using payruns.process
+    // as a placeholder. Confirm with backend whether this should be its own
+    // permission (e.g. payruns.reopen) before shipping.
+    canReopenPayrun: hasPermission('payruns.process'),
+    canManageOvertimeApprovals: hasPermission('attendance.approve_overtime'),
 
     // Settings & Configuration
-    canManageSettings: ['super_admin', 'admin'].includes(userRole || ''),
+    canManageSettings: hasPermission('organization_configs.manage'),
 
     // Reports & Analytics
+    // TODO: no reports.* / audit_logs.* permissions exist in the catalog yet.
+    // Falling back to role-slug checks until those are added server-side.
     canViewReports: ['super_admin', 'admin', 'hr_manager', 'payroll_manager', 'finance_manager', 'auditor'].includes(userRole || ''),
     canViewAuditLogs: ['super_admin', 'admin', 'auditor'].includes(userRole || ''),
 
-    // User specific
+    // Role/identity checks (not permissions — these ask "which role slug am I")
+    // TODO: 'super_admin' isn't a seeded role in role_has_permissions/roles —
+    // confirm how platform-level accounts are represented before relying on this.
     isSuperAdmin: userRole === 'super_admin',
     isAdmin: userRole === 'admin',
     isHRManager: userRole === 'hr_manager',
@@ -57,18 +72,13 @@ export function usePermissions() {
     isAuditor: userRole === 'auditor',
     isEmployee: userRole === 'employee',
 
-    // Current user info
     currentUser: user,
-    userRole: userRole,
+    userRole,
 
-    // Add hasRole function for compatibility
     hasRole: (requiredRoles: string | string[]) => {
       if (!userRole) return false;
-      if (Array.isArray(requiredRoles)) {
-        return requiredRoles.includes(userRole);
-      }
-      return userRole === requiredRoles;
-    }
+      return Array.isArray(requiredRoles) ? requiredRoles.includes(userRole) : userRole === requiredRoles;
+    },
   };
 
   return permissions;
