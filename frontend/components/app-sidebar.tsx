@@ -88,8 +88,8 @@ function SetupStepsSubNav({ pathname }: { pathname: string }) {
                     isCurrent
                       ? "bg-white text-[#be2ed6]"
                       : isPast
-                      ? "bg-[#be2ed6] text-white"
-                      : "border border-muted-foreground/40 text-muted-foreground",
+                        ? "bg-[#be2ed6] text-white"
+                        : "border border-muted-foreground/40 text-muted-foreground",
                   ].join(" ")}
                 >
                   {isPast ? "✓" : idx + 1}
@@ -137,44 +137,34 @@ const data = {
       title: "Payrun",
       url: "/payrun",
       icon: IconChartBar,
-      roles: ["super_admin", "admin", "payroll_manager", "payroll_officer"],
+      permission: "payruns.view",
       hasDropdown: true,
       items: [
-        {
-          title: "History",
-          url: "/payrun/history",
-          roles: ["super_admin", "admin", "payroll_manager"],
-        },
-        {
-          title: "Process",
-          url: "/payrun/process",
-          roles: ["super_admin", "admin", "payroll_manager"],
-        },
-        {
-          title: "Employees Payrun",
-          url: "/payrun/employees",
-          roles: ["super_admin", "admin", "payroll_manager"],
-        },
+        { title: "History", url: "/payrun/history", permission: "payruns.view" },
+        { title: "Process", url: "/payrun/process", permissions: ["payruns.process", "payruns.finalize"] },
+        { title: "Employees Payrun", url: "/payrun/employees", permission: "payrun_details.view" },
       ],
     },
+    { title: "Payslips", url: "/payslips", icon: IconReceipt, permission: "payslips.view" },
+    { title: "P9 Forms", url: "/p9-forms", icon: IconFileText, permission: "p9.view" },
+  ],
+
+  employeeSection: [
+    { title: "Employees", url: "/employees", icon: IconUsers, permission: "employees.view" },
+    { title: "Leaves", url: "/leaves", icon: IconCalendar, permission: "leaves.view" },
+    { title: "Departments", url: "/employees/departments", icon: IconBuilding, permission: "departments.view" },
+    { title: "Roles & Permissions", url: "/roles-permissions", icon: IconBuilding, permission: "roles.view" },
+    { title: "My Leaves", url: "/myleave", icon: IconCalendar, permission: "leaves.create" },
+    { title: "My Reimbursement", url: "/myreimbursements", icon: IconCalendar, permission: "reimbursements.create" },
+    { title: "Attendance", url: "/attendance", icon: IconClipboardList, permission: "attendance.view" },
     {
-      title: "Payslips",
-      url: "/payslips",
-      icon: IconReceipt,
-      roles: ["super_admin", "admin", "payroll_manager"],
+      title: "My Team", url: "/team", icon: IconUsersGroup, permission: "leaves.approve", hasDropdown: true, items: [
+        { title: "Team Members", url: "/team/members", permission: "departments.view_employees" },
+        { title: "Leave Approvals", url: "/team/leave-approvals", permission: "leaves.approve" },
+        { title: "Overtime Approvals", url: "/team/overtime-approvals", permission: "attendance.approve_overtime" },
+        { title: "Expense Claims", url: "/team/expense-claims", permission: "reimbursements.approve" },
+      ]
     },
-    {
-      title: "P9 Forms",
-      url: "/p9-forms",
-      icon: IconFileText,
-      roles: ["super_admin", "admin", "payroll_manager"],
-    },
-    // {
-    //   title: "Tax Reports",
-    //   url: "/tax-reports",
-    //   icon: IconFileText,
-    //   roles: ["super_admin", "admin", "payroll_manager"],
-    // },
   ],
 
   // Finances section
@@ -445,38 +435,38 @@ const data = {
   ],
 
   // Platform Administration — cross-tenant, super_admin only
-platformSection: [
-  {
-    title: "Organizations",
-    url: "/platform/organizations",
-    icon: IconBuilding,
-    roles: ["super_admin"],
-  },
-  {
-    title: "Subscriptions",
-    url: "/platform/subscriptions",
-    icon: IconCash, // imported already, currently unused
-    roles: ["super_admin"],
-  },
-  {
-    title: "Subscription Plans",
-    url: "/subscription-plans",
-    icon: IconReportMoney,
-    roles: ["super_admin"],
-  },
-  {
-    title: "Countries",
-    url: "/platform/countries",
-    icon: IconWorld,
-    roles: ["super_admin"],
-  },
-  {
-    title: "Public Holidays",
-    url: "/public-holidays",
-    icon: IconCalendar,
-    roles: ["super_admin"],
-  },
-],
+  platformSection: [
+    {
+      title: "Organizations",
+      url: "/platform/organizations",
+      icon: IconBuilding,
+      roles: ["super_admin"],
+    },
+    {
+      title: "Subscriptions",
+      url: "/platform/subscriptions",
+      icon: IconCash, // imported already, currently unused
+      roles: ["super_admin"],
+    },
+    {
+      title: "Subscription Plans",
+      url: "/subscription-plans",
+      icon: IconReportMoney,
+      roles: ["super_admin"],
+    },
+    {
+      title: "Countries",
+      url: "/platform/countries",
+      icon: IconWorld,
+      roles: ["super_admin"],
+    },
+    {
+      title: "Public Holidays",
+      url: "/public-holidays",
+      icon: IconCalendar,
+      roles: ["super_admin"],
+    },
+  ],
 
   // Others section
   othersSection: [
@@ -501,7 +491,28 @@ platformSection: [
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
-  const { canAccessPage, userRole, currentUser } = usePermissions();
+  const { hasPermission, hasAnyPermission, currentUser } = usePermissions();
+
+  // Filter function to check if user has access based on the item's declared permission(s)
+  const hasAccess = (item: any) => {
+    if (!currentUser) return false;
+    if (!item.permission && !item.permissions) return true; // no gate = visible to any authenticated user (e.g. Dashboard)
+    if (item.permission) return hasPermission(item.permission);
+    return hasAnyPermission(item.permissions);
+  };
+
+  const filterNavItems = (items: any[]) => {
+    return items.filter((item) => {
+      if (!hasAccess(item)) return false;
+      if (item.hasDropdown && item.items) {
+        item.items = item.items.filter((subItem: any) => hasAccess(subItem));
+        return item.items.length > 0;
+      }
+      return true;
+    });
+  };
+
+
   const [openDropdowns, setOpenDropdowns] = React.useState<string[]>(() => {
     const allSections = [
       ...data.payrollSection,
@@ -561,47 +572,10 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     );
   };
 
-  // Filter function to check if user has access based on roles OR page path
-  const hasAccess = (item: any) => {
-    if (!userRole) return false;
-
-    // Check if user role is in the allowed roles list
-    if (item.roles && item.roles.includes(userRole)) {
-      return true;
-    }
-
-    // Additionally check if user can access the page path
-    return canAccessPage(item.url);
-  };
-
-  // Filter navigation items based on user role and permissions
-  const filterNavItems = (items: any[]) => {
-    return items.filter((item) => {
-      if (!hasAccess(item)) return false;
-
-      // If item has dropdown, filter sub-items
-      if (item.hasDropdown && item.items) {
-        item.items = item.items.filter((subItem: any) => {
-          // Check sub-item roles
-          if (subItem.roles && userRole) {
-            return subItem.roles.includes(userRole);
-          }
-          // Check sub-item path access
-          return canAccessPage(subItem.url);
-        });
-
-        // Only show parent if it has accessible sub-items
-        return item.items.length > 0;
-      }
-
-      return true;
-    });
-  };
-
   const setupComplete = user?.setup_completed === 1;
 
   const coreNavItems = setupComplete
-    ? filterNavItems(data.coreNav) 
+    ? filterNavItems(data.coreNav)
     : [
       {
         title: 'Complete Setup',
@@ -827,18 +801,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         )}
 
         {/* Platform Administration */}
-{filteredPlatformSection.length > 0 && (
-  <SidebarGroup>
-    <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
-      Platform Administration
-    </SidebarGroupLabel>
-    <SidebarGroupContent>
-      <SidebarMenu>
-        {filteredPlatformSection.map((item) => renderNavItem(item))}
-      </SidebarMenu>
-    </SidebarGroupContent>
-  </SidebarGroup>
-)}
+        {filteredPlatformSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Platform Administration
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredPlatformSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {/* Others */}
         {filteredOthersSection.length > 0 && (
