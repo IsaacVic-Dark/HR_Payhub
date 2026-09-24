@@ -23,15 +23,22 @@ interface Employee {
   status: 'active' | 'inactive';
 }
 
+interface PermissionGrant {
+  name: string;
+  scope: 'own' | 'team' | 'department' | 'all';
+}
+
 interface User {
   id: number;
   email: string;
   username: string;
-  user_type: string;
+  user_type: string; // kept for display/back-compat only — do not gate UI on this anymore
   organization_id: number;
   employee: Employee | null;
   setup_completed: number;
   subscription_status: string;
+  role: string | null;            // NEW — primary role slug from PermissionService::primaryRoleSlug()
+  permissions: PermissionGrant[]; // NEW — from PermissionService::effectivePermissionsWithScope()
 }
 
 interface AuthContextType {
