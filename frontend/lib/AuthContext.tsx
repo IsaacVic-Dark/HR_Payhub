@@ -88,7 +88,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 useEffect(() => {
   // Don't attempt auth check on public pages — prevents refresh loop on /login
   // and prevents authed-only calls firing (and redirecting) on public marketing/docs pages.
-  const publicPaths = ['/login', '/register', '/', '/landing', '/docs', '/unauthorized'];
+  const publicPaths = ['/login', '/register', '/', '/landing', '/docs', '/unauthorized', '/calculator'];
   const isPublicPath = publicPaths.some(
     (path) => window.location.pathname === path || window.location.pathname.startsWith(path + '/')
   );
