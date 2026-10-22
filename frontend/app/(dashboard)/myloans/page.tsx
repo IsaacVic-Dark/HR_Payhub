@@ -21,6 +21,8 @@ export default function MyLoansPage() {
   const orgId = user?.organization_id ?? 0;
   const employeeId = user?.employee?.id ?? 0;
 
+  console.log("This is user data:", user);
+
   const [loans, setLoans] = useState<LoanType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
