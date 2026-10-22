@@ -382,9 +382,13 @@ class AdvanceService
                     'errors'     => $result['errors'],
                     'max_allowed' => $result['max_allowed'],
                 ]);
-                self::notify($orgId, (int) $adv['employee_id'], 'Salary advance request rejected by policy',
+                self::notify(
+                    $orgId,
+                    (int) $adv['employee_id'],
+                    'Salary advance request rejected by policy',
                     "Advance {$adv['advance_number']} did not meet the policy: " . implode('; ', $result['errors']),
-                    ['advance_id' => $id]);
+                    ['advance_id' => $id]
+                );
 
                 return ['advance' => $this->find($orgId, $id), 'validation' => $result];
             }
@@ -411,9 +415,12 @@ class AdvanceService
                 'amount_requested' => $adv['amount_requested'],
             ]);
 
-            $this->notifyAdmins($orgId, 'New salary advance request',
+            $this->notifyAdmins(
+                $orgId,
+                'New salary advance request',
                 "Advance {$adv['advance_number']} for KES " . Money::display(Money::toCents($adv['amount_requested'])) . ' is awaiting approval.',
-                ['advance_id' => $id]);
+                ['advance_id' => $id]
+            );
 
             return ['advance' => $this->find($orgId, $id), 'validation' => $result];
         });
@@ -443,8 +450,11 @@ class AdvanceService
                 $approved = Money::toCents($input['amount_approved']);
             }
             if ($approved <= 0 || $approved > $requested) {
-                throw new AdvanceException('amount_approved must be greater than zero and not exceed the amount requested', 422,
-                    ['amount_approved' => 'Must be > 0 and <= KES ' . Money::display($requested)]);
+                throw new AdvanceException(
+                    'amount_approved must be greater than zero and not exceed the amount requested',
+                    422,
+                    ['amount_approved' => 'Must be > 0 and <= KES ' . Money::display($requested)]
+                );
             }
 
             DB::table('advances')->update([
@@ -464,9 +474,13 @@ class AdvanceService
                 'amount_approved'   => $new['amount_approved'],
                 'balance_remaining' => $new['balance_remaining'],
             ]);
-            self::notify($orgId, (int) $adv['employee_id'], 'Salary advance approved',
+            self::notify(
+                $orgId,
+                (int) $adv['employee_id'],
+                'Salary advance approved',
                 "Your advance {$adv['advance_number']} of KES " . Money::display($approved) . ' has been approved.',
-                ['advance_id' => $id]);
+                ['advance_id' => $id]
+            );
             return $new;
         });
     }
@@ -494,11 +508,18 @@ class AdvanceService
             ], 'id', $id);
 
             $this->audit($adv, $userId, 'advance_rejected', [
-                'old_status' => 'pending', 'new_status' => 'rejected', 'reason' => $reason,
+                'old_status' => 'pending',
+                'new_status' => 'rejected',
+                'reason' => $reason,
                 'amount_requested' => $adv['amount_requested'],
             ]);
-            self::notify($orgId, (int) $adv['employee_id'], 'Salary advance rejected',
-                "Your advance {$adv['advance_number']} was rejected: {$reason}", ['advance_id' => $id]);
+            self::notify(
+                $orgId,
+                (int) $adv['employee_id'],
+                'Salary advance rejected',
+                "Your advance {$adv['advance_number']} was rejected: {$reason}",
+                ['advance_id' => $id]
+            );
             return $this->find($orgId, $id);
         });
     }
@@ -516,7 +537,9 @@ class AdvanceService
             $adv = $this->lockOrFail($orgId, $id);
             if (!in_array($adv['status'], $allowed, true)) {
                 throw new AdvanceException(
-                    "An advance in status '{$adv['status']}' cannot be cancelled by you (allowed: " . implode(', ', $allowed) . ')', 409);
+                    "An advance in status '{$adv['status']}' cannot be cancelled by you (allowed: " . implode(', ', $allowed) . ')',
+                    409
+                );
             }
             $reason = $this->nz(trim((string) ($input['reason'] ?? '')));
 
@@ -530,10 +553,17 @@ class AdvanceService
             DB::raw("UPDATE advance_payrun_lines SET status = 'detached' WHERE advance_id = :id AND status = 'attached'", [':id' => $id]);
 
             $this->audit($adv, $userId, 'advance_cancelled', [
-                'old_status' => $adv['status'], 'new_status' => 'cancelled', 'reason' => $reason,
+                'old_status' => $adv['status'],
+                'new_status' => 'cancelled',
+                'reason' => $reason,
             ]);
-            self::notify($orgId, (int) $adv['employee_id'], 'Salary advance cancelled',
-                "Advance {$adv['advance_number']} has been cancelled.", ['advance_id' => $id]);
+            self::notify(
+                $orgId,
+                (int) $adv['employee_id'],
+                'Salary advance cancelled',
+                "Advance {$adv['advance_number']} has been cancelled.",
+                ['advance_id' => $id]
+            );
             return $this->find($orgId, $id);
         });
     }
@@ -561,14 +591,20 @@ class AdvanceService
             $policy = $this->policy->getPolicy($orgId, (int) $adv['policy_config_id']);
             $enabled = $policy['settings']['disbursement_methods'] ?? [];
             if (!empty($enabled) && !in_array($method, $enabled, true)) {
-                throw new AdvanceException("Disbursement method '{$method}' is not enabled by policy", 422,
-                    ['disbursement_method' => 'Allowed: ' . implode(', ', $enabled)]);
+                throw new AdvanceException(
+                    "Disbursement method '{$method}' is not enabled by policy",
+                    422,
+                    ['disbursement_method' => 'Allowed: ' . implode(', ', $enabled)]
+                );
             }
 
             $reference = $this->nz(trim((string) ($input['disbursement_reference'] ?? '')));
             if (in_array($method, ['bank_transfer', 'mpesa', 'cheque'], true) && $reference === null) {
-                throw new AdvanceException('disbursement_reference is required for this method', 422,
-                    ['disbursement_reference' => 'Required for ' . $method]);
+                throw new AdvanceException(
+                    'disbursement_reference is required for this method',
+                    422,
+                    ['disbursement_reference' => 'Required for ' . $method]
+                );
             }
 
             $date = $this->nz($input['disbursement_date'] ?? null) ?? date('Y-m-d');
@@ -581,8 +617,11 @@ class AdvanceService
             $amount   = isset($input['amount_disbursed']) && $input['amount_disbursed'] !== ''
                 ? Money::toCents($input['amount_disbursed']) : $approved;
             if ($amount !== $approved) {
-                throw new AdvanceException('amount_disbursed must equal the approved amount (KES ' . Money::display($approved) . ')', 422,
-                    ['amount_disbursed' => 'Must equal amount_approved']);
+                throw new AdvanceException(
+                    'amount_disbursed must equal the approved amount (KES ' . Money::display($approved) . ')',
+                    422,
+                    ['amount_disbursed' => 'Must equal amount_approved']
+                );
             }
 
             DB::table('advances')->update([
@@ -607,9 +646,13 @@ class AdvanceService
                 'disbursement_date'      => $date,
                 'balance_remaining'      => $new['balance_remaining'],
             ]);
-            self::notify($orgId, (int) $adv['employee_id'], 'Salary advance disbursed',
+            self::notify(
+                $orgId,
+                (int) $adv['employee_id'],
+                'Salary advance disbursed',
                 "Advance {$adv['advance_number']} of KES " . Money::display($amount) . " has been disbursed via {$method}.",
-                ['advance_id' => $id]);
+                ['advance_id' => $id]
+            );
             return $new;
         });
     }
@@ -636,14 +679,19 @@ class AdvanceService
             }
 
             // 12/19. Payrun: same org, draft (never reviewed/finalized).
-            $pr = DB::raw('SELECT id, organization_id, status, payrun_name FROM payruns WHERE id = :id AND organization_id = :org AND deleted_at IS NULL',
-                [':id' => $payrunId, ':org' => $orgId]);
+            $pr = DB::raw(
+                'SELECT id, organization_id, status, payrun_name FROM payruns WHERE id = :id AND organization_id = :org AND deleted_at IS NULL',
+                [':id' => $payrunId, ':org' => $orgId]
+            );
             if (empty($pr)) {
                 throw new AdvanceException('Payrun not found in this organization', 422, ['payrun_id' => 'Payrun not found in this organization']);
             }
             if ($pr[0]->status !== 'draft') {
-                throw new AdvanceException("A payrun in status '{$pr[0]->status}' cannot accept advance recovery; it must be draft", 422,
-                    ['payrun_id' => 'Payrun must be in draft status']);
+                throw new AdvanceException(
+                    "A payrun in status '{$pr[0]->status}' cannot accept advance recovery; it must be draft",
+                    422,
+                    ['payrun_id' => 'Payrun must be in draft status']
+                );
             }
 
             $meta = self::meta($adv);
@@ -653,8 +701,13 @@ class AdvanceService
             }
 
             $existingLines = DB::raw(
-                "SELECT * FROM advance_payrun_lines WHERE advance_id = :id FOR UPDATE", [':id' => $id]);
-            $sameLine = null; $attachedSum = 0; $attachedCount = 0; $processedCount = 0;
+                "SELECT * FROM advance_payrun_lines WHERE advance_id = :id FOR UPDATE",
+                [':id' => $id]
+            );
+            $sameLine = null;
+            $attachedSum = 0;
+            $attachedCount = 0;
+            $processedCount = 0;
             foreach ($existingLines as $l) {
                 if ((int) $l->payrun_id === $payrunId) $sameLine = $l;
                 if ($l->status === 'attached' && (int) $l->payrun_id !== $payrunId) {
@@ -667,22 +720,31 @@ class AdvanceService
                 throw new AdvanceException('This advance is already attached to that payrun', 409, ['payrun_id' => 'Already attached']);
             }
             if (isset($meta['recovery_mode']) && $meta['recovery_mode'] !== $mode && ($attachedCount + $processedCount) > 0) {
-                throw new AdvanceException("This advance already uses '{$meta['recovery_mode']}' recovery; the mode cannot change", 409,
-                    ['recovery_mode' => 'Mode mismatch']);
+                throw new AdvanceException(
+                    "This advance already uses '{$meta['recovery_mode']}' recovery; the mode cannot change",
+                    409,
+                    ['recovery_mode' => 'Mode mismatch']
+                );
             }
 
             if ($mode === AdvanceRecoveryService::MODE_CUSTOM) {
                 $raw = $input['scheduled_amount'] ?? null;
                 if ($raw === null || $raw === '' || !is_numeric($raw) || Money::toCents($raw) <= 0) {
-                    throw new AdvanceException('scheduled_amount is required and must be greater than zero for custom recovery', 422,
-                        ['scheduled_amount' => 'Required for custom recovery']);
+                    throw new AdvanceException(
+                        'scheduled_amount is required and must be greater than zero for custom recovery',
+                        422,
+                        ['scheduled_amount' => 'Required for custom recovery']
+                    );
                 }
                 $scheduled = Money::toCents($raw);
             } else {
                 $n = max(1, (int) $adv['number_of_recoveries']);
                 if ($processedCount + $attachedCount + 1 > $n) {
-                    throw new AdvanceException("All {$n} planned recoveries are already scheduled or processed", 422,
-                        ['payrun_id' => 'Recovery count exceeded']);
+                    throw new AdvanceException(
+                        "All {$n} planned recoveries are already scheduled or processed",
+                        422,
+                        ['payrun_id' => 'Recovery count exceeded']
+                    );
                 }
                 $scheduled = $this->recovery->equalInstalment($adv);
             }
@@ -692,8 +754,10 @@ class AdvanceService
             if ($attachedSum + $scheduled > $balance) {
                 throw new AdvanceException(
                     'Total scheduled recovery (KES ' . Money::display($attachedSum + $scheduled)
-                    . ') would exceed the remaining balance (KES ' . Money::display($balance) . ')', 422,
-                    ['scheduled_amount' => 'Exceeds balance_remaining']);
+                        . ') would exceed the remaining balance (KES ' . Money::display($balance) . ')',
+                    422,
+                    ['scheduled_amount' => 'Exceeds balance_remaining']
+                );
             }
 
             if ($sameLine) { // re-attach a previously detached / failed line
@@ -747,7 +811,8 @@ class AdvanceService
 
             $lines = DB::raw(
                 'SELECT * FROM advance_payrun_lines WHERE advance_id = :a AND payrun_id = :p AND organization_id = :o FOR UPDATE',
-                [':a' => $id, ':p' => $payrunId, ':o' => $orgId]);
+                [':a' => $id, ':p' => $payrunId, ':o' => $orgId]
+            );
             if (empty($lines) || $lines[0]->status !== 'attached') {
                 throw new AdvanceException('No attached recovery line found for that payrun', 404);
             }
@@ -758,7 +823,8 @@ class AdvanceService
 
             DB::table('advance_payrun_lines')->update(['status' => 'detached'], 'id', (int) $lines[0]->id);
             $this->audit($adv, $userId, 'advance_recovery_detached', [
-                'payrun_id' => $payrunId, 'line_id' => (int) $lines[0]->id,
+                'payrun_id' => $payrunId,
+                'line_id' => (int) $lines[0]->id,
                 'scheduled_amount' => $lines[0]->scheduled_amount,
             ]);
             return (array) DB::raw('SELECT * FROM advance_payrun_lines WHERE id = :id', [':id' => (int) $lines[0]->id])[0];
@@ -790,8 +856,11 @@ class AdvanceService
             throw new AdvanceException('Repayment amount must be greater than zero', 422, ['amount' => 'Must be greater than zero']);
         }
         if ($cents > $balanceBefore) {
-            throw new AdvanceException('Repayment (KES ' . Money::display($cents) . ') exceeds the remaining balance (KES ' . Money::display($balanceBefore) . ')', 422,
-                ['amount' => 'Exceeds balance_remaining']);
+            throw new AdvanceException(
+                'Repayment (KES ' . Money::display($cents) . ') exceeds the remaining balance (KES ' . Money::display($balanceBefore) . ')',
+                422,
+                ['amount' => 'Exceeds balance_remaining']
+            );
         }
 
         $newRecovered = $recovered + $cents;
@@ -838,8 +907,13 @@ class AdvanceService
                       WHERE advance_id = :id AND status = 'attached'
                         AND payrun_id <> :p", [':id' => (int) $adv['id'], ':p' => (int) ($opts['payrun_id'] ?? 0)]);
             $this->audit($adv, $userId, 'advance_repaid', $details);
-            self::notify($orgId, (int) $adv['employee_id'], 'Salary advance fully repaid',
-                "Advance {$adv['advance_number']} has been fully repaid.", ['advance_id' => (int) $adv['id']]);
+            self::notify(
+                $orgId,
+                (int) $adv['employee_id'],
+                'Salary advance fully repaid',
+                "Advance {$adv['advance_number']} has been fully repaid.",
+                ['advance_id' => (int) $adv['id']]
+            );
         } else {
             $this->audit($adv, $userId, 'advance_partially_recovered', $details);
         }
@@ -889,7 +963,8 @@ class AdvanceService
             $adv = $this->lockOrFail($orgId, $advanceId);
             $rows = DB::raw(
                 'SELECT * FROM advance_repayments WHERE id = :r AND advance_id = :a AND organization_id = :o FOR UPDATE',
-                [':r' => $repaymentId, ':a' => $advanceId, ':o' => $orgId]);
+                [':r' => $repaymentId, ':a' => $advanceId, ':o' => $orgId]
+            );
             if (empty($rows)) {
                 throw new AdvanceException('Repayment not found', 404);
             }
@@ -927,9 +1002,12 @@ class AdvanceService
             ], 'id', $advanceId);
 
             $this->audit($adv, $userId, 'advance_reversed', [
-                'old_status' => $adv['status'], 'new_status' => $newStatus,
-                'repayment_id' => $repaymentId, 'amount' => Money::format($cents),
-                'balance_remaining' => Money::format($balanceAfter), 'reason' => $reason,
+                'old_status' => $adv['status'],
+                'new_status' => $newStatus,
+                'repayment_id' => $repaymentId,
+                'amount' => Money::format($cents),
+                'balance_remaining' => Money::format($balanceAfter),
+                'reason' => $reason,
             ]);
             return $this->find($orgId, $advanceId);
         });
@@ -949,19 +1027,33 @@ class AdvanceService
         $params = [':org' => $orgId];
 
         $employeeId = $forceEmployeeId ?? (isset($filters['employee_id']) && $filters['employee_id'] !== '' ? (int) $filters['employee_id'] : null);
-        if ($employeeId) { $where[] = 'a.employee_id = :emp'; $params[':emp'] = $employeeId; }
-        if (!empty($filters['status'])) { $where[] = 'a.status = :status'; $params[':status'] = $filters['status']; }
-        if (!empty($filters['from']))   { $where[] = 'a.request_date >= :from'; $params[':from'] = $filters['from']; }
-        if (!empty($filters['to']))     { $where[] = 'a.request_date <= :to';   $params[':to'] = $filters['to']; }
+        if ($employeeId) {
+            $where[] = 'a.employee_id = :emp';
+            $params[':emp'] = $employeeId;
+        }
+        if (!empty($filters['status'])) {
+            $where[] = 'a.status = :status';
+            $params[':status'] = $filters['status'];
+        }
+        if (!empty($filters['from'])) {
+            $where[] = 'a.request_date >= :from';
+            $params[':from'] = $filters['from'];
+        }
+        if (!empty($filters['to'])) {
+            $where[] = 'a.request_date <= :to';
+            $params[':to'] = $filters['to'];
+        }
         if (!empty($filters['name'])) {
             $where[] = "(CONCAT(e.firstname, ' ', e.surname) LIKE :name OR e.employee_number LIKE :name OR a.advance_number LIKE :name)";
             $params[':name'] = '%' . trim($filters['name']) . '%';
         }
         if (!empty($filters['month']) && ctype_digit((string) $filters['month'])) {
-            $where[] = 'MONTH(a.request_date) = :month'; $params[':month'] = (int) $filters['month'];
+            $where[] = 'MONTH(a.request_date) = :month';
+            $params[':month'] = (int) $filters['month'];
         }
         if (!empty($filters['year']) && ctype_digit((string) $filters['year'])) {
-            $where[] = 'YEAR(a.request_date) = :year'; $params[':year'] = (int) $filters['year'];
+            $where[] = 'YEAR(a.request_date) = :year';
+            $params[':year'] = (int) $filters['year'];
         }
         $w = implode(' AND ', $where);
 
@@ -990,8 +1082,12 @@ class AdvanceService
             'rows' => $rows,
             'statistics' => $this->statistics($orgId, $employeeId),
             'pagination' => [
-                'current_page' => $page, 'per_page' => $perPage, 'total' => $total,
-                'total_pages' => $pages, 'has_next' => $page < $pages, 'has_prev' => $page > 1,
+                'current_page' => $page,
+                'per_page' => $perPage,
+                'total' => $total,
+                'total_pages' => $pages,
+                'has_next' => $page < $pages,
+                'has_prev' => $page > 1,
             ],
         ];
     }
@@ -1004,7 +1100,10 @@ class AdvanceService
     {
         $params = [':org' => $orgId];
         $w = 'organization_id = :org';
-        if ($employeeId) { $w .= ' AND employee_id = :emp'; $params[':emp'] = $employeeId; }
+        if ($employeeId) {
+            $w .= ' AND employee_id = :emp';
+            $params[':emp'] = $employeeId;
+        }
 
         $r = DB::raw(
             "SELECT COUNT(*) AS total_advances,
@@ -1070,12 +1169,16 @@ class AdvanceService
     {
         return DB::raw(
             "SELECT r.*, p.payrun_name,
-                    NULLIF(TRIM(CONCAT(COALESCE(u.first_name, ''), ' ', COALESCE(u.surname, ''))), '') AS recorded_by_name
-               FROM advance_repayments r
-               LEFT JOIN payruns p ON p.id = r.payrun_id
-               LEFT JOIN users u ON u.id = r.recorded_by
-              WHERE r.advance_id = :a AND r.organization_id = :o
-              ORDER BY r.id ASC",
+                COALESCE(
+                    NULLIF(TRIM(CONCAT(COALESCE(re.firstname, ''), ' ', COALESCE(re.surname, ''))), ''),
+                    u.username
+                ) AS recorded_by_name
+           FROM advance_repayments r
+           LEFT JOIN payruns p ON p.id = r.payrun_id
+           LEFT JOIN users u ON u.id = r.recorded_by
+           LEFT JOIN employees re ON re.user_id = u.id AND re.organization_id = r.organization_id
+          WHERE r.advance_id = :a AND r.organization_id = :o
+          ORDER BY r.id ASC",
             [':a' => $advanceId, ':o' => $orgId]
         );
     }
@@ -1097,7 +1200,8 @@ class AdvanceService
     {
         $rows = DB::raw(
             'SELECT id, organization_id, status, base_salary, firstname, surname FROM employees WHERE id = :id AND organization_id = :o',
-            [':id' => $employeeId, ':o' => $orgId]);
+            [':id' => $employeeId, ':o' => $orgId]
+        );
         if (empty($rows)) return null;
         $employee = $rows[0];
 
@@ -1106,16 +1210,20 @@ class AdvanceService
                FROM advances
               WHERE organization_id = :o AND employee_id = :e AND status IN ('disbursed','partially_recovered')
               ORDER BY id",
-            [':o' => $orgId, ':e' => $employeeId]);
+            [':o' => $orgId, ':e' => $employeeId]
+        );
         $outstanding = 0;
         foreach ($adv as $a) $outstanding += Money::toCents($a->balance_remaining);
 
         $in = "'" . implode("','", AdvancePolicyService::ACTIVE_STATUSES) . "'";
-        $activeCount = (int) (DB::raw("SELECT COUNT(*) AS c FROM advances WHERE organization_id = :o AND employee_id = :e AND status IN ($in)",
-            [':o' => $orgId, ':e' => $employeeId])[0]->c ?? 0);
+        $activeCount = (int) (DB::raw(
+            "SELECT COUNT(*) AS c FROM advances WHERE organization_id = :o AND employee_id = :e AND status IN ($in)",
+            [':o' => $orgId, ':e' => $employeeId]
+        )[0]->c ?? 0);
 
         $policy = $this->policy->getPolicy($orgId);
-        $maxEligible = null; $canRequest = false;
+        $maxEligible = null;
+        $canRequest = false;
         if ($policy) {
             $s = $policy['settings'];
             $info = $this->policy->calculateMaxAllowed($orgId, $employee, $s);
