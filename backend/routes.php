@@ -29,6 +29,7 @@ use App\Controllers\CountryController;
 use App\Controllers\CountyController;
 use App\Controllers\AllowanceTypeController;
 use App\Controllers\EmployeeAllowanceController;
+use App\Controllers\AdvanceController;
 
 // Authentication routes - NO authentication required
 Router::post('/api/v1/auth/login', [AuthController::getInstance(), 'login']);
@@ -810,7 +811,7 @@ Router::post('api/v1/organizations/{org_id}/payrolls/{id}/pay', PayrollControlle
 ]);
 
 
- 
+
 // ---------------------------------------------------------------------------
 // Payslips
 // ---------------------------------------------------------------------------
@@ -821,7 +822,7 @@ Router::get('api/v1/organizations/{org_id}/payslips/statistics', PayslipControll
     ['AuthMiddleware', ['admin', 'payroll_manager', 'finance_manager', 'hr_manager', 'auditor']],
     'PayslipAuthorizationMiddleware',
 ]);
- 
+
 // GET /api/v1/organizations/{org_id}/payslips
 // ?status=generated|sent|acknowledged &payrun_id= &employee_id= &month= &year= &page= &per_page=
 // Roles: all authenticated org members (employees see own only, enforced by middleware)
@@ -829,18 +830,18 @@ Router::get('api/v1/organizations/{org_id}/payslips', PayslipController::class .
     'AuthMiddleware',
     'PayslipAuthorizationMiddleware',
 ]);
- 
+
 // ---------------------------------------------------------------------------
 // Single payslip
 // ---------------------------------------------------------------------------
- 
+
 // GET /api/v1/organizations/{org_id}/payslips/{id}
 // Roles: all authenticated (scoped by middleware per role)
 Router::get('api/v1/organizations/{org_id}/payslips/{id}', PayslipController::class . '@show', [
     'AuthMiddleware',
     'PayslipAuthorizationMiddleware',
 ]);
- 
+
 // POST /api/v1/organizations/{org_id}/payslips/{id}/acknowledge
 // Employee marks their own payslip as acknowledged (sent → acknowledged)
 // Roles: employee (own only), admin, payroll_manager
@@ -848,7 +849,7 @@ Router::post('api/v1/organizations/{org_id}/payslips/{id}/acknowledge', PayslipC
     'AuthMiddleware',
     'PayslipAuthorizationMiddleware',
 ]);
- 
+
 // PATCH /api/v1/organizations/{org_id}/payslips/{id}/pdf-path
 // Store server PDF path after PDF generation
 // Body: { "pdf_path": "/storage/payslips/2024/04/PAYSLIP-2024-04-EMP133.pdf" }
@@ -857,11 +858,11 @@ Router::patch('api/v1/organizations/{org_id}/payslips/{id}/pdf-path', PayslipCon
     ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
     'PayslipAuthorizationMiddleware',
 ]);
- 
+
 // ---------------------------------------------------------------------------
 // Employee-scoped
 // ---------------------------------------------------------------------------
- 
+
 // GET /api/v1/organizations/{org_id}/employees/{id}/payslips
 // All payslips for one employee across all payruns
 // Roles: all authenticated (scoped by middleware per role)
@@ -869,11 +870,11 @@ Router::get('api/v1/organizations/{org_id}/employees/{id}/payslips', PayslipCont
     'AuthMiddleware',
     'PayslipAuthorizationMiddleware',
 ]);
- 
+
 // ---------------------------------------------------------------------------
 // Payrun-scoped payslip routes
 // ---------------------------------------------------------------------------
- 
+
 // GET /api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips
 // All payslips for a specific payrun (role-scoped)
 // Roles: all authenticated (scoped by middleware per role)
@@ -881,7 +882,7 @@ Router::get('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips', Paysli
     'AuthMiddleware',
     'PayslipAuthorizationMiddleware',
 ]);
- 
+
 // POST /api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/generate
 // Generate payslips from a finalized payrun.
 // Body (optional): { "employee_ids": [1, 2, 3], "regenerate": false }
@@ -890,7 +891,7 @@ Router::post('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/generat
     ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
     'PayslipAuthorizationMiddleware',
 ]);
- 
+
 // POST /api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/bulk-send
 // Mark all generated payslips in a payrun as sent in one call.
 // Roles: admin, payroll_manager
@@ -898,7 +899,7 @@ Router::post('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/bulk-se
     ['AuthMiddleware', ['admin', 'payroll_manager']],
     'PayslipAuthorizationMiddleware',
 ]);
- 
+
 // POST /api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/{id}/send
 // Send a single payslip to the employee (generated → sent).
 // Roles: admin, payroll_manager, payroll_officer, hr_officer
@@ -1039,28 +1040,28 @@ Router::get('api/v1/organizations/{org_id}/employees/{emp_id}/loans', LoanContro
 ]);
 
 Router::post('/api/v1/register', RegistrationController::class . '@register');
- 
+
 // =============================================================================
 // SUBSCRIPTION / PAYMENT
 // =============================================================================
- 
+
 // POST /api/v1/subscription/initiate-payment
 // No auth middleware — guarded internally by requiring org + subscription IDs.
 // Sends M-Pesa STK push and records payment_transactions row.
 Router::post('/api/v1/subscription/initiate-payment', SubscriptionController::class . '@initiatePayment');
- 
+
 // POST /api/v1/subscription/mpesa-callback
 // Public — called by Safaricom Daraja servers after the customer pays.
 // MUST always return HTTP 200 { ResultCode: 0 } or Daraja will retry.
 Router::post('/api/v1/subscription/mpesa-callback', SubscriptionController::class . '@mpesaCallback');
- 
+
 // GET /api/v1/subscription/payment-status?checkout_request_id=xxx
 // Polling endpoint — frontend calls every 3 s while waiting for M-Pesa confirmation.
 // Returns { success, status } and, once completed, { token } for the frontend to store.
 Router::get('/api/v1/subscription/payment-status', SubscriptionController::class . '@paymentStatus');
 
 Router::get('/api/v1/subscription/plans', SubscriptionController::class . '@getPlans');
- 
+
 Router::get('/api/v1/subscription/current', SubscriptionController::class . '@getCurrentSubscription', [
     'AuthMiddleware',
 ]);
@@ -1741,4 +1742,107 @@ Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/attach-payr
 Router::post('api/v1/organizations/{org_id}/employee-allowances/{id}/detach-payrun', EmployeeAllowanceController::class . '@detachFromPayrun', [
     'AuthMiddleware',
     'EmployeeAllowanceAuthorizationMiddleware'
+]);
+
+// =============================================================================
+// SALARY ADVANCES MODULE
+// Roles: see Middleware/AdvanceAuthorizationMiddleware.php (ABILITIES map).
+// Tenant scope: every query is filtered by the authenticated user's organization_id.
+// =============================================================================
+
+// ---- Policy (declared before /advances/{advance} routes for readability) ----
+Router::get('api/v1/advance-policy', AdvanceController::class . '@showPolicy', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'policy_view'],
+]);
+Router::put('api/v1/advance-policy', AdvanceController::class . '@updatePolicy', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'policy_update'],
+]);
+
+// ---- Advances CRUD ----
+Router::post('api/v1/advances', AdvanceController::class . '@store', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'create'],
+]);
+Router::get('api/v1/advances', AdvanceController::class . '@index', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'list'],
+]);
+Router::get('api/v1/advances/{advance}', AdvanceController::class . '@show', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'view'],
+]);
+Router::put('api/v1/advances/{advance}', AdvanceController::class . '@update', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'update'],
+]);
+Router::delete('api/v1/advances/{advance}', AdvanceController::class . '@destroy', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'delete'],
+]);
+
+// ---- Workflow ----
+Router::post('api/v1/advances/{advance}/submit', AdvanceController::class . '@submit', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'submit'],
+]);
+Router::post('api/v1/advances/{advance}/approve', AdvanceController::class . '@approve', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'approve'],
+]);
+Router::post('api/v1/advances/{advance}/reject', AdvanceController::class . '@reject', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'reject'],
+]);
+Router::post('api/v1/advances/{advance}/cancel', AdvanceController::class . '@cancel', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'cancel'],
+]);
+Router::post('api/v1/advances/{advance}/disburse', AdvanceController::class . '@disburse', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'disburse'],
+]);
+
+// ---- Payrun recovery (advance_payrun_lines) ----
+Router::post('api/v1/advances/{advance}/attach-payrun', AdvanceController::class . '@attachPayrun', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'attach'],
+]);
+Router::post('api/v1/advances/{advance}/detach-payrun', AdvanceController::class . '@detachPayrun', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'detach'],
+]);
+Router::get('api/v1/advances/{advance}/payrun-lines', AdvanceController::class . '@payrunLines', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'view_lines'],
+]);
+
+// ---- Repayments ----
+Router::post('api/v1/advances/{advance}/manual-repayment', AdvanceController::class . '@manualRepayment', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'manual_repayment'],
+]);
+Router::get('api/v1/advances/{advance}/repayments', AdvanceController::class . '@repayments', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'view_repayments'],
+]);
+Router::post('api/v1/advances/{advance}/repayments/{repayment}/reverse', AdvanceController::class . '@reverseRepayment', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'reverse_repayment'],
+]);
+
+// ---- Per-employee views ----
+Router::get('api/v1/employees/{employee}/advances', AdvanceController::class . '@employeeAdvances', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'employee_view'],
+]);
+Router::get('api/v1/employees/{employee}/advance-balance', AdvanceController::class . '@employeeBalance', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'employee_view'],
+]);
+
+// Draft payruns for the attach-recovery screen
+Router::get('api/v1/advance-payruns', AdvanceController::class . '@payrunOptions', [
+    'AuthMiddleware', ['AdvanceAuthorizationMiddleware', 'payrun_options'],
 ]);

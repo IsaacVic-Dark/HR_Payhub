@@ -241,21 +241,286 @@ CREATE TABLE IF NOT EXISTS `job_titles` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- Dumping structure for table payhub.advances
-CREATE TABLE IF NOT EXISTS `advances` (
-  `id` int NOT NULL AUTO_INCREMENT,
-  `employee_id` int NOT NULL,
-  `config_id` int NOT NULL,
-  `amount` decimal(15,2) NOT NULL,
-  `request_date` date NOT NULL,
-  `status` enum('pending','approved','rejected','repaid') DEFAULT 'pending',
-  `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
-  `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  PRIMARY KEY (`id`),
-  KEY `employee_id` (`employee_id`),
-  KEY `config_id` (`config_id`),
-  CONSTRAINT `advances_ibfk_1` FOREIGN KEY (`employee_id`) REFERENCES `employees` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `advances_ibfk_2` FOREIGN KEY (`config_id`) REFERENCES `organization_configs` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+-- =========================================
+-- ADVANCES
+-- =========================================
+CREATE TABLE advances (
+    id INT NOT NULL AUTO_INCREMENT,
+    organization_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    policy_config_id INT NOT NULL,
+
+    advance_number VARCHAR(50) NOT NULL,
+
+    amount_requested DECIMAL(15,2) NOT NULL,
+    amount_approved DECIMAL(15,2) DEFAULT NULL,
+    amount_disbursed DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    amount_recovered DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+    balance_remaining DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+
+    reason TEXT NULL,
+    rejection_reason TEXT NULL,
+    system_rejection_reason TEXT NULL,
+
+    request_date DATE NOT NULL,
+    requested_payrun_id INT DEFAULT NULL,
+    recovery_start_date DATE DEFAULT NULL,
+    recovery_end_date DATE DEFAULT NULL,
+    number_of_recoveries INT DEFAULT 1,
+
+    disbursement_method ENUM(
+        'payroll',
+        'bank_transfer',
+        'mpesa',
+        'cash',
+        'cheque'
+    ) NOT NULL DEFAULT 'payroll',
+
+    disbursement_reference VARCHAR(100) DEFAULT NULL,
+    disbursement_date DATE DEFAULT NULL,
+
+    status ENUM(
+        'draft',
+        'pending',
+        'validated',
+        'system_rejected',
+        'approved',
+        'rejected',
+        'scheduled',
+        'disbursed',
+        'partially_recovered',
+        'repaid',
+        'cancelled',
+        'reversed',
+        'failed'
+    ) NOT NULL DEFAULT 'pending',
+
+    approved_by INT DEFAULT NULL,
+    approved_at TIMESTAMP NULL DEFAULT NULL,
+    rejected_by INT DEFAULT NULL,
+    rejected_at TIMESTAMP NULL DEFAULT NULL,
+
+    disbursed_by INT DEFAULT NULL,
+    disbursed_at TIMESTAMP NULL DEFAULT NULL,
+
+    cancelled_by INT DEFAULT NULL,
+    cancelled_at TIMESTAMP NULL DEFAULT NULL,
+    cancellation_reason TEXT NULL,
+
+    metadata JSON DEFAULT NULL,
+
+    created_by INT DEFAULT NULL,
+    updated_by INT DEFAULT NULL,
+
+    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    UNIQUE KEY unique_advance_number_per_org
+        (organization_id, advance_number),
+
+    KEY idx_advances_org (organization_id),
+    KEY idx_advances_employee (employee_id),
+    KEY idx_advances_status (organization_id, status),
+    KEY idx_advances_policy (policy_config_id),
+    KEY idx_advances_requested_payrun (requested_payrun_id),
+    KEY idx_advances_recovery_dates
+        (recovery_start_date, recovery_end_date),
+
+    CONSTRAINT adv_org_fk
+        FOREIGN KEY (organization_id)
+        REFERENCES organizations(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT adv_employee_fk
+        FOREIGN KEY (employee_id)
+        REFERENCES employees(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT adv_policy_fk
+        FOREIGN KEY (policy_config_id)
+        REFERENCES organization_configs(id)
+        ON DELETE RESTRICT,
+
+    CONSTRAINT adv_requested_payrun_fk
+        FOREIGN KEY (requested_payrun_id)
+        REFERENCES payruns(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT adv_approved_by_fk
+        FOREIGN KEY (approved_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT adv_rejected_by_fk
+        FOREIGN KEY (rejected_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT adv_disbursed_by_fk
+        FOREIGN KEY (disbursed_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT adv_cancelled_by_fk
+        FOREIGN KEY (cancelled_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT adv_created_by_fk
+        FOREIGN KEY (created_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT adv_updated_by_fk
+        FOREIGN KEY (updated_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL
+) ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_0900_ai_ci;
+
+-- =========================================
+-- ADVANCE REPAYMENTS
+-- =========================================
+CREATE TABLE advance_repayments (
+    id INT NOT NULL AUTO_INCREMENT,
+    organization_id INT NOT NULL,
+    advance_id INT NOT NULL,
+    employee_id INT NOT NULL,
+    payrun_id INT DEFAULT NULL,
+    payrun_detail_id INT DEFAULT NULL,
+
+    amount DECIMAL(15,2) NOT NULL,
+    balance_after DECIMAL(15,2) NOT NULL,
+    repayment_date DATE NOT NULL,
+
+    method ENUM(
+        'payroll_deduction',
+        'manual',
+        'reversal'
+    ) NOT NULL DEFAULT 'payroll_deduction',
+
+    status ENUM(
+        'pending',
+        'applied',
+        'failed',
+        'reversed'
+    ) NOT NULL DEFAULT 'pending',
+
+    notes TEXT NULL,
+    recorded_by INT DEFAULT NULL,
+
+    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    KEY idx_adv_repay_advance (advance_id),
+    KEY idx_adv_repay_org (organization_id),
+    KEY idx_adv_repay_employee (employee_id),
+    KEY idx_adv_repay_payrun (payrun_id),
+    KEY idx_adv_repay_status (status),
+
+    CONSTRAINT advrep_org_fk
+        FOREIGN KEY (organization_id)
+        REFERENCES organizations(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT advrep_advance_fk
+        FOREIGN KEY (advance_id)
+        REFERENCES advances(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT advrep_employee_fk
+        FOREIGN KEY (employee_id)
+        REFERENCES employees(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT advrep_payrun_fk
+        FOREIGN KEY (payrun_id)
+        REFERENCES payruns(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT advrep_detail_fk
+        FOREIGN KEY (payrun_detail_id)
+        REFERENCES payrun_details(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT advrep_recorded_by_fk
+        FOREIGN KEY (recorded_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL
+) ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_0900_ai_ci;
+
+-- =========================================
+-- ADVANCE PAYRUN LINES
+-- =========================================
+CREATE TABLE advance_payrun_lines (
+    id INT NOT NULL AUTO_INCREMENT,
+    organization_id INT NOT NULL,
+    advance_id INT NOT NULL,
+    payrun_id INT NOT NULL,
+    employee_id INT NOT NULL,
+
+    scheduled_amount DECIMAL(15,2) NOT NULL,
+
+    status ENUM(
+        'attached',
+        'processed',
+        'detached',
+        'failed'
+    ) NOT NULL DEFAULT 'attached',
+
+    attached_by INT DEFAULT NULL,
+    processed_at TIMESTAMP NULL DEFAULT NULL,
+
+    created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+        ON UPDATE CURRENT_TIMESTAMP,
+
+    PRIMARY KEY (id),
+
+    UNIQUE KEY unique_advance_payrun
+        (advance_id, payrun_id),
+
+    KEY idx_advpl_org (organization_id),
+    KEY idx_advpl_advance (advance_id),
+    KEY idx_advpl_payrun (payrun_id),
+    KEY idx_advpl_employee (employee_id),
+    KEY idx_advpl_status (status),
+
+    CONSTRAINT advpl_org_fk
+        FOREIGN KEY (organization_id)
+        REFERENCES organizations(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT advpl_advance_fk
+        FOREIGN KEY (advance_id)
+        REFERENCES advances(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT advpl_payrun_fk
+        FOREIGN KEY (payrun_id)
+        REFERENCES payruns(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT advpl_employee_fk
+        FOREIGN KEY (employee_id)
+        REFERENCES employees(id)
+        ON DELETE CASCADE,
+
+    CONSTRAINT advpl_attached_by_fk
+        FOREIGN KEY (attached_by)
+        REFERENCES users(id)
+        ON DELETE SET NULL
+) ENGINE=InnoDB
+DEFAULT CHARSET=utf8mb4
+COLLATE=utf8mb4_0900_ai_ci;
 
 -- Data exporting was unselected.
 
@@ -311,7 +576,25 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
     'payment_failed',
     'disputed',
     'reversed',
-    'cancelled'
+    'cancelled',
+
+    -- Salary Advances (new)
+    'advance_created',
+    'advance_submitted',
+    'advance_policy_validated',
+    'advance_policy_failed',
+    'advance_approved',
+    'advance_rejected',
+    'advance_cancelled',
+    'advance_disbursed',
+    'advance_recovery_attached',
+    'advance_recovery_detached',
+    'advance_recovery_processed',
+    'advance_recovery_skipped',
+    'advance_partially_recovered',
+    'advance_repaid',
+    'advance_reversed',
+    'advance_manual_repayment'
   ) NOT NULL,
   `details` json DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2147,3 +2430,34 @@ VALUES
   '2026-03-01', NULL,
   'Requested for upcoming field assignment.',
   'PENDING_APPROVAL', @created_by, NOW(), NULL, NULL);
+
+  INSERT INTO organization_configs
+(organization_id, config_type, name, percentage, fixed_amount, value_text, settings, status, is_active)
+VALUES
+(
+    221,
+    'advance',
+    'Salary Advance Policy',
+    50.00,
+    NULL,
+    NULL,
+    JSON_OBJECT(
+        'max_percentage_of_basic', 50,
+        'max_percentage_of_net', 60,
+        'minimum_amount', 1000,
+        'maximum_amount', 150000,
+        'max_active_advances', 1,
+        'allow_partial_recovery', true,
+        'default_recovery_periods', 1,
+        'max_recovery_periods', 3,
+        'require_reason', true,
+        'require_supporting_document', false,
+        'approval_workflow', JSON_ARRAY('manager', 'hr'),
+        'finance_approval_threshold', 50000,
+        'disbursement_methods', JSON_ARRAY('payroll', 'mpesa', 'bank_transfer'),
+        'request_cutoff_day', 20,
+        'allow_employee_request', true
+    ),
+    'approved',
+    1
+);

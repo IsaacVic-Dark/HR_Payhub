@@ -80,7 +80,8 @@ class PayrunProcessingService
                     $payrun,
                     $taxConfig,
                     $deductionConfigs,
-                    $orgId
+                    $orgId,
+                    $userId
                 );
 
                 $summary['employee_count']++;
@@ -156,7 +157,7 @@ class PayrunProcessingService
         $taxConfig        = loadTaxConfig($orgId);
         $deductionConfigs = $this->getDeductionConfigs($orgId);
 
-        $result = $this->processEmployee($employee, $payrun, $taxConfig, $deductionConfigs, $orgId);
+        $result = $this->processEmployee($employee, $payrun, $taxConfig, $deductionConfigs, $orgId, $userId);
 
         $this->recalculatePayrunTotals($payrunId);
 
@@ -373,13 +374,35 @@ class PayrunProcessingService
      * Process a single employee: calculate all earnings and deductions,
      * write payrun_details and payrun_deductions rows.
      */
+    /**
+     * Each employee is processed inside ONE database transaction so that the
+     * payrun_details row, every payrun_deductions row and all salary-advance
+     * ledger changes commit or roll back together. A failure for one
+     * employee never affects the others (process() collects errors per
+     * employee).
+     */
     private function processEmployee(
         object $employee,
         object $payrun,
         array  $taxConfig,
         array  $deductionConfigs,
-        int    $orgId
+        int    $orgId,
+        int    $userId = 0
     ): array {
+        return DB::transaction(function () use ($employee, $payrun, $taxConfig, $deductionConfigs, $orgId, $userId) {
+            return $this->processEmployeeInner($employee, $payrun, $taxConfig, $deductionConfigs, $orgId, $userId);
+        });
+    }
+
+    private function processEmployeeInner(
+        object $employee,
+        object $payrun,
+        array  $taxConfig,
+        array  $deductionConfigs,
+        int    $orgId,
+        int    $userId = 0
+    ): array {
+        $userId = $userId ?: (int) ($payrun->reviewed_by ?? $payrun->created_by);
         $periodStart = $payrun->pay_period_start;
         $periodEnd   = $payrun->pay_period_end;
         $employeeId  = $employee->id;
@@ -427,10 +450,15 @@ class PayrunProcessingService
         $grossPay = $grossBeforeAllowances + $taxableAllowance + $nontaxableAllowance;
 
         // --- Voluntary/org deductions ---
+        // Salary advances (AdvancePayrollIntegrationService): on a draft payrun
+        // reprocess, first undo what this payrun applied before so nothing is
+        // double-counted.
+        $advanceIntegration = new AdvancePayrollIntegrationService();
+        $advanceIntegration->rollbackForReprocess($orgId, $payrun->id, $employeeId, $userId);
+
         $loanDeductions       = $this->getLoanInstalment($employeeId, $periodStart, $periodEnd, $deductionConfigs);
-        $advanceDeductions    = $this->getAdvanceDeduction($employeeId, $periodStart, $periodEnd, $deductionConfigs);
         $attendanceDeductions = $this->getAttendanceDeductionsTotal($employeeId, $periodStart, $periodEnd, $existingDetailId, $orgId);
-        $extraDeductions      = $loanDeductions['total'] + $advanceDeductions['total'] + $attendanceDeductions['total'];
+        $otherDeductions      = $loanDeductions['total'] + $attendanceDeductions['total'];
 
         // --- Statutory calculations ---
         // Overtime, bonus, and commission are taxable under PAYE — unlike
@@ -438,6 +466,19 @@ class PayrunProcessingService
         // reimbursements/allowances they're not pensionable pay, so they
         // go into the PAYE base only, never into NSSF/SHIF/Housing Levy.
         $taxableOtherEarnings = $overtimeAmount + $bonusAmount + $commissionAmount;
+
+        // Projected net pay BEFORE any advance recovery (gross - statutory - other
+        // deductions). The advance recovery is a post-tax deduction: it is not in
+        // taxable income, so PAYE / NSSF / SHIF / Housing Levy are unaffected.
+        $preAdvanceCalc = calculateNetPay(
+            $basicSalary, $grossPay, $taxConfig, $otherDeductions,
+            $taxableReimbursement, $taxableAllowance, $taxableOtherEarnings
+        );
+        $advanceDeductions = $advanceIntegration->prepare(
+            $orgId, $payrun->id, $employeeId, $userId, Money::toCents($preAdvanceCalc['net_pay'])
+        );
+        // Included in total_deductions, reduces net_pay.
+        $extraDeductions = $otherDeductions + $advanceDeductions['total'];
 
         $calc = calculateNetPay(
             $basicSalary, $grossPay, $taxConfig, $extraDeductions,
@@ -480,7 +521,9 @@ class PayrunProcessingService
         // --- Insert payrun_deductions rows ---
         $this->insertStatutoryDeductions($detailId, $calc, $orgId);
         $this->insertVoluntaryDeductions($detailId, $loanDeductions['items']);
-        $this->insertVoluntaryDeductions($detailId, $advanceDeductions['items']);
+        // Salary advance recovery: payrun_deductions + advance_repayments + advance update
+        // + line processed + audit, all inside this employee's transaction.
+        $advanceIntegration->apply($advanceDeductions, $detailId, $orgId, $payrun->id, $employeeId, $userId, $periodEnd);
         $this->insertAttendanceDeductions($detailId, $attendanceDeductions);
 
         return $calc;
@@ -783,7 +826,8 @@ class PayrunProcessingService
     }
 
     /**
-     * Advance repayment deductions within the pay period.
+     * @deprecated Superseded by AdvancePayrollIntegrationService (no longer called).
+     * Kept only until the old single-table advances schema is fully retired.
      */
     private function getAdvanceDeduction(
         int    $employeeId,
