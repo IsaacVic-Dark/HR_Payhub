@@ -88,8 +88,8 @@ function SetupStepsSubNav({ pathname }: { pathname: string }) {
                     isCurrent
                       ? "bg-white text-[#be2ed6]"
                       : isPast
-                      ? "bg-[#be2ed6] text-white"
-                      : "border border-muted-foreground/40 text-muted-foreground",
+                        ? "bg-[#be2ed6] text-white"
+                        : "border border-muted-foreground/40 text-muted-foreground",
                   ].join(" ")}
                 >
                   {isPast ? "✓" : idx + 1}
@@ -184,6 +184,12 @@ const data = {
       url: "/loans",
       icon: IconBriefcase,
       roles: ["super_admin", "admin", "hr_manager", "department_manager"],
+    },
+    {
+      title: "Advances",
+      url: "/advances",
+      icon: IconCash,
+      roles: ["super_admin", "admin"],
     },
     {
       title: "Overtime Approvals",
@@ -327,6 +333,12 @@ const data = {
       icon: IconBriefcase,
       roles: ["employee"],
     },
+    {
+      title: "My Advances",
+      url: "/myadvances",
+      icon: IconCash,
+      roles: ["employee"],
+    },
   ],
 
   // Configuration section
@@ -439,38 +451,38 @@ const data = {
   ],
 
   // Platform Administration — cross-tenant, super_admin only
-platformSection: [
-  {
-    title: "Organizations",
-    url: "/platform/organizations",
-    icon: IconBuilding,
-    roles: ["super_admin"],
-  },
-  {
-    title: "Subscriptions",
-    url: "/platform/subscriptions",
-    icon: IconCash, // imported already, currently unused
-    roles: ["super_admin"],
-  },
-  {
-    title: "Subscription Plans",
-    url: "/subscription-plans",
-    icon: IconReportMoney,
-    roles: ["super_admin"],
-  },
-  {
-    title: "Countries",
-    url: "/platform/countries",
-    icon: IconWorld,
-    roles: ["super_admin"],
-  },
-  {
-    title: "Public Holidays",
-    url: "/public-holidays",
-    icon: IconCalendar,
-    roles: ["super_admin"],
-  },
-],
+  platformSection: [
+    {
+      title: "Organizations",
+      url: "/platform/organizations",
+      icon: IconBuilding,
+      roles: ["super_admin"],
+    },
+    {
+      title: "Subscriptions",
+      url: "/platform/subscriptions",
+      icon: IconCash, // imported already, currently unused
+      roles: ["super_admin"],
+    },
+    {
+      title: "Subscription Plans",
+      url: "/subscription-plans",
+      icon: IconReportMoney,
+      roles: ["super_admin"],
+    },
+    {
+      title: "Countries",
+      url: "/platform/countries",
+      icon: IconWorld,
+      roles: ["super_admin"],
+    },
+    {
+      title: "Public Holidays",
+      url: "/public-holidays",
+      icon: IconCalendar,
+      roles: ["super_admin"],
+    },
+  ],
 
   // Others section
   othersSection: [
@@ -595,7 +607,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const setupComplete = user?.setup_completed === 1;
 
   const coreNavItems = setupComplete
-    ? filterNavItems(data.coreNav) 
+    ? filterNavItems(data.coreNav)
     : [
       {
         title: 'Complete Setup',
@@ -821,18 +833,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         )}
 
         {/* Platform Administration */}
-{filteredPlatformSection.length > 0 && (
-  <SidebarGroup>
-    <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
-      Platform Administration
-    </SidebarGroupLabel>
-    <SidebarGroupContent>
-      <SidebarMenu>
-        {filteredPlatformSection.map((item) => renderNavItem(item))}
-      </SidebarMenu>
-    </SidebarGroupContent>
-  </SidebarGroup>
-)}
+        {filteredPlatformSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Platform Administration
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredPlatformSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
 
         {/* Others */}
         {filteredOthersSection.length > 0 && (
