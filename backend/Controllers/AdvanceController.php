@@ -207,6 +207,47 @@ class AdvanceController
             message: 'Recovery detached from payrun', code: 200));
     }
 
+    /** POST /api/v1/advances/{advance}/auto-attach : retry placing the advance in the current draft payrun (e.g. after reopening a reviewed payrun) */
+    public function autoAttach($advance)
+    {
+        return $this->run(fn() => responseJson(success: true,
+            data: $this->service->autoAttach((int) $advance, $this->actor()),
+            message: 'Payrun placement checked', code: 200));
+    }
+
+    /** POST /api/v1/advances/{advance}/attach-payout : body { payrun_id } - admin picks the draft payrun that pays the advance out */
+    public function attachPayout($advance)
+    {
+        return $this->run(function () use ($advance) {
+            $input = $this->input();
+            $payrunId = (int) ($input['payrun_id'] ?? 0);
+            if ($payrunId <= 0) {
+                throw new AdvanceException('payrun_id is required', 422, ['payrun_id' => 'payrun_id is required']);
+            }
+            $actor = $this->actor();
+            $this->service->schedulePayout((int) $advance, $payrunId, (int) $actor['user']['id']);
+            return responseJson(success: true,
+                data: $this->service->find($this->orgId(), (int) $advance),
+                message: 'Payout scheduled in payrun', code: 200);
+        });
+    }
+
+    /** POST /api/v1/advances/{advance}/detach-payout */
+    public function detachPayout($advance)
+    {
+        return $this->run(fn() => responseJson(success: true,
+            data: $this->service->detachPayout((int) $advance, $this->actor()),
+            message: 'Payout detached from payrun', code: 200));
+    }
+
+    /** GET /api/v1/payruns/{payrun}/employees/{employee}/advances : advance payout + recoveries on one employee's payrun row */
+    public function payrunEmployee($payrun, $employee)
+    {
+        return $this->run(fn() => responseJson(success: true,
+            data: $this->service->payrunEmployeeSummary($this->orgId(), (int) $payrun, (int) $employee),
+            message: 'Fetched payrun advance summary successfully', code: 200));
+    }
+
     /** GET /api/v1/advances/{advance}/payrun-lines */
     public function payrunLines($advance)
     {

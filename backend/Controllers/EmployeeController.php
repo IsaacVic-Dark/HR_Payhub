@@ -25,6 +25,21 @@ class EmployeeController
             // Minimal mode — returns only id, firstname, middlename, surname, personalemail
             $withMinimal = isset($_GET['with_minimal']) && $_GET['with_minimal'] == '1';
 
+            // with_salary=1 - like with_minimal, plus base_salary and the maximum salary
+            // advance the employee may request. Salary is sensitive, so payroll/HR/admin only.
+            $withSalary = isset($_GET['with_salary']) && $_GET['with_salary'] == '1';
+            if ($withSalary) {
+                $viewer = \App\Middleware\AuthMiddleware::getCurrentUser();
+                if (!$viewer || !in_array($viewer['user_type'], ['admin', 'hr_manager', 'payroll_manager', 'payroll_officer'], true)) {
+                    return responseJson(
+                        success: false,
+                        message: "You do not have permission to view employee salaries",
+                        code: 403
+                    );
+                }
+                $withMinimal = true; // same lightweight code path as with_minimal
+            }
+
             // Apply role-based filters FIRST
             $roleFilters = $this->applyRoleBasedFilters($orgId);
 
@@ -52,7 +67,8 @@ class EmployeeController
             if ($withMinimal) {
                 // Lightweight query — only id, firstname, middlename, surname, personalemail
                 $query = "SELECT e.id,
-                    e.firstname, e.middlename, e.surname, e.personalemail
+                    e.firstname, e.middlename, e.surname, e.personalemail"
+                    . ($withSalary ? ", e.workemail, e.base_salary" : "") . "
                     FROM employees e
                     WHERE e.organization_id = :org_id";
                 $params = [':org_id' => $orgId];
@@ -81,6 +97,21 @@ class EmployeeController
 
             // Execute query
             $employees = empty($params) ? DB::raw($query) : DB::raw($query, $params);
+
+            // with_salary: attach each employee's maximum allowed advance (policy rules:
+            // lower of maximum_amount and max_percentage_of_basic, etc.). null = no advance policy.
+            if ($withSalary && !empty($employees)) {
+                $advancePolicy = new \App\Services\AdvancePolicyService();
+                $policy = $advancePolicy->getPolicy((int) $orgId);
+                foreach ($employees as $emp) {
+                    $emp->base_salary = (float) $emp->base_salary;
+                    $emp->max_advance = null;
+                    if ($policy) {
+                        $info = $advancePolicy->calculateMaxAllowed((int) $orgId, $emp, $policy['settings']);
+                        $emp->max_advance = (float) \App\Services\Money::format($info['max_cents']);
+                    }
+                }
+            }
 
             // Map raw JOIN columns into nested objects (full mode only)
             if (!$withMinimal) {

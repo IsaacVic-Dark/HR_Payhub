@@ -1813,6 +1813,22 @@ Router::post('api/v1/advances/{advance}/detach-payrun', AdvanceController::class
     'AuthMiddleware',
     ['AdvanceAuthorizationMiddleware', 'detach'],
 ]);
+Router::post('api/v1/advances/{advance}/auto-attach', AdvanceController::class . '@autoAttach', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'attach'],
+]);
+Router::post('api/v1/advances/{advance}/attach-payout', AdvanceController::class . '@attachPayout', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'attach'],
+]);
+Router::post('api/v1/advances/{advance}/detach-payout', AdvanceController::class . '@detachPayout', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'detach'],
+]);
+Router::get('api/v1/payruns/{payrun}/employees/{employee}/advances', AdvanceController::class . '@payrunEmployee', [
+    'AuthMiddleware',
+    ['AdvanceAuthorizationMiddleware', 'payrun_view'],
+]);
 Router::get('api/v1/advances/{advance}/payrun-lines', AdvanceController::class . '@payrunLines', [
     'AuthMiddleware',
     ['AdvanceAuthorizationMiddleware', 'view_lines'],

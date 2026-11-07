@@ -22,6 +22,7 @@ class AdvanceAuthorizationMiddleware
         'view'              => ['admin', 'payroll_manager', 'payroll_officer', 'finance_manager', 'auditor', 'employee'],
         'view_repayments'   => ['admin', 'payroll_manager', 'payroll_officer', 'finance_manager', 'auditor', 'employee'],
         'view_lines'        => ['admin', 'payroll_manager', 'payroll_officer', 'finance_manager', 'auditor'],
+        'payrun_view'       => ['admin', 'payroll_manager', 'payroll_officer', 'finance_manager', 'auditor'],
         'create'            => ['admin', 'employee'],
         'update'            => ['admin', 'employee'],
         'delete'            => ['admin', 'employee'],

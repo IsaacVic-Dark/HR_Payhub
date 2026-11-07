@@ -73,40 +73,48 @@ class AdvancePayrollIntegrationService
 
             $reps = DB::raw(
                 "SELECT * FROM advance_repayments
-                  WHERE advance_id = :a AND payrun_id = :p AND method = 'payroll_deduction' AND status = 'applied'
+                  WHERE advance_id = :a AND payrun_id = :p AND method = 'payroll_deduction'
+                    AND status IN ('pending','applied')
                   FOR UPDATE",
                 [':a' => (int) $adv['id'], ':p' => $payrunId]
             );
 
+            // 'pending' = planned deduction in this draft payrun: the advance itself was
+            // never touched, so only the repayment row is reversed. 'applied' rows come
+            // from before deferred recovery existed and still have to be undone on the advance.
             $undo = 0;
             foreach ($reps as $rep) {
-                $undo += Money::toCents($rep->amount);
+                if ($rep->status === 'applied') {
+                    $undo += Money::toCents($rep->amount);
+                }
                 DB::table('advance_repayments')->update([
                     'status' => 'reversed',
                     'notes'  => trim(($rep->notes ?? '') . ' [reversed: payrun reprocessed]'),
                 ], 'id', (int) $rep->id);
             }
 
-            $recovered = Money::toCents($adv['amount_recovered']) - $undo;
-            $balance   = Money::toCents($adv['amount_approved']) - $recovered;
-            $status    = AdvanceService::statusFor($balance, $recovered);
+            if ($undo > 0) {
+                $recovered = Money::toCents($adv['amount_recovered']) - $undo;
+                $balance   = Money::toCents($adv['amount_approved']) - $recovered;
+                $status    = AdvanceService::statusFor($balance, $recovered);
 
-            DB::table('advances')->update([
-                'amount_recovered'  => Money::format($recovered),
-                'balance_remaining' => Money::format($balance),
-                'status'            => $status,
-                'updated_by'        => $userId,
-            ], 'id', (int) $adv['id']);
+                DB::table('advances')->update([
+                    'amount_recovered'  => Money::format($recovered),
+                    'balance_remaining' => Money::format($balance),
+                    'status'            => $status,
+                    'updated_by'        => $userId,
+                ], 'id', (int) $adv['id']);
+
+                AdvanceService::writeAudit($orgId, $userId, 'advance', (int) $adv['id'], 'advance_reversed', [
+                    'reason'            => 'payrun_reprocess',
+                    'payrun_id'         => $payrunId,
+                    'old_status'        => $adv['status'],
+                    'new_status'        => $status,
+                    'amount_reversed'   => Money::format($undo),
+                    'balance_remaining' => Money::format($balance),
+                ]);
+            }
             DB::table('advance_payrun_lines')->update(['status' => 'attached', 'processed_at' => null], 'id', (int) $line->id);
-
-            AdvanceService::writeAudit($orgId, $userId, 'advance', (int) $adv['id'], 'advance_reversed', [
-                'reason'            => 'payrun_reprocess',
-                'payrun_id'         => $payrunId,
-                'old_status'        => $adv['status'],
-                'new_status'        => $status,
-                'amount_reversed'   => Money::format($undo),
-                'balance_remaining' => Money::format($balance),
-            ]);
         }
     }
 
@@ -183,7 +191,7 @@ class AdvancePayrollIntegrationService
                FROM advance_repayments r
                INNER JOIN advances a ON a.id = r.advance_id
               WHERE r.organization_id = :o AND r.payrun_id = :p AND r.employee_id = :e
-                AND r.method = 'payroll_deduction' AND r.status = 'applied'",
+                AND r.method = 'payroll_deduction' AND r.status IN ('pending','applied')",
             [':o' => $orgId, ':p' => $payrunId, ':e' => $employeeId]
         );
         $items = []; $total = 0;
@@ -241,8 +249,10 @@ class AdvancePayrollIntegrationService
                 'amount'           => Money::format($cents),
             ]);
 
-            // 6-7, 9, 11. repayment row, advance update, audit logs, repaid notification
+            // 6. planned repayment row (status 'pending'). The advance balance/status, audit
+            //    logs and the "repaid" notification happen when the payrun is finalized.
             $this->advances->recordRepayment($adv, $cents, 'payroll_deduction', $userId, [
+                'defer'            => true, // planned only; AdvanceService::finalizeRecoveries() applies it
                 'payrun_id'        => $payrunId,
                 'payrun_detail_id' => $detailId,
                 'date'             => $periodEnd,

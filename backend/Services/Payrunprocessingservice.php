@@ -51,6 +51,13 @@ class PayrunProcessingService
             throw new \RuntimeException("Payrun #$payrunId is already finalised and cannot be reprocessed");
         }
 
+        // 1b. Salary advances waiting for a payrun (approved payroll advances, or
+        //     disbursed advances with recovery still to schedule) join this
+        //     payrun if it is a draft. Idempotent; never blocks processing.
+        if ($payrun->status === 'draft') {
+            (new AdvanceService())->attachWaiting($orgId, $payrunId, $userId);
+        }
+
         // 2. Load statutory rates from organization_configs
         $taxConfig = loadTaxConfig($orgId);
 
@@ -447,7 +454,11 @@ class PayrunProcessingService
         $taxableAllowance         = $allowances['taxable'];
         $nontaxableAllowance      = $allowances['nontaxable'];
 
-        $grossPay = $grossBeforeAllowances + $taxableAllowance + $nontaxableAllowance;
+        // Salary advance paid out through THIS payrun (AdvanceService::schedulePayout).
+        // Non-taxable: reaches gross/net only, never the PAYE base or NSSF/SHIF/Housing Levy.
+        $advancePayouts = $this->getAdvancePayoutsTotal($employeeId, $payrun->id);
+
+        $grossPay = $grossBeforeAllowances + $taxableAllowance + $nontaxableAllowance + $advancePayouts['total'];
 
         // --- Voluntary/org deductions ---
         // Salary advances (AdvancePayrollIntegrationService): on a draft payrun
@@ -499,6 +510,8 @@ class PayrunProcessingService
             'taxable_allowance'        => round($taxableAllowance, 2),
             'nontaxable_allowance'     => round($nontaxableAllowance, 2),
             'allowance_metadata'       => !empty($allowances['metadata']) ? json_encode($allowances['metadata']) : null,
+            'advance_payout'           => round($advancePayouts['total'], 2),
+            'advance_payout_metadata'  => !empty($advancePayouts['metadata']) ? json_encode($advancePayouts['metadata']) : null,
             'gross_pay'        => $calc['gross_pay'],
             'total_deductions' => $calc['total_deductions'],
             'net_pay'          => $calc['net_pay'],
@@ -583,6 +596,41 @@ class PayrunProcessingService
             'nontaxable' => round($nontaxable, 2),
             'metadata'   => $metadata,
         ];
+    }
+
+    /**
+     * Salary advances whose payout is scheduled in this payrun (payroll
+     * disbursement method). The advances table is the source of truth, so
+     * reprocessing always reflects exactly what is currently scheduled.
+     * 'disbursed'/'partially_recovered'/'repaid' are included so a payout stays
+     * visible after the payrun is finalized (finalizing flips scheduled -> disbursed).
+     *
+     * Returns ['total' => float, 'metadata' => [{advance_id, advance_number, amount}]]
+     */
+    private function getAdvancePayoutsTotal(int $employeeId, int $payrunId): array
+    {
+        $rows = DB::raw(
+            "SELECT id, advance_number, amount_approved
+               FROM advances
+              WHERE employee_id = :employee_id
+                AND payout_payrun_id = :payrun_id
+                AND disbursement_method = 'payroll'
+                AND status IN ('scheduled','disbursed','partially_recovered','repaid')",
+            [':employee_id' => $employeeId, ':payrun_id' => $payrunId]
+        );
+
+        $total = 0.0;
+        $metadata = [];
+        foreach ($rows as $row) {
+            $amount = (float) $row->amount_approved;
+            $total += $amount;
+            $metadata[] = [
+                'advance_id'     => (int) $row->id,
+                'advance_number' => $row->advance_number,
+                'amount'         => round($amount, 2),
+            ];
+        }
+        return ['total' => round($total, 2), 'metadata' => $metadata];
     }
 
     /**

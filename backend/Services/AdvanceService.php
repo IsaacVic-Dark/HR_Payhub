@@ -435,7 +435,7 @@ class AdvanceService
         $orgId  = $this->orgId($actor);
         $userId = $this->userId($actor);
 
-        return self::tx(function () use ($id, $input, $orgId, $userId) {
+        $approvedAdvance = self::tx(function () use ($id, $input, $orgId, $userId) {
             $adv = $this->lockOrFail($orgId, $id);
             if ($adv['status'] !== 'pending') {
                 throw new AdvanceException("Only pending advances can be approved (current status: {$adv['status']})", 409);
@@ -483,6 +483,12 @@ class AdvanceService
             );
             return $new;
         });
+
+        // Payroll-method advances: schedule the payout in the current draft
+        // payrun. Runs AFTER the approval commits, so a missing / reviewed
+        // payrun never blocks the approval itself - it just reports back.
+        $approvedAdvance['payroll_sync'] = $this->autoAttach($id, $actor);
+        return $approvedAdvance;
     }
 
     public function reject(int $id, array $input, array $actor): array
@@ -533,7 +539,8 @@ class AdvanceService
             ? ['draft', 'pending', 'validated', 'approved', 'scheduled']
             : ['pending', 'validated'];
 
-        return self::tx(function () use ($id, $input, $orgId, $userId, $allowed) {
+        $payoutPayrunId = 0;
+        $cancelled = self::tx(function () use ($id, $input, $orgId, $userId, $allowed, &$payoutPayrunId) {
             $adv = $this->lockOrFail($orgId, $id);
             if (!in_array($adv['status'], $allowed, true)) {
                 throw new AdvanceException(
@@ -551,6 +558,10 @@ class AdvanceService
                 'updated_by'          => $userId,
             ], 'id', $id);
             DB::raw("UPDATE advance_payrun_lines SET status = 'detached' WHERE advance_id = :id AND status = 'attached'", [':id' => $id]);
+            if (!empty($adv['payout_payrun_id'])) {
+                $payoutPayrunId = (int) $adv['payout_payrun_id'];
+                DB::table('advances')->update(['payout_payrun_id' => null], 'id', $id);
+            }
 
             $this->audit($adv, $userId, 'advance_cancelled', [
                 'old_status' => $adv['status'],
@@ -566,6 +577,11 @@ class AdvanceService
             );
             return $this->find($orgId, $id);
         });
+
+        if ($payoutPayrunId > 0) {
+            $this->refreshEmployee($orgId, $payoutPayrunId, (int) $cancelled['employee_id'], $userId);
+        }
+        return $cancelled;
     }
 
     // =========================================================================
@@ -577,7 +593,7 @@ class AdvanceService
         $orgId  = $this->orgId($actor);
         $userId = $this->userId($actor);
 
-        return self::tx(function () use ($id, $input, $orgId, $userId) {
+        $disbursed = self::tx(function () use ($id, $input, $orgId, $userId) {
             $adv = $this->lockOrFail($orgId, $id);
             // 17. Admin approval is required before disbursement.
             if (!in_array($adv['status'], ['approved', 'scheduled'], true)) {
@@ -585,6 +601,14 @@ class AdvanceService
             }
 
             $method = $input['disbursement_method'] ?? $adv['disbursement_method'];
+            // A payout already scheduled in a payrun is completed by finalizing
+            // that payrun (markPayoutsDisbursed); detach it first to pay another way.
+            if ($adv['status'] === 'scheduled' && !empty($adv['payout_payrun_id'])) {
+                throw new AdvanceException(
+                    'This advance is scheduled to be paid out in a payrun and is disbursed when that payrun is finalized. Detach the payout first to pay it another way.',
+                    409
+                );
+            }
             if (!in_array($method, AdvancePolicyService::DISBURSEMENT_METHODS, true)) {
                 throw new AdvanceException('Invalid disbursement method', 422, ['disbursement_method' => 'Invalid disbursement method']);
             }
@@ -655,6 +679,10 @@ class AdvanceService
             );
             return $new;
         });
+
+        // Disbursed -> recovery joins the current draft payrun (waits if none).
+        $disbursed['payroll_sync'] = $this->autoAttach($id, $actor);
+        return $disbursed;
     }
 
     // =========================================================================
@@ -822,6 +850,7 @@ class AdvanceService
             }
 
             DB::table('advance_payrun_lines')->update(['status' => 'detached'], 'id', (int) $lines[0]->id);
+            $this->skipPayrun($adv, $payrunId, $userId);
             $this->audit($adv, $userId, 'advance_recovery_detached', [
                 'payrun_id' => $payrunId,
                 'line_id' => (int) $lines[0]->id,
@@ -829,6 +858,510 @@ class AdvanceService
             ]);
             return (array) DB::raw('SELECT * FROM advance_payrun_lines WHERE id = :id', [':id' => (int) $lines[0]->id])[0];
         });
+    }
+
+    // =========================================================================
+    // 5b. Automatic payrun placement
+    //
+    //   payroll-method advance : approved -> scheduled (payout joins the current
+    //                            DRAFT payrun as a non-taxable earning) ->
+    //                            disbursed when that payrun is finalized.
+    //   any disbursed advance  : recovery instalment joins the current DRAFT
+    //                            payrun (post-tax deduction, existing flow).
+    //
+    //   No draft payrun        -> outcome "waiting_no_payrun": the advance waits
+    //                             and is picked up by attachWaiting() as soon as
+    //                             a draft payrun is created / processed.
+    //   Payrun already reviewed-> outcome "payrun_reviewed": nothing is changed;
+    //                             the admin can reopen it and retry, or leave the
+    //                             advance to join the next payrun.
+    // =========================================================================
+
+    /** Latest state of "the current payrun" for this organisation. */
+    private function currentPayrun(int $orgId): array
+    {
+        $cols = 'id, payrun_name, status, pay_period_start, pay_period_end';
+        $draft = DB::raw(
+            "SELECT $cols FROM payruns
+              WHERE organization_id = :o AND status = 'draft' AND deleted_at IS NULL
+                AND payrun_type = 'regular'
+              ORDER BY pay_period_start ASC, id ASC LIMIT 1",
+            [':o' => $orgId]
+        );
+        if (!empty($draft)) {
+            return ['state' => 'draft', 'payrun' => $draft[0]];
+        }
+        $reviewed = DB::raw(
+            "SELECT $cols FROM payruns
+              WHERE organization_id = :o AND status = 'reviewed' AND deleted_at IS NULL
+                AND payrun_type = 'regular'
+              ORDER BY pay_period_start ASC, id ASC LIMIT 1",
+            [':o' => $orgId]
+        );
+        if (!empty($reviewed)) {
+            return ['state' => 'reviewed', 'payrun' => $reviewed[0]];
+        }
+        return ['state' => 'none', 'payrun' => null];
+    }
+
+    /** Remember a payrun the admin detached from, so auto-attach never re-adds it. */
+    private function skipPayrun(array $adv, int $payrunId, int $userId): void
+    {
+        $meta = self::meta($adv);
+        $skip = array_map('intval', $meta['skip_payrun_ids'] ?? []);
+        if (!in_array($payrunId, $skip, true)) {
+            $skip[] = $payrunId;
+        }
+        $meta['skip_payrun_ids'] = $skip;
+        DB::table('advances')->update(['metadata' => json_encode($meta), 'updated_by' => $userId], 'id', (int) $adv['id']);
+    }
+
+    private function isSkipped(array $adv, int $payrunId): bool
+    {
+        return in_array($payrunId, array_map('intval', self::meta($adv)['skip_payrun_ids'] ?? []), true);
+    }
+
+    /** Recompute one employee's payrun row (and header totals). Never throws. */
+    private function refreshEmployee(int $orgId, int $payrunId, int $employeeId, int $userId): void
+    {
+        try {
+            (new PayrunProcessingService())->processSingleEmployee($orgId, $payrunId, $employeeId, $userId);
+        } catch (\Throwable $e) {
+            error_log("AdvanceService::refreshEmployee payrun {$payrunId} employee {$employeeId}: " . $e->getMessage());
+        }
+    }
+
+    /** True when a disbursed advance still has an instalment left to schedule. */
+    private function needsRecovery(array $adv): bool
+    {
+        if (!in_array($adv['status'], ['disbursed', 'partially_recovered'], true)) return false;
+        if (Money::toCents($adv['balance_remaining']) <= 0) return false;
+        $c = DB::raw(
+            "SELECT SUM(status = 'processed') AS done, SUM(status = 'attached') AS pending
+               FROM advance_payrun_lines WHERE advance_id = :a",
+            [':a' => (int) $adv['id']]
+        );
+        $done = (int) ($c[0]->done ?? 0);
+        $pending = (int) ($c[0]->pending ?? 0);
+        return ($done + $pending) < max(1, (int) $adv['number_of_recoveries']);
+    }
+
+    /** True when a payroll-method advance is approved but not yet scheduled. */
+    private function needsPayout(array $adv): bool
+    {
+        return $adv['disbursement_method'] === 'payroll'
+            && in_array($adv['status'], ['approved', 'scheduled'], true)
+            && empty($adv['payout_payrun_id']);
+    }
+
+    /**
+     * Place one advance into the current draft payrun (payout or recovery) and
+     * report what happened. Never throws: the caller's own action (approve /
+     * disburse) has already been committed.
+     */
+    public function autoAttach(int $id, array $actor): array
+    {
+        $orgId  = $this->orgId($actor);
+        $userId = $this->userId($actor);
+
+        try {
+            $adv = $this->find($orgId, $id);
+            if (!$adv) {
+                return ['outcome' => 'not_applicable', 'message' => 'Advance not found'];
+            }
+
+            $kind = $this->needsPayout($adv) ? 'payout' : ($this->needsRecovery($adv) ? 'recovery' : null);
+            if ($kind === null) {
+                return ['outcome' => 'not_applicable', 'message' => 'Nothing to add to a payrun for this advance'];
+            }
+            $what = $kind === 'payout' ? 'payout' : 'recovery';
+
+            $cur = $this->currentPayrun($orgId);
+            if ($cur['state'] === 'none') {
+                return [
+                    'outcome' => 'waiting_no_payrun',
+                    'kind'    => $kind,
+                    'message' => "No draft payrun exists yet. The advance {$what} will be added automatically when the next payrun is created.",
+                ];
+            }
+            if ($cur['state'] === 'reviewed') {
+                return [
+                    'outcome'     => 'payrun_reviewed',
+                    'kind'        => $kind,
+                    'payrun_id'   => (int) $cur['payrun']->id,
+                    'payrun_name' => $cur['payrun']->payrun_name,
+                    'message'     => "Payrun {$cur['payrun']->payrun_name} is already reviewed. Reopen it to add the advance {$what} now, or leave it to join the next payrun.",
+                    'actions'     => ['reopen_payrun', 'wait_for_next_payrun'],
+                ];
+            }
+
+            $payrun = $cur['payrun'];
+            if ($this->isSkipped($adv, (int) $payrun->id)) {
+                return [
+                    'outcome'   => 'waiting_no_payrun',
+                    'kind'      => $kind,
+                    'message'   => "This advance was detached from {$payrun->payrun_name}; it will join the next payrun.",
+                ];
+            }
+
+            if ($kind === 'payout') {
+                $this->schedulePayout($id, (int) $payrun->id, $userId, true);
+            } else {
+                $this->attachPayrun($id, ['payrun_id' => (int) $payrun->id], $actor);
+                $this->refreshEmployee($orgId, (int) $payrun->id, (int) $adv['employee_id'], $userId);
+            }
+
+            return [
+                'outcome'     => 'attached',
+                'kind'        => $kind,
+                'payrun_id'   => (int) $payrun->id,
+                'payrun_name' => $payrun->payrun_name,
+                'message'     => "Advance {$what} added to {$payrun->payrun_name}.",
+            ];
+        } catch (AdvanceException $e) {
+            return ['outcome' => 'not_applicable', 'message' => $e->getMessage()];
+        } catch (\Throwable $e) {
+            error_log("AdvanceService::autoAttach advance {$id}: " . $e->getMessage());
+            return ['outcome' => 'error', 'message' => 'The advance was saved but could not be added to the payrun yet. It will be retried when the payrun is processed.'];
+        }
+    }
+
+    /**
+     * Schedule a payroll-method advance as a payout in a DRAFT payrun.
+     * approved -> scheduled; the payrun row is recomputed unless $refresh is false
+     * (payrun processing recomputes every employee itself).
+     */
+    public function schedulePayout(int $id, int $payrunId, int $userId, bool $refresh = true): void
+    {
+        $orgId = 0;
+        $employeeId = 0;
+        self::tx(function () use ($id, $payrunId, $userId, &$orgId, &$employeeId) {
+            $row = DB::raw('SELECT organization_id FROM advances WHERE id = :id', [':id' => $id]);
+            if (empty($row)) throw new AdvanceException('Advance not found', 404);
+            $orgId = (int) $row[0]->organization_id;
+
+            $adv = $this->lockOrFail($orgId, $id);
+            if ($adv['disbursement_method'] !== 'payroll') {
+                throw new AdvanceException('Only payroll-method advances are paid out through a payrun', 409);
+            }
+            if (!in_array($adv['status'], ['approved', 'scheduled'], true)) {
+                throw new AdvanceException("Only approved advances can be scheduled for payout (current status: {$adv['status']})", 409);
+            }
+            $employeeId = (int) $adv['employee_id'];
+
+            $pr = DB::raw(
+                'SELECT id, status, payrun_name FROM payruns WHERE id = :id AND organization_id = :o AND deleted_at IS NULL',
+                [':id' => $payrunId, ':o' => $orgId]
+            );
+            if (empty($pr)) {
+                throw new AdvanceException('Payrun not found in this organization', 422, ['payrun_id' => 'Payrun not found']);
+            }
+            if ($pr[0]->status !== 'draft') {
+                throw new AdvanceException(
+                    "Payrun {$pr[0]->payrun_name} is '{$pr[0]->status}'. A payout can only be added to a draft payrun.",
+                    422,
+                    ['payrun_id' => 'Payrun must be draft']
+                );
+            }
+
+            DB::table('advances')->update([
+                'status'           => 'scheduled',
+                'payout_payrun_id' => $payrunId,
+                'updated_by'       => $userId,
+            ], 'id', $id);
+
+            $this->audit($adv, $userId, 'advance_payout_scheduled', [
+                'old_status'  => $adv['status'],
+                'new_status'  => 'scheduled',
+                'payrun_id'   => $payrunId,
+                'payrun_name' => $pr[0]->payrun_name,
+                'amount'      => $adv['amount_approved'],
+            ]);
+        });
+
+        if ($refresh) {
+            // Inside processSingleEmployee the advance is read back from the
+            // advances table, so a failure here leaves a consistent (scheduled)
+            // advance that the next payrun process will pick up.
+            $this->refreshEmployee($orgId, $payrunId, $employeeId, $userId);
+        }
+    }
+
+    /**
+     * Admin: take a scheduled payout out of its draft payrun. The advance goes
+     * back to "approved" and will NOT be auto-added to that payrun again; it
+     * joins the next draft payrun (or the admin attaches it elsewhere).
+     */
+    public function detachPayout(int $id, array $actor): array
+    {
+        $orgId  = $this->orgId($actor);
+        $userId = $this->userId($actor);
+        $payrunId = 0;
+
+        $result = self::tx(function () use ($id, $orgId, $userId, &$payrunId) {
+            $adv = $this->lockOrFail($orgId, $id);
+            if ($adv['status'] !== 'scheduled' || empty($adv['payout_payrun_id'])) {
+                throw new AdvanceException('This advance has no scheduled payout to detach', 409);
+            }
+            $payrunId = (int) $adv['payout_payrun_id'];
+            $pr = DB::raw('SELECT status FROM payruns WHERE id = :id AND organization_id = :o', [':id' => $payrunId, ':o' => $orgId]);
+            if (empty($pr) || $pr[0]->status !== 'draft') {
+                throw new AdvanceException('A payout can only be detached from a draft payrun. Reopen the payrun first.', 422);
+            }
+
+            DB::table('advances')->update(['status' => 'approved', 'payout_payrun_id' => null, 'updated_by' => $userId], 'id', $id);
+            $adv['status'] = 'approved';
+            $this->skipPayrun($adv, $payrunId, $userId);
+            $this->audit($adv, $userId, 'advance_payout_detached', ['payrun_id' => $payrunId]);
+            return $this->find($orgId, $id);
+        });
+
+        $this->refreshEmployee($orgId, $payrunId, (int) $result['employee_id'], $userId);
+        return $result;
+    }
+
+    /**
+     * Pick up every advance that is waiting for a payrun and place it in
+     * $payrunId (must be a draft). Idempotent. Called when a draft payrun is
+     * processed and when a new draft is created, so:
+     *   - advances approved while no draft existed join the next one,
+     *   - already-disbursed advances (e.g. disbursed before this feature
+     *     existed) start recovering from the current draft.
+     * Does not recompute employee rows: callers process the payrun afterwards.
+     *
+     * @return array ['payouts' => int, 'recoveries' => int]
+     */
+    public function attachWaiting(int $orgId, int $payrunId, int $userId): array
+    {
+        $out = ['payouts' => 0, 'recoveries' => 0];
+        $pr = DB::raw(
+            "SELECT id, status, payrun_type FROM payruns WHERE id = :id AND organization_id = :o AND deleted_at IS NULL",
+            [':id' => $payrunId, ':o' => $orgId]
+        );
+        if (empty($pr) || $pr[0]->status !== 'draft' || $pr[0]->payrun_type !== 'regular') {
+            return $out;
+        }
+
+        $actor = ['user' => ['id' => $userId, 'organization_id' => $orgId, 'user_type' => 'admin'], 'employee' => null];
+
+        $candidates = DB::raw(
+            "SELECT a.id FROM advances a
+               INNER JOIN employees e ON e.id = a.employee_id
+              WHERE a.organization_id = :o
+                AND a.status IN ('approved','scheduled','disbursed','partially_recovered')
+              ORDER BY a.id ASC",
+            [':o' => $orgId]
+        );
+
+        foreach ($candidates as $c) {
+            try {
+                $adv = $this->find($orgId, (int) $c->id);
+                if (!$adv || $this->isSkipped($adv, $payrunId)) continue;
+
+                if ($this->needsPayout($adv)) {
+                    $this->schedulePayout((int) $adv['id'], $payrunId, $userId, false);
+                    $out['payouts']++;
+                } elseif ($this->needsRecovery($adv)) {
+                    $has = DB::raw(
+                        "SELECT id FROM advance_payrun_lines WHERE advance_id = :a AND payrun_id = :p AND status IN ('attached','processed')",
+                        [':a' => (int) $adv['id'], ':p' => $payrunId]
+                    );
+                    // One instalment per payrun; also never stack a second
+                    // attached instalment while an earlier one is still pending.
+                    $pending = DB::raw(
+                        "SELECT id FROM advance_payrun_lines WHERE advance_id = :a AND status = 'attached'",
+                        [':a' => (int) $adv['id']]
+                    );
+                    if (!empty($has) || !empty($pending)) continue;
+                    // A payroll payout finalized in THIS payrun must not recover in it.
+                    if (!empty($adv['payout_payrun_id']) && (int) $adv['payout_payrun_id'] === $payrunId) continue;
+
+                    $this->attachPayrun((int) $adv['id'], ['payrun_id' => $payrunId], $actor);
+                    $out['recoveries']++;
+                }
+            } catch (\Throwable $e) {
+                // One bad advance must never block the payrun.
+                error_log("AdvanceService::attachWaiting advance {$c->id}: " . $e->getMessage());
+            }
+        }
+        return $out;
+    }
+
+    /**
+     * Called inside finalizePayrun's transaction: every advance whose payout was
+     * in this payrun is now paid, so it becomes "disbursed" and starts recovering.
+     *
+     * @return int number of advances disbursed
+     */
+    public function markPayoutsDisbursed(int $orgId, int $payrunId, int $userId): int
+    {
+        $pr = DB::raw('SELECT payrun_name, pay_period_end FROM payruns WHERE id = :id', [':id' => $payrunId]);
+        $name = $pr[0]->payrun_name ?? ('#' . $payrunId);
+        $date = $pr[0]->pay_period_end ?? date('Y-m-d');
+
+        $rows = DB::raw(
+            "SELECT id FROM advances
+              WHERE organization_id = :o AND payout_payrun_id = :p AND status = 'scheduled' FOR UPDATE",
+            [':o' => $orgId, ':p' => $payrunId]
+        );
+        $n = 0;
+        foreach ($rows as $r) {
+            $adv = $this->lockOrFail($orgId, (int) $r->id);
+            $approved = Money::toCents($adv['amount_approved']);
+            DB::table('advances')->update([
+                'amount_disbursed'       => Money::format($approved),
+                'disbursement_reference' => "Payrun: {$name}",
+                'disbursement_date'      => $date,
+                'balance_remaining'      => Money::format($approved - Money::toCents($adv['amount_recovered'])),
+                'status'                 => 'disbursed',
+                'disbursed_by'           => $userId,
+                'disbursed_at'           => $this->now(),
+                'updated_by'             => $userId,
+            ], 'id', (int) $adv['id']);
+
+            $this->audit($adv, $userId, 'advance_disbursed', [
+                'old_status'          => 'scheduled',
+                'new_status'          => 'disbursed',
+                'amount_disbursed'    => Money::format($approved),
+                'disbursement_method' => 'payroll',
+                'payrun_id'           => $payrunId,
+                'payrun_name'         => $name,
+            ]);
+            self::notify(
+                $orgId,
+                (int) $adv['employee_id'],
+                'Salary advance paid',
+                "Advance {$adv['advance_number']} of KES " . Money::display($approved) . " was paid out in {$name}.",
+                ['advance_id' => (int) $adv['id']]
+            );
+            $n++;
+        }
+        return $n;
+    }
+
+    /**
+     * Called inside finalizePayrun's transaction. Recoveries planned while the
+     * payrun was a draft ('pending' repayments) are now real: reduce the advance
+     * balance, move it to partially_recovered / repaid and notify the employee.
+     *
+     * @return int number of repayments applied
+     */
+    public function finalizeRecoveries(int $orgId, int $payrunId, int $userId): int
+    {
+        $rows = DB::raw(
+            "SELECT * FROM advance_repayments
+              WHERE organization_id = :o AND payrun_id = :p
+                AND method = 'payroll_deduction' AND status = 'pending'
+              ORDER BY id ASC FOR UPDATE",
+            [':o' => $orgId, ':p' => $payrunId]
+        );
+
+        $n = 0;
+        foreach ($rows as $rep) {
+            $adv   = $this->lockOrFail($orgId, (int) $rep->advance_id);
+            $cents = Money::toCents($rep->amount);
+            $balanceBefore = Money::toCents($adv['balance_remaining']);
+
+            if (!in_array($adv['status'], ['disbursed', 'partially_recovered'], true) || $cents <= 0 || $cents > $balanceBefore) {
+                DB::table('advance_repayments')->update([
+                    'status' => 'failed',
+                    'notes'  => trim(($rep->notes ?? '') . " [not applied at finalize: advance is '{$adv['status']}']"),
+                ], 'id', (int) $rep->id);
+                continue;
+            }
+
+            $newRecovered = Money::toCents($adv['amount_recovered']) + $cents;
+            $balanceAfter = Money::toCents($adv['amount_approved']) - $newRecovered;
+            $newStatus    = self::statusFor($balanceAfter, $newRecovered);
+
+            DB::table('advance_repayments')->update([
+                'status'        => 'applied',
+                'balance_after' => Money::format($balanceAfter),
+            ], 'id', (int) $rep->id);
+
+            DB::table('advances')->update([
+                'amount_recovered'  => Money::format($newRecovered),
+                'balance_remaining' => Money::format($balanceAfter),
+                'status'            => $newStatus,
+                'updated_by'        => $userId,
+            ], 'id', (int) $adv['id']);
+
+            $details = [
+                'old_status'       => $adv['status'],
+                'new_status'       => $newStatus,
+                'repayment_id'     => (int) $rep->id,
+                'amount'           => Money::format($cents),
+                'balance_before'   => Money::format($balanceBefore),
+                'balance_after'    => Money::format($balanceAfter),
+                'amount_recovered' => Money::format($newRecovered),
+                'payrun_id'        => $payrunId,
+            ];
+            $this->audit($adv, $userId, 'advance_recovery_processed', $details);
+
+            if ($newStatus === 'repaid') {
+                DB::raw("UPDATE advance_payrun_lines SET status = 'detached'
+                          WHERE advance_id = :id AND status = 'attached' AND payrun_id <> :p",
+                    [':id' => (int) $adv['id'], ':p' => $payrunId]);
+                $this->audit($adv, $userId, 'advance_repaid', $details);
+                self::notify(
+                    $orgId,
+                    (int) $adv['employee_id'],
+                    'Salary advance fully repaid',
+                    "Advance {$adv['advance_number']} has been fully repaid.",
+                    ['advance_id' => (int) $adv['id']]
+                );
+            } else {
+                $this->audit($adv, $userId, 'advance_partially_recovered', $details);
+            }
+            $n++;
+        }
+        return $n;
+    }
+
+    /**
+     * Everything advance-related on ONE employee's payrun row: the payout
+     * earning, recovery instalments (planned or applied) - for the payrun
+     * detail screen and the payslip.
+     */
+    public function payrunEmployeeSummary(int $orgId, int $payrunId, int $employeeId): array
+    {
+        $payouts = DB::raw(
+            "SELECT id, advance_number, amount_approved AS amount, status, reason
+               FROM advances
+              WHERE organization_id = :o AND employee_id = :e AND payout_payrun_id = :p
+                AND status IN ('scheduled','disbursed','partially_recovered','repaid')",
+            [':o' => $orgId, ':e' => $employeeId, ':p' => $payrunId]
+        );
+
+        $recoveries = DB::raw(
+            "SELECT l.id AS line_id, l.advance_id, a.advance_number, l.status AS line_status,
+                    l.scheduled_amount,
+                    r.amount AS recovered_amount, r.status AS repayment_status, r.balance_after,
+                    a.balance_remaining, a.number_of_recoveries
+               FROM advance_payrun_lines l
+               INNER JOIN advances a ON a.id = l.advance_id
+               LEFT JOIN advance_repayments r
+                      ON r.advance_id = l.advance_id AND r.payrun_id = l.payrun_id
+                     AND r.method = 'payroll_deduction' AND r.status IN ('pending','applied')
+              WHERE l.organization_id = :o AND l.employee_id = :e AND l.payrun_id = :p
+                AND l.status IN ('attached','processed','failed')
+              ORDER BY l.id ASC",
+            [':o' => $orgId, ':e' => $employeeId, ':p' => $payrunId]
+        );
+
+        $payoutTotal = 0.0;
+        foreach ($payouts as $p) $payoutTotal += (float) $p->amount;
+        $recoveryTotal = 0.0;
+        foreach ($recoveries as $r) {
+            if ($r->line_status === 'processed') $recoveryTotal += (float) ($r->recovered_amount ?? 0);
+        }
+
+        return [
+            'payouts'         => $payouts,
+            'recoveries'      => $recoveries,
+            'payout_total'    => round($payoutTotal, 2),
+            'recovery_total'  => round($recoveryTotal, 2),
+        ];
     }
 
     // =========================================================================
@@ -877,11 +1410,23 @@ class AdvanceService
             'balance_after'    => Money::format($balanceAfter),
             'repayment_date'   => $opts['date'] ?? date('Y-m-d'),
             'method'           => $method,
-            'status'           => 'applied',
+            // 'pending' = planned deduction in a draft payrun; finalizeRecoveries() applies it.
+            'status'           => !empty($opts['defer']) ? 'pending' : 'applied',
             'notes'            => $opts['notes'] ?? null,
             'recorded_by'      => $userId,
         ]);
         $repaymentId = (int) DB::lastInsertId();
+
+        if (!empty($opts['defer'])) {
+            // The advance itself is untouched until the payrun is finalized, so it
+            // never shows "repaid" for money that has not actually been recovered.
+            return [
+                'advance'        => $adv,
+                'repayment_id'   => $repaymentId,
+                'balance_before' => Money::format($balanceBefore),
+                'balance_after'  => Money::format($balanceAfter),
+            ];
+        }
 
         DB::table('advances')->update([
             'amount_recovered'  => Money::format($newRecovered),
@@ -1065,9 +1610,11 @@ class AdvanceService
 
         $rows = DB::raw(
             "SELECT a.*, CONCAT(e.firstname, ' ', e.surname) AS employee_name, e.employee_number,
-                    COALESCE(e.workemail, e.personalemail) AS employee_email
+                    COALESCE(e.workemail, e.personalemail) AS employee_email,
+                    po.payrun_name AS payout_payrun_name, po.status AS payout_payrun_status
                FROM advances a
                INNER JOIN employees e ON e.id = a.employee_id
+               LEFT JOIN payruns po ON po.id = a.payout_payrun_id
               WHERE $w
               ORDER BY a.created_at DESC, a.id DESC
               LIMIT $perPage OFFSET $offset",
@@ -1152,8 +1699,10 @@ class AdvanceService
     {
         $rows = DB::raw(
             "SELECT a.*, CONCAT(e.firstname, ' ', e.surname) AS employee_name, e.employee_number,
-                    COALESCE(e.workemail, e.personalemail) AS employee_email
+                    COALESCE(e.workemail, e.personalemail) AS employee_email,
+                    po.payrun_name AS payout_payrun_name, po.status AS payout_payrun_status
                FROM advances a INNER JOIN employees e ON e.id = a.employee_id
+               LEFT JOIN payruns po ON po.id = a.payout_payrun_id
               WHERE a.id = :id AND a.organization_id = :org",
             [':id' => $id, ':org' => $orgId]
         );

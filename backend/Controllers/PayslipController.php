@@ -36,6 +36,7 @@ class PayslipController
             pd.overtime_amount,
             pd.bonus_amount,
             pd.commission_amount,
+            pd.advance_payout,
             pd.gross_pay,
             pd.nssf,
             pd.shif,
@@ -105,6 +106,7 @@ class PayslipController
             'overtime_amount'   => (float) $ps->overtime_amount,
             'bonus_amount'      => (float) $ps->bonus_amount,
             'commission_amount' => (float) $ps->commission_amount,
+            'advance_payout'    => (float) ($ps->advance_payout ?? 0),
             'gross_pay'         => (float) $ps->gross_pay,
         ];
 
@@ -137,6 +139,7 @@ class PayslipController
             $ps->overtime_amount,
             $ps->bonus_amount,
             $ps->commission_amount,
+            $ps->advance_payout,
             $ps->gross_pay,
             $ps->nssf,
             $ps->shif,

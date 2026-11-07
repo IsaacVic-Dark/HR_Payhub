@@ -334,6 +334,10 @@ class PayrunDetailController
                 );
             }
 
+            // Salary advance payout + recovery lines for this employee's row.
+            $detail[0]->advances = (new \App\Services\AdvanceService())
+                ->payrunEmployeeSummary((int) $org_id, (int) $payrunId, (int) $detail[0]->employee_id);
+
             return responseJson(
                 success: true,
                 data: $detail[0],

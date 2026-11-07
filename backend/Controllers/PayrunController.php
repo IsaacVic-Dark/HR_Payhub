@@ -1277,6 +1277,11 @@ class PayrunController
                     $payrun_id
                 );
 
+                // Advance recoveries planned in this payrun become real now.
+                (new \App\Services\AdvanceService())->finalizeRecoveries((int) $org_id, (int) $payrun_id, (int) $currentUser['id']);
+                // Salary advances paid out through this payrun are now disbursed.
+                (new \App\Services\AdvanceService())->markPayoutsDisbursed((int) $org_id, (int) $payrun_id, (int) $currentUser['id']);
+
                 // Off-cycle / adjustment runs (e.g. "March 2026 Adjustment 01") finalize
                 // standalone — they must NOT spawn a further "next month" draft payrun.
                 if (isset($payrun->payrun_type) && $payrun->payrun_type === 'off_cycle') {
@@ -1441,6 +1446,16 @@ class PayrunController
             });
 
             $nextPayrunId = $transactionResult['next_payrun_id'];
+
+            // Advances waiting for a payrun (payouts approved while none was open, and
+            // recoveries of advances just disbursed) join the new draft right away.
+            if ($nextPayrunId !== null) {
+                try {
+                    (new \App\Services\AdvanceService())->attachWaiting((int) $org_id, (int) $nextPayrunId, (int) $currentUser['id']);
+                } catch (\Throwable $e) {
+                    error_log('Advance attachWaiting after finalize failed: ' . $e->getMessage());
+                }
+            }
             $skippedEmployees = $transactionResult['skipped'] ?? [];
 
             // ---- Auto-generate payslips for the finalized payrun ----
