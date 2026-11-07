@@ -250,20 +250,30 @@ function JobTitleField({
 }
 
 interface EmployeeDrawerAddProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   employees: ApiEmployeeType[];
   onEmployeeAdded?: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function EmployeeDrawerAdd({
   children,
   employees,
   onEmployeeAdded,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
 }: EmployeeDrawerAddProps) {
   const isMobile = useIsMobile();
-  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+  const [isDrawerOpenInternal, setIsDrawerOpenInternal] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const { user } = useAuth();
+  // Support both controlled (open/onOpenChange) and uncontrolled (trigger-wrapper) usage.
+  const isControlled = openProp !== undefined;
+  const isDrawerOpen = isControlled ? openProp : isDrawerOpenInternal;
+  const setIsDrawerOpen = isControlled
+    ? (v: boolean) => onOpenChangeProp?.(v)
+    : setIsDrawerOpenInternal;
 
   const [formData, setFormData] = React.useState({
     employee_number: "",
@@ -496,7 +506,9 @@ export function EmployeeDrawerAdd({
 
   return (
     <>
-      <div onClick={() => setIsDrawerOpen(true)}>{children}</div>
+      {!isControlled && (
+        <div onClick={() => setIsDrawerOpen(true)}>{children}</div>
+      )}
 
       <Drawer
         open={isDrawerOpen}
@@ -941,12 +953,22 @@ export function EmployeeDrawerAdd({
 export function EmployeeDrawer({
   employee,
   children,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
 }: {
   employee: Employee;
   children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const isMobile = useIsMobile();
-  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+  const [isDrawerOpenInternal, setIsDrawerOpenInternal] = React.useState(false);
+  // Support both controlled (open/onOpenChange) and uncontrolled (trigger-wrapper) usage.
+  const isControlled = openProp !== undefined;
+  const isDrawerOpen = isControlled ? openProp : isDrawerOpenInternal;
+  const setIsDrawerOpen = isControlled
+    ? (v: boolean) => onOpenChangeProp?.(v)
+    : setIsDrawerOpenInternal;
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return "N/A";
@@ -984,13 +1006,15 @@ export function EmployeeDrawer({
 
   return (
     <>
-      <div onClick={() => setIsDrawerOpen(true)}>
-        {children || (
-          <Button variant="link" className="p-0 h-auto">
-            {employee.name}
-          </Button>
-        )}
-      </div>
+      {!isControlled && (
+        <div onClick={() => setIsDrawerOpen(true)}>
+          {children || (
+            <Button variant="link" className="p-0 h-auto">
+              {employee.name}
+            </Button>
+          )}
+        </div>
+      )}
 
       <Drawer
         data-vaul-no-drag
@@ -1173,14 +1197,24 @@ export function EmployeeDrawer({
 export function EmployeeDrawerEdit({
   employee,
   children,
+  open: openProp,
+  onOpenChange: onOpenChangeProp,
 }: {
   employee: Employee;
   children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const isMobile = useIsMobile();
-  const [isDrawerOpen, setIsDrawerOpen] = React.useState(false);
+  const [isDrawerOpenInternal, setIsDrawerOpenInternal] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const { user } = useAuth();
+  // Support both controlled (open/onOpenChange) and uncontrolled (trigger-wrapper) usage.
+  const isControlled = openProp !== undefined;
+  const isDrawerOpen = isControlled ? openProp : isDrawerOpenInternal;
+  const setIsDrawerOpen = isControlled
+    ? (v: boolean) => onOpenChangeProp?.(v)
+    : setIsDrawerOpenInternal;
 
   const [formData, setFormData] = React.useState({
     firstname: employee.name.split(" ")[0] || "",
@@ -1418,7 +1452,9 @@ export function EmployeeDrawerEdit({
 
   return (
     <>
-      <div onClick={() => setIsDrawerOpen(true)}>{children}</div>
+      {!isControlled && (
+        <div onClick={() => setIsDrawerOpen(true)}>{children}</div>
+      )}
 
       <Drawer
         data-vaul-no-drag

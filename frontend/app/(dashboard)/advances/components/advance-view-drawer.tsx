@@ -25,6 +25,7 @@ import {
   formatKES,
   formatDate,
   formatDateTime,
+  isAdminUser,
 } from "@/services/api/advance";
 import {
   Wallet,
@@ -38,6 +39,7 @@ import {
   Banknote,
 } from "lucide-react";
 import { useAuth } from "@/lib/AuthContext";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 interface AdvanceViewDrawerProps {
@@ -179,7 +181,7 @@ function buildSteps(advance: AdvanceType): TimelineStep[] {
   // 3. Disbursement
   const disbursedStates = ["disbursed", "partially_recovered", "repaid", "reversed"];
   steps.push({
-    label: "Disbursement",
+    label: "Payout",
     state:
       s === "failed"
         ? "rejected"
@@ -191,7 +193,7 @@ function buildSteps(advance: AdvanceType): TimelineStep[] {
     timestamp: formatDateTime(advance.disbursed_at),
     sublabel:
       s === "failed"
-        ? "Disbursement failed — retry from the actions menu"
+        ? "Payout failed — retry from the actions menu"
         : advance.disbursement_date
         ? `${METHOD_LABELS[advance.disbursement_method]} · ${formatDate(advance.disbursement_date)}${
             advance.disbursement_reference ? ` · Ref ${advance.disbursement_reference}` : ""
@@ -292,7 +294,7 @@ function RepaymentsTab({ advance, active }: { advance: AdvanceType; active: bool
                 REPAY_STATUS_COLOR[r.status]
               )}
             >
-              {r.status}
+              {r.status === "pending" ? "Scheduled in payrun" : r.status === "applied" ? "Applied" : r.status}
             </span>
           </div>
           <div className="flex items-center justify-between mt-1 text-xs text-gray-500">
@@ -318,6 +320,21 @@ function RepaymentsTab({ advance, active }: { advance: AdvanceType; active: bool
 
 export function AdvanceViewDrawer({ open, onOpenChange, advance }: AdvanceViewDrawerProps) {
   const [tab, setTab] = useState("details");
+  const { user: authUser } = useAuth();
+  const [detaching, setDetaching] = useState(false);
+
+  const handleDetachPayout = async () => {
+    if (!advance || !authUser?.organization_id) return;
+    setDetaching(true);
+    const res = await advanceAPI.detachPayout(authUser.organization_id, advance.advance_id);
+    setDetaching(false);
+    if (res.success) {
+      toast.success("Payout detached. It will join the next draft payrun.");
+      onOpenChange(false);
+    } else {
+      toast.error(res.error ?? res.message ?? "Failed to detach payout");
+    }
+  };
 
   // Always land on Details when a different advance is opened.
   useEffect(() => {
@@ -401,14 +418,36 @@ export function AdvanceViewDrawer({ open, onOpenChange, advance }: AdvanceViewDr
                 </p>
               </div>
               <div className="p-3 bg-green-50 rounded-xl text-center">
-                <p className="text-xs text-green-600 font-medium">Recovered</p>
+                <p className="text-xs text-green-600 font-medium">Repaid</p>
                 <p className="text-base font-bold text-green-900 mt-0.5">{formatKES(recovered)}</p>
               </div>
             </div>
 
+            {/* Payout through payroll */}
+            {advance.payout_payrun_id != null && (
+              <Section title="Payroll Payout" icon={<Banknote className="h-4 w-4 text-gray-500" />}>
+                <div className="flex items-center justify-between text-sm">
+                  <div>
+                    <p className="font-medium">{advance.payout_payrun_name ?? `Payrun #${advance.payout_payrun_id}`}</p>
+                    <p className="text-xs text-gray-500 capitalize">
+                      Payrun {advance.payout_payrun_status ?? "—"}
+                      {advance.status === "scheduled" ? " · paid out when the payrun is finalized" : ""}
+                    </p>
+                  </div>
+                  {advance.status === "scheduled" &&
+                    advance.payout_payrun_status === "draft" &&
+                    isAdminUser(authUser?.user_type ?? "") && (
+                      <Button variant="outline" size="sm" disabled={detaching} onClick={handleDetachPayout}>
+                        {detaching ? "Detaching…" : "Detach"}
+                      </Button>
+                    )}
+                </div>
+              </Section>
+            )}
+
             {/* Recovery progress */}
             {showRecovery && (
-              <Section title="Recovery Progress" icon={<TrendingUp className="h-4 w-4 text-gray-500" />}>
+              <Section title="Repayment Progress" icon={<TrendingUp className="h-4 w-4 text-gray-500" />}>
                 <div className="space-y-1.5">
                   <div className="flex justify-between text-xs text-gray-500">
                     <span>{formatKES(recovered)} recovered</span>
@@ -459,13 +498,13 @@ export function AdvanceViewDrawer({ open, onOpenChange, advance }: AdvanceViewDr
                 <InfoRow label="Request date" value={formatDate(advance.request_date)} />
                 <InfoRow label="Amount requested" value={formatKES(requested)} />
                 <InfoRow label="Amount approved" value={formatKES(approved)} />
-                <InfoRow label="Amount disbursed" value={formatKES(disbursed)} />
+                <InfoRow label="Amount paid out" value={formatKES(disbursed)} />
                 <InfoRow
-                  label="Disbursement method"
+                  label="Payout method"
                   value={METHOD_LABELS[advance.disbursement_method] ?? advance.disbursement_method}
                 />
                 <InfoRow
-                  label="Recoveries"
+                  label="Repayment instalments"
                   value={
                     perRecovery != null
                       ? `${advance.number_of_recoveries} × ${formatKES(perRecovery)}`
@@ -473,7 +512,7 @@ export function AdvanceViewDrawer({ open, onOpenChange, advance }: AdvanceViewDr
                   }
                 />
                 <InfoRow
-                  label="Recovery window"
+                  label="Repayment window"
                   value={
                     advance.recovery_start_date
                       ? `${formatDate(advance.recovery_start_date)} – ${formatDate(advance.recovery_end_date)}`

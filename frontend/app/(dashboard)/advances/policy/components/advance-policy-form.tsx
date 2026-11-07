@@ -251,7 +251,7 @@ export function AdvancePolicyForm() {
       </Card>
 
       {/* Recovery */}
-      <Card title="Recovery" description="How advances are deducted from payroll.">
+      <Card title="Repayment" description="How advances are deducted from payroll.">
         <div className="grid grid-cols-2 gap-4 mb-2">
           <div className="space-y-1.5">
             <Label htmlFor="p_def_rec">Default recovery periods</Label>
@@ -335,7 +335,7 @@ export function AdvancePolicyForm() {
       </Card>
 
       {/* Requests + disbursement */}
-      <Card title="Requests & disbursement">
+      <Card title="Requests & payout">
         <p className="text-sm font-medium text-gray-800 mb-2">Allowed disbursement methods</p>
         <div className="flex flex-wrap gap-x-6 gap-y-2 mb-4">
           {ALL_METHODS.map((m) => (

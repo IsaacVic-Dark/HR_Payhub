@@ -1,3 +1,5 @@
+import type { PayrunEmployeeAdvances } from "@/services/api/advance";
+
 type PayrunDetailType = {
   id: number;
   payrun_id: number;
@@ -11,6 +13,11 @@ type PayrunDetailType = {
   taxable_reimbursement: number;
   nontaxable_reimbursement: number;
   reimbursement_metadata?: string | null;
+  // Salary advance paid out through this payrun (non-taxable)
+  advance_payout?: number;
+  advance_payout_metadata?: string | null;
+  // Payout + recovery lines (GET payrun detail)
+  advances?: PayrunEmployeeAdvances;
   // Statutory deductions
   nssf: number;
   shif: number;

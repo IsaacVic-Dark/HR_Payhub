@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useOpenOnNew } from "@/hooks/use-open-on-new";
 import { Filter, Search, Plus, Eye } from "lucide-react";
 import {
   advanceAPI,
@@ -10,6 +11,7 @@ import {
   ActionPayload,
   AdvancePolicySettings,
   RepaymentRecord,
+  PayrollSync,
   STATUS_CONFIG,
   METHOD_LABELS,
   ACTION_LABELS,
@@ -36,6 +38,7 @@ import { AdvanceAttachDialog } from "@/app/(dashboard)/advances/components/advan
 import { AdvanceViewDrawer } from "@/app/(dashboard)/advances/components/advance-view-drawer";
 import { AdvanceRequestForm } from "@/app/(dashboard)/myadvances/components/advance-request-form";
 import { toast } from "sonner";
+import { payrunAPI } from "@/services/api/payrun";
 import { DataTable, ColumnDef } from "@/components/table";
 import { useAuth } from "@/lib/AuthContext";
 import { cn } from "@/lib/utils";
@@ -96,6 +99,8 @@ const AdvanceTable: React.FC<AdvanceTableProps> = ({ onChanged }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [viewAdvance, setViewAdvance] = useState<AdvanceType | null>(null);
   const [createOpen, setCreateOpen] = useState(false);
+  // Opened by the header "+" quick-add menu (?new=1)
+  useOpenOnNew(() => setCreateOpen(true), isAdmin);
   const [attachOpen, setAttachOpen] = useState(false);
   const [attachAdvance, setAttachAdvance] = useState<AdvanceType | null>(null);
   const [repayments, setRepayments] = useState<RepaymentRecord[]>([]);
@@ -197,6 +202,33 @@ const AdvanceTable: React.FC<AdvanceTableProps> = ({ onChanged }) => {
     setDialogOpen(true);
   };
 
+  // Tell the admin where the advance landed; a reviewed payrun offers a one-click reopen.
+  const notifyPayrollSync = (sync: PayrollSync, advanceId: number) => {
+    if (sync.outcome === "attached" || sync.outcome === "waiting_no_payrun") {
+      toast.info(sync.message);
+    } else if (sync.outcome === "payrun_reviewed" && sync.payrun_id && orgId) {
+      toast.warning(sync.message, {
+        duration: 15000,
+        action: {
+          label: "Reopen payrun",
+          onClick: async () => {
+            const reopened = await payrunAPI.reopenPayrun(orgId, sync.payrun_id!);
+            if (!reopened.success) {
+              toast.error(reopened.error ?? "Failed to reopen payrun");
+              return;
+            }
+            const retry = await advanceAPI.autoAttach(orgId, advanceId);
+            if (retry.success && retry.data) toast.success(retry.data.message);
+            else toast.error(retry.error ?? "Payrun reopened, but the advance could not be added");
+            refreshAll();
+          },
+        },
+      });
+    } else if (sync.outcome === "error") {
+      toast.error(sync.message);
+    }
+  };
+
   const handleWorkflowAction = async (payload: ActionPayload) => {
     if (!selectedAdvance || !orgId) return;
     const id = selectedAdvance.advance_id;
@@ -240,6 +272,11 @@ const AdvanceTable: React.FC<AdvanceTableProps> = ({ onChanged }) => {
 
       if (res.success) {
         toast.success(res.message ?? "Action completed successfully");
+        // Approve / disburse also try to place the advance in the current draft payrun.
+        const sync = (res.data as any)?.payroll_sync as PayrollSync | undefined;
+        if (sync && (dialogAction === "approve" || dialogAction === "disburse")) {
+          notifyPayrollSync(sync, id);
+        }
         setDialogOpen(false);
         refreshAll();
       } else {

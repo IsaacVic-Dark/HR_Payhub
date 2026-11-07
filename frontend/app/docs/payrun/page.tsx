@@ -22,9 +22,18 @@ const NAV: NavGroup[] = [
     title: "Running a payrun",
     items: [
       { id: "creating", label: "Creating a payrun" },
-      { id: "reviewing", label: "Reviewing & editing" },
-      { id: "approvals", label: "Approval workflow" },
-      { id: "disbursement", label: "Disbursement" },
+      { id: "processing", label: "Processing & reviewing" },
+      { id: "reopening", label: "Reopening a payrun" },
+      { id: "finalizing", label: "Finalizing" },
+    ],
+  },
+  {
+    title: "Salary advances",
+    items: [
+      { id: "advances-overview", label: "How advances reach a payrun" },
+      { id: "advance-payouts", label: "Advance payouts" },
+      { id: "advance-recoveries", label: "Advance recoveries" },
+      { id: "advances-changes", label: "Reprocessing & reopening" },
     ],
   },
   {
@@ -86,6 +95,66 @@ function InlineCode({ children }: { children: React.ReactNode }) {
     <code className="font-mono text-[13px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-800 border border-gray-200">
       {children}
     </code>
+  );
+}
+
+/** Simple striped reference table: first column is emphasised. */
+function Table({
+  head,
+  rows,
+}: {
+  head: string[];
+  rows: React.ReactNode[][];
+}) {
+  return (
+    <div className="overflow-x-auto my-6">
+      <table className="w-full text-sm border border-gray-200 rounded-md overflow-hidden">
+        <thead>
+          <tr className="bg-gray-50 text-left text-xs uppercase tracking-wide text-gray-500">
+            {head.map((h) => (
+              <th key={h} className="px-4 py-2 font-semibold">
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-100">
+          {rows.map((r, i) => (
+            <tr key={i}>
+              {r.map((c, j) => (
+                <td
+                  key={j}
+                  className={`px-4 py-2 align-top ${j === 0 ? "font-medium text-gray-800" : "text-gray-500"}`}
+                >
+                  {c}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function Steps({ items }: { items: { t: string; d: React.ReactNode }[] }) {
+  return (
+    <ol className="space-y-3 my-6">
+      {items.map((s, i) => (
+        <li key={s.t} className="flex gap-3">
+          <span
+            className="shrink-0 w-6 h-6 rounded-full text-xs font-bold text-white flex items-center justify-center mt-0.5"
+            style={{ backgroundColor: PURPLE }}
+          >
+            {i + 1}
+          </span>
+          <div>
+            <p className="text-sm font-semibold text-gray-900">{s.t}</p>
+            <p className="text-sm text-gray-500 leading-relaxed">{s.d}</p>
+          </div>
+        </li>
+      ))}
+    </ol>
   );
 }
 
@@ -247,34 +316,33 @@ export default function PayrunDocsPage() {
           <p className="text-gray-500 text-[15px] leading-7 mb-10">
             A payrun is the process PayKe runs to turn a pay period into paid, compliant
             salaries. This page walks through what happens end to end — from opening a
-            payrun to statutory filing — so your finance and HR teams know exactly what to
+            payrun to finalizing it — including how salary advances are paid out and
+            recovered along the way, so your finance and HR teams know exactly what to
             expect at each step.
           </p>
 
           <Section id="introduction" title="Introduction">
             <p>
               Every payrun in PayKe moves through the same guarded pipeline, regardless of
-              company size: it is opened against a pay period, populated with the
-              employees due to be paid, calculated, reviewed, approved, and disbursed. Each
-              stage is logged, so you can always see who did what and when.
+              company size: it is opened against a pay period, calculated for every active
+              employee, reviewed, and finalized. Each stage records who did it and when, and
+              the change is written to the audit log.
             </p>
             <p>
-              This document describes the default flow. Approval steps and disbursement
-              channels can be configured per organisation in{" "}
-              <InlineCode>Settings → Payroll</InlineCode>.
+              Payrun amounts are built from the employee's salary and everything attached to
+              the period: overtime, bonuses and commission, allowances, reimbursements, loan
+              instalments, attendance deductions and salary advances. Statutory deductions are
+              then calculated from your organisation's approved tax configuration.
             </p>
           </Section>
 
           <Section id="lifecycle" title="Payrun lifecycle" eyebrow="Overview">
-            <p>A payrun always sits in exactly one of the following states:</p>
-            <div className="grid sm:grid-cols-2 gap-3 my-6">
+            <p>A payrun is always in exactly one of the following states:</p>
+            <div className="grid sm:grid-cols-3 gap-3 my-6">
               {[
-                { s: "Draft", d: "Created but not yet calculated. Employees can still be added or removed." },
-                { s: "Calculated", d: "Gross pay, deductions and net pay have been computed for every employee." },
-                { s: "In review", d: "Open for HR/finance to check line items before it moves to approval." },
-                { s: "Pending approval", d: "Waiting on one or more approvers, per your approval workflow." },
-                { s: "Approved", d: "Locked for editing. Queued for disbursement." },
-                { s: "Disbursed", d: "Payments have been sent and payslips generated." },
+                { s: "Draft", d: "Open for changes. It can be calculated again, and salary advances can still be added to it or removed from it." },
+                { s: "Reviewed", d: "Calculated and stamped with the reviewer and time. It can be reopened until payslips have been sent." },
+                { s: "Finalized", d: "Locked for good. Payslips are generated, advance payouts become paid and advance recoveries are applied." },
               ].map((row) => (
                 <div key={row.s} className="border border-gray-200 rounded-md p-3">
                   <p className="text-sm font-semibold text-gray-900 mb-1">{row.s}</p>
@@ -282,76 +350,211 @@ export default function PayrunDocsPage() {
                 </div>
               ))}
             </div>
-            <Callout kind="note" title="State changes are one-directional">
-              A payrun cannot move backwards once approved. To correct an error after
-              approval, PayKe creates a linked adjustment payrun rather than reopening the
-              original — this keeps every disbursed run auditable.
+            <CodeBlock>{`draft ──process / review──▶ reviewed ──finalize──▶ finalized
+  ▲                            │
+  └────────── reopen ──────────┘   (blocked once payslips have been sent)`}</CodeBlock>
+            <Callout kind="note" title="A finalized payrun is permanent">
+              A finalized payrun cannot be reopened or reprocessed. To correct an error after
+              finalizing, use an off-cycle adjustment payrun (or carry-forward for late
+              overtime) rather than editing history — this keeps every finalized run auditable.
             </Callout>
+            <p>
+              Payruns are either <strong>regular</strong> (the monthly run) or{" "}
+              <strong>off-cycle</strong> (an adjustment). Finalizing a regular payrun opens the
+              next month's draft automatically; finalizing an off-cycle run does not.
+            </p>
           </Section>
 
           <Section id="creating" title="Creating a payrun" eyebrow="Running a payrun">
-            <p>Opening a new payrun requires three inputs:</p>
+            <p>Opening a new payrun requires:</p>
             <ul className="list-disc pl-5 space-y-1.5">
-              <li>A <strong>pay period</strong> (e.g. monthly, bi-weekly) with start and end dates.</li>
-              <li>The <strong>employee scope</strong> — all active employees by default, or a filtered subset (e.g. one branch or department).</li>
-              <li>A <strong>pay date</strong>, which drives disbursement scheduling and payslip timestamps.</li>
+              <li>A <strong>name</strong>, for example “November 2026 Payrun”.</li>
+              <li>A <strong>pay period start</strong> and <strong>end</strong> date. The start cannot be after the end.</li>
             </ul>
             <p>
-              PayKe pulls each employee's current contract, salary structure, active
-              allowances, and any one-off adjustments (bonuses, loan deductions, leave
-              without pay) submitted for that period.
+              You rarely need to do this by hand. When a regular payrun is finalized, PayKe
+              creates the next month's draft for you (the same days, one month forward), and a
+              brand-new organisation gets its first payrun created automatically.
+            </p>
+            <p>
+              Every active employee (including those on probation) is included. For each one,
+              PayKe pulls the current salary and whatever has been attached to the period,
+              such as approved overtime, allowances, reimbursements, loan instalments,
+              attendance deductions and salary advances.
             </p>
           </Section>
 
-          <Section id="reviewing" title="Reviewing & editing">
+          <Section id="processing" title="Processing & reviewing">
             <p>
-              Once calculated, the payrun opens for review. Every line item is editable at
-              this stage — gross pay, allowances, deductions, and one-off adjustments — and
-              PayKe recalculates statutory deductions automatically whenever a figure
-              changes.
+              Processing calculates the payrun. Each employee is calculated in their own
+              transaction, so one employee's error never blocks the rest. Processing recalculates
+              gross pay, statutory deductions, other deductions and net pay, and then marks the
+              payrun as reviewed with your name and the time.
             </p>
-            <p>The review screen flags anything that needs attention before approval:</p>
+            <CodeBlock>{`POST /api/v1/organizations/{org_id}/payrun/{payrun_id}/process
+
+→ 200 OK
+  { "data": { "payrun_id": 7, "employee_count": 42, "total_gross_pay": 4120000,
+              "total_deductions": 910000, "total_net_pay": 3210000,
+              "status": "reviewed", "errors": [] } }
+
+→ 207 Multi-Status when some employees failed; their errors are listed in "errors".`}</CodeBlock>
+            <p>
+              Processing needs an approved, active tax configuration (NSSF, SHIF, Housing Levy
+              and personal relief). Without one it stops with an error, and a finalized payrun
+              cannot be processed at all.
+            </p>
+            <Table
+              head={["Action", "Who can do it"]}
+              rows={[
+                ["Process (calculate)", "Admin, payroll manager, payroll officer"],
+                ["Review (draft → reviewed)", "Admin, payroll manager, HR manager, payroll officer"],
+              ]}
+            />
+            <p>
+              Reviewed and finalized payruns are locked against direct edits. To change a
+              reviewed payrun, reopen it first.
+            </p>
+          </Section>
+
+          <Section id="reopening" title="Reopening a payrun">
+            <p>
+              A reviewed payrun can be sent back to draft — for example to add late overtime,
+              fix an input, or let a newly approved salary advance join the run. Reopening only
+              changes the status and clears the review stamp. It does not recalculate anything,
+              so process the payrun again afterwards.
+            </p>
+            <CodeBlock>{`POST /api/v1/organizations/{org_id}/payrun/{payrun_id}/reopen
+{ "reason": "Late overtime approved" }`}</CodeBlock>
             <ul className="list-disc pl-5 space-y-1.5">
-              <li>Employees with no bank or mobile money details on file.</li>
-              <li>Net pay that swings more than 20% from the prior period.</li>
-              <li>Missing statutory numbers (PIN, NSSF, SHIF) required for filing.</li>
+              <li>Only reviewed payruns can be reopened.</li>
+              <li>It is blocked once any payslip for the payrun has been sent to an employee.</li>
+              <li>Who can reopen: admin, payroll manager, HR manager, payroll officer.</li>
             </ul>
           </Section>
 
-          <Section id="approvals" title="Approval workflow">
+          <Section id="finalizing" title="Finalizing">
             <p>
-              Approval routing is configurable, but most organisations use a two-step
-              chain: a <strong>reviewer</strong> (typically HR) confirms the numbers, then
-              an <strong>approver</strong> (typically finance or a director) authorises
-              disbursement. Both actions are timestamped and tied to the approving user.
+              Finalizing locks the payrun. Only a reviewed payrun can be finalized, by an
+              admin, payroll manager or finance manager. The first three steps below happen in
+              one transaction, so either all of them are applied or none of them are. The last
+              two follow straight after, and a problem there does not undo the finalize:
             </p>
-            <Callout kind="warning" title="Approval is final">
-              Approving a payrun locks every line item. If an error is found after
-              approval but before disbursement, an approver can cancel the run, which
-              returns it to draft — disbursed runs cannot be cancelled and require an
-              adjustment payrun instead.
+            <Steps
+              items={[
+                { t: "The payrun is locked", d: "Its status becomes finalized and the finalizer and time are recorded." },
+                { t: "Salary advances are settled", d: "Advance recoveries planned in this payrun are applied to each advance's balance, and advance payouts in this payrun become paid." },
+                { t: "The next draft is opened", d: "For a regular payrun, next month's draft is created." },
+                { t: "Waiting advances move on", d: "Advances waiting for a payrun join the new draft straight away." },
+                { t: "Payslips are generated", d: "A payslip is created for every employee in the payrun, ready to be sent." },
+              ]}
+            />
+            <CodeBlock>{`POST /api/v1/organizations/{org_id}/payrun/{payrun_id}/finalize`}</CodeBlock>
+            <p>
+              Payments themselves are made outside PayKe — PayKe calculates what each employee
+              is owed and produces the payslips. Finalizing does not send money.
+            </p>
+          </Section>
+
+          <Section id="advances-overview" title="How advances reach a payrun" eyebrow="Salary advances">
+            <p>
+              Salary advances touch a payrun in two ways. A <strong>payout</strong> adds money to
+              an employee's pay when the advance's method is Payroll. A <strong>recovery</strong>{" "}
+              takes an instalment back as a deduction. Both are placed in a draft payrun
+              automatically, and both only become final when the payrun is finalized.
+            </p>
+            <Table
+              head={["Payrun event", "What happens to advances"]}
+              rows={[
+                ["A draft payrun is processed", "Advances waiting for a payrun are attached to it first. Then each employee is calculated with their payout included in gross pay and their recovery planned as a deduction."],
+                ["The payrun is reviewed", "Nothing changes. Recalculating a reviewed payrun keeps the advance deductions exactly as planned."],
+                ["The payrun is reopened", "The advance ledger is untouched. Advances approved in the meantime can now be added; process again to recalculate."],
+                ["The payrun is finalized", "Payouts become paid (the advance is Paid Out). Planned recoveries are applied and the advance balance and status update."],
+                ["The next draft is created", "Advances still waiting for a payrun join it right away."],
+              ]}
+            />
+            <Callout kind="note" title="Only draft payruns can take advances">
+              A payout or recovery can only be added to, or removed from, a draft regular
+              payrun. If the current payrun is already reviewed, the admin is offered a{" "}
+              <em>Reopen payrun</em> button when approving an advance, or the advance simply
+              joins the next payrun. The full advance workflow is in the{" "}
+              <a href="/docs/advance" className="font-medium underline" style={{ color: PURPLE }}>
+                salary advances documentation
+              </a>
+              .
             </Callout>
           </Section>
 
-          <Section id="disbursement" title="Disbursement">
+          <Section id="advance-payouts" title="Advance payouts">
             <p>
-              Approved payruns are queued for disbursement on the scheduled pay date.
-              PayKe supports batch bank transfers and mobile money payout, and will retry
-              individual failed payments (e.g. an invalid account number) without blocking
-              the rest of the batch.
+              When a payroll-method advance is approved, its payout is scheduled in the current
+              draft payrun. On that employee's payrun row it appears as a{" "}
+              <strong>Salary Advance Payout</strong> earning, and the payrun detail drawer lists
+              it under <em>Salary Advances</em> as “Paid out in this payrun”.
             </p>
-            <CodeBlock>{`POST /api/payruns/{id}/disburse
-{
-  "channel": "bank_batch",   // or "mobile_money"
-  "pay_date": "2026-08-31"
-}
+            <ul className="list-disc pl-5 space-y-1.5">
+              <li>The payout is added to <strong>gross pay and net pay</strong>, so the employee receives it with their normal pay.</li>
+              <li>It is <strong>not taxable</strong>. PAYE, NSSF, SHIF and Housing Levy are unaffected.</li>
+              <li>It shows on the employee's payslip as its own line.</li>
+              <li>When the payrun is finalized the advance becomes Paid Out, with the reference “Payrun: &lt;payrun name&gt;” and the last day of the pay period as its date.</li>
+            </ul>
+            <p>
+              An advance is never recovered in the same payrun that pays it out. Its first
+              instalment comes in the next payrun.
+            </p>
+          </Section>
 
-→ 202 Accepted
-  { "status": "processing", "batch_id": "pr_8f21c3" }`}</CodeBlock>
+          <Section id="advance-recoveries" title="Advance recoveries">
             <p>
-              Disbursement status updates land on the payrun timeline in real time, and
-              any failed line items are surfaced individually for a manual retry.
+              Once an advance is Paid Out, one repayment instalment is placed in each upcoming
+              draft payrun until the balance is cleared. When the payrun is calculated, PayKe
+              works out the instalment for every employee:
             </p>
+            <Steps
+              items={[
+                { t: "Project net pay", d: "Net pay is calculated before the advance, from gross pay, statutory deductions, loans and attendance deductions." },
+                { t: "Cap the instalment", d: "The instalment is limited so net pay stays at or above the minimum set in the advance policy. With partial recovery allowed, the shortfall stays on the balance for a later payrun." },
+                { t: "Add the deduction", d: "The recovery is added as a deduction line on the payslip and in total deductions. It is a post-tax deduction: taxable income and statutory deductions do not change." },
+              ]}
+            />
+            <Callout kind="note" title="Planned in draft, applied at finalize">
+              While the payrun is a draft the recovery is only <em>planned</em>: the payslip
+              shows the deduction and the payrun detail drawer says the advance balance updates
+              when the payrun is finalized. Finalizing applies it, moving the advance to
+              Repaying or Fully repaid.
+            </Callout>
+            <p>
+              If the policy forbids partial recovery and the full instalment would push net pay
+              below the minimum, the calculation for that employee stops with an error (the
+              payrun still processes everyone else, and returns a 207 listing the failures).
+              If an employee's net pay is already at or below the minimum, that instalment is
+              skipped and an audit entry records why.
+            </p>
+          </Section>
+
+          <Section id="advances-changes" title="Reprocessing & reopening">
+            <p>
+              You can safely calculate a draft payrun more than once. Each time, PayKe first
+              undoes what the payrun previously planned for advances — planned repayments are
+              marked reversed and their lines return to attached — and then recalculates from
+              scratch, so nothing is ever counted twice.
+            </p>
+            <Table
+              head={["Situation", "What PayKe does"]}
+              rows={[
+                ["Process a draft payrun again", "Planned advance recoveries are rolled back and recalculated. Payouts are re-read from the advances currently scheduled in this payrun."],
+                ["Process a reviewed payrun again", "The advance ledger is not touched. Already-planned recoveries are carried onto the payslip so they are not dropped."],
+                ["Advance approved while the payrun is reviewed", "Nothing is changed. Reopen the payrun and the advance is added, or leave it for the next payrun."],
+                ["Admin detaches a payout", "The employee's row is recalculated straight away, and that advance will not be added to this payrun automatically again."],
+                ["Admin detaches a recovery instalment", "The line is removed and that advance will not be added to this payrun automatically again. The deduction drops out of the employee's row the next time the payrun is processed."],
+                ["Advance cancelled", "A scheduled payout is removed and the employee's row recalculated. Attached recovery lines are detached and drop out the next time the payrun is processed."],
+              ]}
+            />
+            <Callout kind="warning" title="After finalizing, advance deductions are final">
+              A finalized payrun cannot be reprocessed, so its payouts and recoveries cannot be
+              rolled back. If an advance deduction was wrong, record the correction against the
+              advance (for example a manual repayment) or use an off-cycle adjustment payrun.
+            </Callout>
           </Section>
 
           <Section id="statutory" title="Statutory deductions" eyebrow="Compliance">
@@ -392,11 +595,15 @@ export default function PayrunDocsPage() {
               Reliefs (personal relief, insurance relief, mortgage interest) are applied
               per employee based on what's on file in their profile.
             </p>
+            <p>
+              Salary advances do not change any of these figures. An advance payout is
+              non-taxable, and an advance recovery is deducted after tax.
+            </p>
           </Section>
 
           <Section id="filing" title="Filing & remittance">
             <p>
-              After disbursement, PayKe generates the statutory returns for the period —
+              After the payrun is finalized, PayKe generates the statutory returns for the period —
               PAYE (P10), NSSF, and SHIF schedules — in the format required for submission.
               Remittance itself is a finance-team action: PayKe prepares the figures and
               filing files, and marks the period as filed once you confirm submission.
@@ -405,9 +612,15 @@ export default function PayrunDocsPage() {
 
           <Section id="payslips" title="Payslips & notifications" eyebrow="Reference">
             <p>
-              Payslips are generated the moment a payrun is disbursed and are immediately
-              available to employees in the portal. Each employee is notified by email
-              (and SMS, if enabled) with a link to their payslip for that period.
+              Payslips are generated for every employee the moment a payrun is finalized.
+              Sending them to employees is a separate step, done one at a time or in bulk, and
+              a payrun can no longer be reopened once any payslip has been sent.
+            </p>
+            <p>
+              Each payslip itemises the employee's earnings and deductions. A salary advance
+              payout appears as its own earning, and an advance recovery as a deduction. The
+              itemised deductions behind a payrun line (PAYE, NSSF, SHIF, Housing Levy, loans,
+              advances and attendance deductions) can also be listed for each employee row.
             </p>
           </Section>
 
@@ -415,22 +628,51 @@ export default function PayrunDocsPage() {
             <div className="space-y-4">
               <div>
                 <p className="font-semibold text-gray-900 text-sm mb-1">
-                  A payment failed during disbursement
+                  Processing says no approved tax configuration was found
                 </p>
                 <p>
-                  Open the payrun's disbursement tab — failed items are listed with a
-                  reason (e.g. invalid account, insufficient float). Fix the underlying
-                  detail on the employee's profile, then retry just that line item.
+                  An admin needs to set up and approve the NSSF rate, SHIF rate, Housing Levy
+                  rate and personal relief in the organisation's tax configuration, then
+                  process again.
                 </p>
               </div>
               <div>
                 <p className="font-semibold text-gray-900 text-sm mb-1">
-                  Approved payrun has an error
+                  Processing finished but some employees show errors
                 </p>
                 <p>
-                  If it hasn't disbursed yet, an approver can cancel it back to draft. If
-                  it has already disbursed, create an adjustment payrun linked to the
-                  original rather than editing history.
+                  The payrun returns a 207 with each failure listed. Fix the cause for that
+                  employee and process again. One common cause is a salary advance recovery
+                  that would drop net pay below the minimum while partial recovery is switched
+                  off in the advance policy.
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm mb-1">
+                  I can't reopen a payrun
+                </p>
+                <p>
+                  Only reviewed payruns can be reopened, and not once a payslip has been sent.
+                  A finalized payrun can never be reopened. Use an off-cycle adjustment instead.
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm mb-1">
+                  An advance is not in the payrun
+                </p>
+                <p>
+                  The payrun may already be reviewed (reopen it, then process again), there may
+                  be no draft payrun yet (the advance joins the next one automatically), or an
+                  admin may have detached the advance from this payrun.
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm mb-1">
+                  The advance balance has not changed after processing
+                </p>
+                <p>
+                  Expected. Recoveries are planned while the payrun is a draft and applied
+                  when it is finalized.
                 </p>
               </div>
             </div>
@@ -442,15 +684,42 @@ export default function PayrunDocsPage() {
                 <p className="font-semibold text-gray-900 text-sm mb-1">
                   Can I run payroll for a subset of employees?
                 </p>
-                <p>Yes — scope a payrun to a branch, department, or a manual selection when creating it.</p>
+                <p>
+                  A regular payrun covers every active employee. Use an off-cycle adjustment
+                  payrun for one-off corrections.
+                </p>
               </div>
               <div>
                 <p className="font-semibold text-gray-900 text-sm mb-1">
-                  Who can approve a payrun?
+                  Who can finalize a payrun?
+                </p>
+                <p>Admins, payroll managers and finance managers.</p>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm mb-1">
+                  Is a salary advance payout taxed?
                 </p>
                 <p>
-                  Any user with the Approver role for that organisation. Roles and
-                  approval chains are managed in <InlineCode>Settings → Roles</InlineCode>.
+                  No. It is added to gross and net pay only, and never to taxable income.
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm mb-1">
+                  Can an advance be paid out and repaid in the same payrun?
+                </p>
+                <p>
+                  No. The payout comes in one payrun and the first repayment instalment in the
+                  next.
+                </p>
+              </div>
+              <div>
+                <p className="font-semibold text-gray-900 text-sm mb-1">
+                  Can I reprocess a payrun?
+                </p>
+                <p>
+                  Yes, as long as it is not finalized. Reprocessing a draft rolls back and
+                  recalculates planned advance recoveries. Reprocessing a reviewed payrun keeps
+                  them as they are.
                 </p>
               </div>
             </div>

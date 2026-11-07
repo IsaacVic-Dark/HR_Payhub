@@ -46,6 +46,14 @@ type MinimalEmployeeType = {
   personalemail: string;
 };
 
+/** with_salary=1 — minimal shape + salary and the maximum salary advance the employee may request. */
+type MinimalEmployeeWithSalaryType = MinimalEmployeeType & {
+  workemail: string | null;
+  base_salary: number;
+  /** Lower of the policy's maximum_amount and max_percentage_of_basic (etc). null = no advance policy configured. */
+  max_advance: number | null;
+};
+
 interface ApiResponse<T = any> {
   success: boolean;
   data?: T;
@@ -76,6 +84,9 @@ interface EmployeeFilters {
   // shape instead of the full EmployeeType — use getEmployeesMinimal() below
   // rather than passing this directly to getEmployees().
   with_minimal?: 0 | 1;
+  // Like with_minimal, plus base_salary + max_advance. Admin / HR / payroll roles only —
+  // use getEmployeesWithSalary() below.
+  with_salary?: 0 | 1;
 }
 
 interface CreateEmployeeData {
@@ -247,6 +258,32 @@ class EmployeeAPI {
       });
 
       return this.handleResponse<EmployeeType[]>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch employees",
+      };
+    }
+  }
+
+  // Picker list including salary — { ...minimal, workemail, base_salary, max_advance }
+  // GET /organizations/{org_id}/employees?with_salary=1  (admin / HR / payroll only)
+  async getEmployeesWithSalary(
+    organizationId: number,
+    filters: Omit<EmployeeFilters, "with_minimal" | "with_salary"> = {}
+  ): Promise<ApiResponse<MinimalEmployeeWithSalaryType[]>> {
+    try {
+      const queryParams = this.buildQueryParams({ ...filters, with_salary: 1 });
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees${queryParams ? `?${queryParams}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<MinimalEmployeeWithSalaryType[]>(response);
     } catch (error) {
       return {
         success: false,
@@ -508,6 +545,7 @@ export const employeeAPI = new EmployeeAPI();
 export type {
   EmployeeType,
   MinimalEmployeeType,
+  MinimalEmployeeWithSalaryType,
   EmployeeFilters,
   ApiResponse,
   EmployeesResponseData,

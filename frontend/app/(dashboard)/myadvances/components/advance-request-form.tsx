@@ -15,7 +15,7 @@ import {
   METHOD_LABELS,
   formatKES,
 } from "@/services/api/advance";
-import { employeeAPI, type MinimalEmployeeType } from "@/services/api/employee";
+import { employeeAPI, type MinimalEmployeeWithSalaryType } from "@/services/api/employee";
 
 interface AdvanceRequestFormProps {
   /** Org policy settings — falls back to sensible defaults when null. */
@@ -44,7 +44,9 @@ export function AdvanceRequestForm({
   const isEdit = !!advance;
 
   const [submitting, setSubmitting] = useState<"draft" | "submit" | null>(null);
-  const [employees, setEmployees] = useState<MinimalEmployeeType[]>([]);
+  const [employees, setEmployees] = useState<MinimalEmployeeWithSalaryType[]>([]);
+  // The signed-in employee's own cap (employee mode); admins read it from the picked employee.
+  const [ownMax, setOwnMax] = useState<number | null>(null);
   const [employeesLoading, setEmployeesLoading] = useState(adminMode);
 
   // "" for method / recoveries means "use the policy default" (policy may load late).
@@ -59,12 +61,21 @@ export function AdvanceRequestForm({
   useEffect(() => {
     if (!adminMode || !orgId) return;
     employeeAPI
-      .getEmployeesMinimal(orgId)
+      .getEmployeesWithSalary(orgId)
       .then((res) => {
         if (res.success && Array.isArray(res.data)) setEmployees(res.data);
       })
       .finally(() => setEmployeesLoading(false));
   }, [adminMode, orgId]);
+
+  // Employees see their own cap; no employee picker.
+  useEffect(() => {
+    if (adminMode || !orgId || !ownEmployeeId) return;
+    advanceAPI.getEmployeeBalance(orgId, ownEmployeeId).then((res) => {
+      const v = res.success ? (res.data as any)?.max_eligible_amount : null;
+      setOwnMax(v != null ? Number(v) : null);
+    });
+  }, [adminMode, orgId, ownEmployeeId]);
 
   const methods = p.disbursement_methods.length
     ? p.disbursement_methods
@@ -86,8 +97,16 @@ export function AdvanceRequestForm({
   const amountNum = Number(form.amount);
   const perRecovery = amountNum > 0 ? amountNum / effectiveRecoveries : null;
 
-  const empName = (e: MinimalEmployeeType) =>
+  const empName = (e: MinimalEmployeeWithSalaryType) =>
     [e.firstname, e.middlename, e.surname].filter(Boolean).join(" ");
+
+  // Maximum for THIS employee: the lower of max_percentage_of_basic and the policy's
+  // maximum_amount (the backend already takes the minimum). Falls back to the policy maximum.
+  const selectedEmployee = adminMode
+    ? employees.find((e) => String(e.id) === form.employee_id) ?? null
+    : null;
+  const employeeMax = adminMode ? selectedEmployee?.max_advance ?? null : ownMax;
+  const maxAmount = employeeMax != null ? Math.min(employeeMax, p.maximum_amount) : p.maximum_amount;
 
   /** Returns an error message, or null when valid. Drafts only need an amount. */
   const validate = (asDraft: boolean): string | null => {
@@ -96,8 +115,8 @@ export function AdvanceRequestForm({
     if (asDraft) return null;
     if (amountNum < p.minimum_amount)
       return `Minimum advance is ${formatKES(p.minimum_amount)}.`;
-    if (amountNum > p.maximum_amount)
-      return `Maximum advance is ${formatKES(p.maximum_amount)}.`;
+    if (amountNum > maxAmount)
+      return `Maximum advance${adminMode || employeeMax != null ? " for this employee" : ""} is ${formatKES(maxAmount)}.`;
     if (p.require_reason && !form.reason.trim()) return "A reason is required.";
     return null;
   };
@@ -184,6 +203,7 @@ export function AdvanceRequestForm({
               {employees.map((e) => (
                 <option key={e.id} value={e.id}>
                   {empName(e)}
+                  {e.max_advance != null ? ` — max ${formatKES(e.max_advance)}` : ""}
                 </option>
               ))}
             </select>
@@ -196,26 +216,35 @@ export function AdvanceRequestForm({
         <Label htmlFor="adv_amount">
           Amount (KES) *
           <span className="ml-2 text-xs text-muted-foreground font-normal">
-            {formatKES(p.minimum_amount)} – {formatKES(p.maximum_amount)}
+            {formatKES(p.minimum_amount)} – {formatKES(maxAmount)}
           </span>
         </Label>
         <Input
           id="adv_amount"
           type="number"
           min={p.minimum_amount}
-          max={p.maximum_amount}
+          max={maxAmount}
           step="0.01"
           placeholder="e.g. 20000"
           value={form.amount}
           onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
           disabled={busy}
         />
+        {(selectedEmployee || (!adminMode && ownMax != null)) && (
+          <p className="text-xs text-muted-foreground">
+            {selectedEmployee
+              ? `${empName(selectedEmployee)}: basic salary ${formatKES(selectedEmployee.base_salary)}, `
+              : "Your "}
+            maximum advance {formatKES(maxAmount)}
+            {p.max_percentage_of_basic != null ? ` (${p.max_percentage_of_basic}% of basic, capped at ${formatKES(p.maximum_amount)})` : ""}.
+          </p>
+        )}
       </div>
 
       {/* Recoveries + method */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="adv_recoveries">Recovery periods *</Label>
+          <Label htmlFor="adv_recoveries">Repayment periods *</Label>
           <select
             id="adv_recoveries"
             className={selectClass}
@@ -231,7 +260,7 @@ export function AdvanceRequestForm({
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="adv_method">Disbursement method *</Label>
+          <Label htmlFor="adv_method">Payout method *</Label>
           <select
             id="adv_method"
             className={selectClass}

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useOpenOnNew } from "@/hooks/use-open-on-new";
 import { Filter, Search, Plus, Eye, Trash2, AlertTriangle } from "lucide-react";
 import {
   loanAPI,
@@ -371,6 +372,9 @@ const LoanTable: React.FC = () => {
 
   // Only show "Create Loan" to privileged roles
   const canCreateLoan = ["admin", "hr_manager", "payroll_manager"].includes(userType);
+
+  // Opened by the header "+" quick-add menu (?new=1)
+  useOpenOnNew(() => setCreateDialogOpen(true), canCreateLoan);
 
   const empName = (e: { firstname: string; middlename?: string; surname: string }) =>
     [e.firstname, e.middlename, e.surname].filter(Boolean).join(" ");

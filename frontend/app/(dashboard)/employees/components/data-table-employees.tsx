@@ -23,6 +23,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useDrawerParams } from "@/hooks/use-drawer-params";
 
 type DrawerEmployeeStatus =
   | "active"
@@ -64,6 +65,13 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
   const [employees, setEmployees] = useState<EmployeeType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // ── URL drawer state ──────────────────────────────────────────────────────
+  const { drawerType, drawerId, openDrawer, closeDrawer } = useDrawerParams();
+  // Derive which employee the URL is pointing at (once data is loaded).
+  const urlEmployee = drawerId
+    ? employees.find((e) => String(e.id) === drawerId) ?? null
+    : null;
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -349,94 +357,36 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
       header: "Actions",
       cell: (employee) => (
         <div className="flex items-center gap-2">
-          <EmployeeDrawer
-            employee={{
-              id: employee.id.toString(),
-              name: `${employee.firstname} ${employee.surname}`,
-              workemail: employee.workemail || "",
-              personalemail: employee.personalemail || "",
-              phone: employee.phone || "",
-              position: employee.job_title?.title ?? "",
-              department: employee.department?.name ?? "",
-              status: employee.status as unknown as DrawerEmployeeStatus,
-              salary: parseFloat(employee.base_salary),
-              hire_date: employee.hire_date,
-              start_date: employee.start_date,
-              bank_account_number: employee.bank_account_number || "",
-              work_location: employee.work_location,
-              employment_type: employee.employment_type,
-              report_to: employee.report_to
-                ? [
-                  employee.report_to.firstname,
-                  employee.report_to.middlename,
-                  employee.report_to.surname
-                ]
-                  .filter(Boolean)
-                  .join(" ")
-                : "",
-              location: employee.work_location,
-              img: (
-                <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                  <span className="font-medium text-gray-700">
-                    {employee.firstname[0]}
-                    {employee.surname[0]}
-                  </span>
-                </div>
-              ),
-            }}
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0"
+            title="View employee"
+            onClick={() => openDrawer("view", String(employee.id))}
           >
-            <Button size="sm" variant="ghost" className="h-8 w-8 p-0">
-              <Eye className="h-4 w-4" />
-            </Button>
-          </EmployeeDrawer>
-          <EmployeeDrawerEdit
-            employee={{
-              id: employee.id.toString(),
-              name: `${employee.firstname} ${employee.surname}`,
-              email: employee.email,
-              p_email: employee.personal_email || "",
-              personal_email: employee.personal_email || "",
-              phone: employee.phone || "",
-              position: employee.job_title?.title ?? "",
-              department: employee.department?.name ?? "",
-              status: (employee.status as unknown) as DrawerEmployeeStatus,
-              salary: parseFloat(employee.base_salary),
-              hire_date: employee.hire_date,
-              bank_account_number: employee.bank_account_number || "",
-              work_location: employee.work_location,
-              employment_type: employee.employment_type,
-              report_to: employee.report_to?.firstname || "",
-              location: employee.work_location,
-              img: (
-                <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center">
-                  <span className="font-medium text-gray-700">
-                    {employee.firstname[0]}
-                    {employee.surname[0]}
-                  </span>
-                </div>
-              ),
-            }}
+            <Eye className="h-4 w-4" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+            title="Edit employee"
+            onClick={() => openDrawer("edit", String(employee.id))}
           >
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-4 w-4"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              viewBox="0 0 24 24"
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                className="h-4 w-4"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                viewBox="0 0 24 24"
-              >
-                <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-                <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" />
-              </svg>
-            </Button>
-          </EmployeeDrawerEdit>
+              <path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+              <path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z" />
+            </svg>
+          </Button>
           <Button
             size="sm"
             variant="ghost"
@@ -491,15 +441,13 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
                 <Filter className="w-4 h-4" />
                 Filters
               </button>
-              <EmployeeDrawerAdd
-                employees={employees}
-                onEmployeeAdded={fetchEmployees}
+              <Button
+                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors"
+                onClick={() => openDrawer("add")}
               >
-                <Button className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700 transition-colors">
-                  <Plus className="w-4 h-4" />
-                  Add Employee
-                </Button>
-              </EmployeeDrawerAdd>
+                <Plus className="w-4 h-4" />
+                Add Employee
+              </Button>
             </div>
           </div>
 
@@ -623,6 +571,77 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── URL-controlled drawers ──────────────────────────────────────────── */}
+      {/* Add drawer */}
+      <EmployeeDrawerAdd
+        employees={employees}
+        onEmployeeAdded={() => { fetchEmployees(); closeDrawer(); }}
+        open={drawerType === "add"}
+        onOpenChange={(v) => { if (!v) closeDrawer(); }}
+      />
+
+      {/* View drawer */}
+      {urlEmployee && (
+        <EmployeeDrawer
+          employee={{
+            id: urlEmployee.id.toString(),
+            name: `${urlEmployee.firstname} ${urlEmployee.surname}`,
+            workemail: urlEmployee.workemail || "",
+            personalemail: urlEmployee.personalemail || "",
+            phone: urlEmployee.phone || "",
+            position: urlEmployee.job_title?.title ?? "",
+            department: urlEmployee.department?.name ?? "",
+            status: urlEmployee.status as DrawerEmployeeStatus,
+            salary: parseFloat(urlEmployee.base_salary),
+            hire_date: urlEmployee.hire_date,
+            start_date: urlEmployee.start_date,
+            bank_account_number: urlEmployee.bank_account_number || "",
+            work_location: urlEmployee.work_location,
+            employment_type: urlEmployee.employment_type,
+            report_to: urlEmployee.report_to
+              ? [urlEmployee.report_to.firstname, urlEmployee.report_to.middlename, urlEmployee.report_to.surname]
+                  .filter(Boolean).join(" ")
+              : "",
+            location: urlEmployee.work_location,
+            img: null,
+          }}
+          open={drawerType === "view"}
+          onOpenChange={(v) => { if (!v) closeDrawer(); }}
+        />
+      )}
+
+      {/* Edit drawer */}
+      {urlEmployee && (
+        <EmployeeDrawerEdit
+          employee={{
+            id: urlEmployee.id.toString(),
+            name: `${urlEmployee.firstname} ${urlEmployee.surname}`,
+            email: urlEmployee.email,
+            p_email: urlEmployee.personal_email || "",
+            personal_email: urlEmployee.personal_email || "",
+            phone: urlEmployee.phone || "",
+            position: urlEmployee.job_title?.title ?? "",
+            department: urlEmployee.department?.name ?? "",
+            status: urlEmployee.status as DrawerEmployeeStatus,
+            salary: parseFloat(urlEmployee.base_salary),
+            hire_date: urlEmployee.hire_date,
+            bank_account_number: urlEmployee.bank_account_number || "",
+            work_location: urlEmployee.work_location,
+            employment_type: urlEmployee.employment_type,
+            report_to: urlEmployee.report_to?.firstname || "",
+            location: urlEmployee.work_location,
+            img: null,
+            department_id: urlEmployee.department?.id,
+            job_title_id: urlEmployee.job_title?.id,
+            workemail: urlEmployee.workemail || "",
+            personalemail: urlEmployee.personalemail || "",
+            start_date: urlEmployee.start_date,
+          }}
+          open={drawerType === "edit"}
+          onOpenChange={(v) => { if (!v) closeDrawer(); }}
+        />
+      )}
     </>
   );
 };

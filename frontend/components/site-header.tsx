@@ -4,14 +4,84 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { SidebarTrigger } from "@/components/ui/sidebar";
+import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Search, BellDot, Bell, ExternalLink, UserPlus } from "lucide-react";
+import {
+  Search,
+  BellDot,
+  Bell,
+  ExternalLink,
+  Plus,
+  UserPlus,
+  CalendarPlus,
+  HandCoins,
+  Banknote,
+  ReceiptText,
+  type LucideIcon,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { NotificationModal } from "@/components/NotificationModal";
 import { notificationService } from "@/services/api/notification";
 import { useAuth } from "@/lib/AuthContext";
+
+// Quick-add menu. Roles match who can actually use each create form, so a user
+// is never sent to a page where the form wouldn't open.
+// Navigation opens the create form via ?drawer=add (employees, which already
+// uses useDrawerParams) or ?new=1 (handled by hooks/use-open-on-new.ts).
+type QuickAdd = {
+  label: string;
+  description: string;
+  href: string;
+  icon: LucideIcon;
+  roles: string[];
+};
+
+const QUICK_ADD_ITEMS: QuickAdd[] = [
+  {
+    label: "New Employee",
+    description: "Add a team member",
+    href: "/employees?drawer=add",
+    icon: UserPlus,
+    roles: ["admin", "hr_manager", "payroll_manager", "department_manager"],
+  },
+  {
+    label: "Apply Leave",
+    description: "Record a leave request",
+    href: "/leaves?new=1",
+    icon: CalendarPlus,
+    roles: ["admin", "hr_manager", "department_manager"],
+  },
+  {
+    label: "New Loan",
+    description: "Create an employee loan",
+    href: "/loans?new=1",
+    icon: HandCoins,
+    roles: ["admin", "hr_manager", "payroll_manager"],
+  },
+  {
+    label: "New Advance",
+    description: "Salary advance for an employee",
+    href: "/advances?new=1",
+    icon: Banknote,
+    roles: ["admin"],
+  },
+  {
+    label: "New Reimbursement",
+    description: "Submit an expense claim",
+    href: "/reimbursements?new=1",
+    icon: ReceiptText,
+    roles: ["admin", "hr_manager", "finance_manager"],
+  },
+];
 
 export function SiteHeader() {
 
@@ -62,6 +132,10 @@ export function SiteHeader() {
 
   const hasUnreadNotifications = unreadCount > 0;
 
+  const quickAddItems = QUICK_ADD_ITEMS.filter((item) =>
+    item.roles.includes(user?.user_type ?? ""),
+  );
+
 
   return (
     <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
@@ -87,6 +161,41 @@ export function SiteHeader() {
               />
             </div>
 
+            {/* Quick add (+) — hidden when the user's role can't create anything */}
+            {quickAddItems.length > 0 && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Quick add"
+                    className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 data-[state=open]:bg-gray-100"
+                  >
+                    <Plus className="h-5 w-5" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-64">
+                  <DropdownMenuLabel className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                    Quick add
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  {quickAddItems.map(({ label, description, href, icon: Icon }) => (
+                    <DropdownMenuItem key={href} asChild className="cursor-pointer gap-3 py-2">
+                      <Link href={href}>
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
+                          <Icon className="h-4 w-4" />
+                        </span>
+                        <span className="flex flex-col">
+                          <span className="text-sm font-medium leading-tight">{label}</span>
+                          <span className="text-xs text-muted-foreground">{description}</span>
+                        </span>
+                      </Link>
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+
             {/* Notification bell — hidden for super_admin (no org-scoped notifications to show) */}
             {!isSuperAdmin && (
               <>
@@ -100,16 +209,6 @@ export function SiteHeader() {
                     <BellDot className="h-5 w-5" />
                   ) : (
                     <Bell className="h-5 w-5" />
-                  )}
-
-                  {/* Notification badge for unread count */}
-                  {hasUnreadNotifications && (
-                    <Badge
-                      variant="destructive"
-                      className="absolute -top-1 -right-1 h-5 w-5 p-0 text-xs flex items-center justify-center min-w-[20px]"
-                    >
-                      {unreadCount > 99 ? '99+' : unreadCount}
-                    </Badge>
                   )}
                 </Button>
 
@@ -176,11 +275,6 @@ export function SiteHeader() {
               </Avatar>
             </div>
 
-            {/* Invite Button */}
-            <Button variant="ghost" className="border-1 border-gray-300">
-              <UserPlus className="h-4 w-4" />
-              Invite
-            </Button>
           </div>
         </div>
       </div>

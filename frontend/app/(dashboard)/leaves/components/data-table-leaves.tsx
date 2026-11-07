@@ -41,6 +41,8 @@ import {
 import { cn } from "@/lib/utils";
 import { employeeAPI } from "@/services/api/employee";
 import { useAuth } from "@/lib/AuthContext";
+import { useDrawerParams } from "@/hooks/use-drawer-params";
+import { useOpenOnNew } from "@/hooks/use-open-on-new";
 
 const LeaveTable: React.FC = () => {
   const { user } = useAuth();
@@ -54,9 +56,12 @@ const LeaveTable: React.FC = () => {
   const [selectedLeave, setSelectedLeave] = useState<LeaveType | null>(null);
   const [actionType, setActionType] = useState<"approve" | "reject">("approve");
 
-  // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewLeave, setViewLeave] = useState<LeaveType | null>(null);
+  // URL-driven drawer state
+  const { drawerType, drawerId, openDrawer, closeDrawer } = useDrawerParams();
+  // Derive the leave record the URL is pointing at once data is loaded.
+  const viewLeave = drawerId
+    ? leaves.find((l) => String(l.leave_id) === drawerId) ?? null
+    : null;
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -75,6 +80,8 @@ const LeaveTable: React.FC = () => {
 
   // Apply Leave Dialog state
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  // Opened by the header "+" quick-add menu (?new=1)
+  useOpenOnNew(() => setApplyDialogOpen(true));
   const [applyLoading, setApplyLoading] = useState(false);
 
   // Leave types for dropdowns

@@ -9,7 +9,7 @@ import {
 } from "@/components/ui/drawer";
 import { Button } from "@/components/ui/button";
 import { PayrunDetailType } from "@/services/api/payrun-detail";
-import { User, DollarSign, Receipt, Briefcase } from "lucide-react";
+import { User, DollarSign, Receipt, Briefcase, Wallet } from "lucide-react";
 import { formatCurrency } from "@/utils/currency";
 
 interface PayrunDetailDrawerProps {
@@ -120,6 +120,12 @@ export function PayrunDetailDrawer({
                     <span className="text-gray-600">Non-taxable Reimbursement</span>
                     <p className="font-medium">{formatCurrency(detail.nontaxable_reimbursement)}</p>
                   </div>
+                  {Number(detail.advance_payout ?? 0) > 0 && (
+                    <div>
+                      <span className="text-gray-600">Salary Advance Payout</span>
+                      <p className="font-medium">{formatCurrency(detail.advance_payout)}</p>
+                    </div>
+                  )}
                   <div className="col-span-2 pt-2 border-t flex items-center justify-between">
                     <span className="text-gray-600 font-medium">Gross Pay</span>
                     <p className="font-semibold text-base">{formatCurrency(detail.gross_pay)}</p>
@@ -172,6 +178,47 @@ export function PayrunDetailDrawer({
                   </div>
                 </div>
               </div>
+
+              {/* Salary Advances: payout paid in this payrun + recovery instalments */}
+              {detail.advances &&
+                (detail.advances.payouts.length > 0 || detail.advances.recoveries.length > 0) && (
+                  <div>
+                    <h3 className="font-semibold mb-4 flex items-center">
+                      <Wallet className="h-4 w-4 mr-2" />
+                      Salary Advances
+                    </h3>
+                    <div className="space-y-2 text-sm">
+                      {detail.advances.payouts.map((p) => (
+                        <div key={`payout-${p.id}`} className="flex items-center justify-between rounded-md border p-3">
+                          <div>
+                            <p className="font-medium font-mono">{p.advance_number}</p>
+                            <p className="text-xs text-gray-500">Paid out in this payrun</p>
+                          </div>
+                          <p className="font-medium text-green-600">+ {formatCurrency(p.amount)}</p>
+                        </div>
+                      ))}
+                      {detail.advances.recoveries.map((r) => (
+                        <div key={`rec-${r.line_id}`} className="flex items-center justify-between rounded-md border p-3">
+                          <div>
+                            <p className="font-medium font-mono">{r.advance_number}</p>
+                            <p className="text-xs text-gray-500">
+                              {r.line_status === "processed" && r.repayment_status === "applied"
+                                ? `Repaid · balance ${formatCurrency(r.balance_after ?? 0)}`
+                                : r.line_status === "processed"
+                                  ? "Deduction included — advance balance updates when the payrun is finalized"
+                                  : r.line_status === "failed"
+                                    ? "Repayment skipped"
+                                    : "Repayment scheduled — deducted when the payrun is processed"}
+                            </p>
+                          </div>
+                          <p className="font-medium text-red-600">
+                            − {formatCurrency(r.line_status === "processed" ? (r.recovered_amount ?? 0) : r.scheduled_amount)}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
               {/* Net Pay */}
               <div className="rounded-lg bg-green-50 border border-green-200 p-4 flex items-center justify-between">

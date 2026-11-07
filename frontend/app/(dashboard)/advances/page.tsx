@@ -72,12 +72,12 @@ export default function AdvancesPage() {
           <div className="space-y-1">
             <h1 className="text-2xl font-medium">Advances Management</h1>
             <p className="text-sm text-muted-foreground">
-              Review salary advance requests, approve, disburse and track recoveries.
+              Review salary advance requests, approve, mark them paid out and track repayments.
             </p>
           </div>
           {isAdminUser(user?.user_type ?? "") && (
             <Button asChild variant="outline" className="flex items-center gap-1.5 shrink-0">
-              <Link href="/advances/policy">
+              <Link href="/company-settings?section=advance">
                 <Settings2 className="w-4 h-4" />
                 Policy Settings
               </Link>

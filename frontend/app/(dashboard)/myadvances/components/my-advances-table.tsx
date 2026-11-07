@@ -146,6 +146,27 @@ const MyAdvancesTable: React.FC<MyAdvancesTableProps> = ({
       },
     },
     {
+      key: "payrun",
+      header: "Payroll",
+      cell: (a) => {
+        if (a.status === "scheduled" && a.payout_payrun_name) {
+          return <span className="text-sm">Paid in {a.payout_payrun_name}</span>;
+        }
+        if (a.status === "approved" && a.disbursement_method === "payroll") {
+          return <span className="text-xs text-gray-500">Waiting for next payrun</span>;
+        }
+        if (a.status === "disbursed" || a.status === "partially_recovered") {
+          const per = a.amount_approved != null && a.number_of_recoveries > 0
+            ? Math.min(Number(a.balance_remaining), Number(a.amount_approved) / a.number_of_recoveries)
+            : null;
+          return per != null ? (
+            <span className="text-sm">{formatKES(per)} per payrun</span>
+          ) : null;
+        }
+        return <span className="text-xs text-gray-400">—</span>;
+      },
+    },
+    {
       key: "method",
       header: "Method",
       cell: (a) => (

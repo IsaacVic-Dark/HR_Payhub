@@ -50,6 +50,7 @@ import { useOrganization } from "./components/organization-actions";
 import { useOrganizationConfig } from "@/hooks/useOrganizationConfig";
 import { type OrganizationType } from "@/services/api/organization";
 import { useAuth } from "@/lib/AuthContext";
+import { AdvancePolicyForm } from "@/app/(dashboard)/advances/policy/components/advance-policy-form";
 
 const sidebarItems = [
   { key: "profile", label: "My Profile", icon: IconBuilding },
@@ -60,7 +61,7 @@ const sidebarItems = [
   // { key: "per_diem", label: "Per Diem", icon: IconPlane },
   { key: "leave", label: "Leave Settings", icon: IconCalendarTime },
   { key: "attendance", label: "Attendance", icon: IconClock },
-  // { key: "advance", label: "Advances", icon: IconArrowForward },
+  { key: "advance", label: "Advances", icon: IconArrowForward }, // admin only (filtered below)
   // { key: "refund", label: "Refunds", icon: IconCreditCard },
   { key: "notifications", label: "Notifications", icon: IconBell },
   { key: "billing", label: "Billing", icon: IconCreditCard },
@@ -1487,7 +1488,15 @@ function DataExportSection() {
 
 // Main Component
 export default function OrganizationConfigPage() {
+  const { user: currentUser } = useAuth();
+  const isOrgAdmin = currentUser?.user_type === "admin";
   const [activeSection, setActiveSection] = useState("profile");
+
+  // Deep link, e.g. /company-settings?section=advance
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("section");
+    if (wanted && sidebarItems.some((i) => i.key === wanted)) setActiveSection(wanted);
+  }, []);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingField, setEditingField] = useState<string>("");
@@ -1768,7 +1777,9 @@ export default function OrganizationConfigPage() {
                 <div className="w-64 flex-shrink-0">
                   <div className="p-4">
                     <div className="space-y-1">
-                      {sidebarItems.map((item) => {
+                      {sidebarItems
+                        .filter((item) => item.key !== "advance" || isOrgAdmin)
+                        .map((item) => {
                         const IconComponent = item.icon;
                         return (
                           <button
@@ -1819,6 +1830,20 @@ export default function OrganizationConfigPage() {
                         configs={activeConfigs}
                         isLoading={configsLoading}
                       />
+                    ) : activeSection === "advance" ? (
+                      isOrgAdmin ? (
+                        <div className="p-6 max-w-4xl">
+                          <div className="mb-6">
+                            <h2 className="text-lg font-semibold">Advances</h2>
+                            <p className="text-sm text-muted-foreground">
+                              Limits, repayment rules and payout methods that every salary advance request is checked against.
+                            </p>
+                          </div>
+                          <AdvancePolicyForm />
+                        </div>
+                      ) : (
+                        <div className="p-6 text-sm text-muted-foreground">Only organization admins can change the advance policy.</div>
+                      )
                     ) : activeSection === "attendance" ? (
                       <AttendanceSettingsSection
                         configs={activeConfigs}

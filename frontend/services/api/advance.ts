@@ -70,6 +70,10 @@ type AdvanceType = {
 
   request_date: string;
   requested_payrun_id: number | null;
+  /** Draft payrun that pays this (payroll-method) advance out. */
+  payout_payrun_id: number | null;
+  payout_payrun_name: string | null;
+  payout_payrun_status: "draft" | "reviewed" | "finalized" | null;
   recovery_start_date: string | null;
   recovery_end_date: string | null;
   number_of_recoveries: number;
@@ -130,6 +134,36 @@ type PayrunLine = {
   scheduled_amount: number;
   status: "attached" | "processed" | "detached" | "failed";
   processed_at: string | null;
+};
+
+/** What happened when an advance was placed in the current draft payrun. */
+type PayrollSync = {
+  outcome: "attached" | "waiting_no_payrun" | "payrun_reviewed" | "not_applicable" | "error";
+  kind?: "payout" | "recovery";
+  payrun_id?: number;
+  payrun_name?: string;
+  message: string;
+  actions?: ("reopen_payrun" | "wait_for_next_payrun")[];
+};
+
+/** Advance payout + recovery lines on one employee's payrun row. */
+type PayrunEmployeeAdvances = {
+  payouts: { id: number; advance_number: string; amount: number; status: string; reason: string | null }[];
+  recoveries: {
+    line_id: number;
+    advance_id: number;
+    advance_number: string;
+    line_status: "attached" | "processed" | "failed";
+    scheduled_amount: number;
+    recovered_amount: number | null;
+    /** "pending" = planned in a draft payrun (applied at finalize), "applied" = deducted for real. */
+    repayment_status: "pending" | "applied" | null;
+    balance_after: number | null;
+    balance_remaining: number;
+    number_of_recoveries: number;
+  }[];
+  payout_total: number;
+  recovery_total: number;
 };
 
 /** A draft payrun an advance recovery can be attached to. */
@@ -322,8 +356,10 @@ function getAvailableActions(
       case "validated":
         return ["approve", "reject", "cancel"];
       case "approved":
-      case "scheduled":
         return ["disburse", "cancel"];
+      case "scheduled":
+        // Payout is paid by the payrun and disbursed when it is finalized.
+        return ["cancel"];
       case "disbursed":
       case "partially_recovered":
         return ["attach", "repayment", "reverse"];
@@ -352,11 +388,11 @@ function getAvailableActions(
 const ACTION_LABELS: Record<AdvanceAction, string> = {
   approve: "Approve",
   reject: "Reject",
-  disburse: "Disburse",
+  disburse: "Mark as Paid Out",
   cancel: "Cancel",
   reverse: "Reverse Repayment",
   repayment: "Record Repayment",
-  attach: "Recovery Schedule",
+  attach: "Repayment Schedule",
   edit: "Edit",
   submit: "Submit",
 };
@@ -380,9 +416,9 @@ const STATUS_CONFIG: Record<AdvanceStatus, { label: string; color: string }> = {
   system_rejected: { label: "System Rejected", color: "bg-red-100 text-red-800" },
   approved: { label: "Approved", color: "bg-green-100 text-green-800" },
   rejected: { label: "Rejected", color: "bg-red-100 text-red-800" },
-  scheduled: { label: "Scheduled", color: "bg-teal-100 text-teal-800" },
-  disbursed: { label: "Disbursed", color: "bg-blue-100 text-blue-800" },
-  partially_recovered: { label: "Recovering", color: "bg-indigo-100 text-indigo-800" },
+  scheduled: { label: "Payout in Payrun", color: "bg-teal-100 text-teal-800" },
+  disbursed: { label: "Paid Out", color: "bg-blue-100 text-blue-800" },
+  partially_recovered: { label: "Repaying", color: "bg-indigo-100 text-indigo-800" },
   repaid: { label: "Fully Repaid", color: "bg-gray-100 text-gray-600" },
   cancelled: { label: "Cancelled", color: "bg-gray-100 text-gray-500" },
   reversed: { label: "Reversed", color: "bg-orange-100 text-orange-800" },
@@ -502,6 +538,9 @@ function mapAdvance(r: any): AdvanceType {
 
     request_date: r.request_date,
     requested_payrun_id: r.requested_payrun_id != null ? Number(r.requested_payrun_id) : null,
+    payout_payrun_id: r.payout_payrun_id != null ? Number(r.payout_payrun_id) : null,
+    payout_payrun_name: r.payout_payrun_name ?? null,
+    payout_payrun_status: r.payout_payrun_status ?? null,
     recovery_start_date: r.recovery_start_date ?? null,
     recovery_end_date: r.recovery_end_date ?? null,
     number_of_recoveries: Number(r.number_of_recoveries ?? 1),
@@ -925,6 +964,48 @@ class AdvanceAPI {
     );
   }
 
+  // ── Automatic payrun placement ──────────────────────────────────────────
+
+  // POST /advances/{id}/auto-attach — retry after reopening a reviewed payrun
+  async autoAttach(_orgId: number, advanceId: number) {
+    return this.request<PayrollSync>(
+      `/advances/${advanceId}/auto-attach`,
+      "POST",
+      {},
+      "Failed to add advance to payrun"
+    );
+  }
+
+  // POST /advances/{id}/attach-payout — admin picks the draft payrun that pays it out
+  async attachPayout(_orgId: number, advanceId: number, payrunId: number) {
+    return this.request(
+      `/advances/${advanceId}/attach-payout`,
+      "POST",
+      { payrun_id: payrunId },
+      "Failed to schedule payout"
+    );
+  }
+
+  // POST /advances/{id}/detach-payout — it then joins the next draft payrun
+  async detachPayout(_orgId: number, advanceId: number) {
+    return this.request(
+      `/advances/${advanceId}/detach-payout`,
+      "POST",
+      {},
+      "Failed to detach payout"
+    );
+  }
+
+  // GET /payruns/{payrun}/employees/{employee}/advances
+  async getPayrunEmployeeAdvances(payrunId: number, employeeId: number) {
+    return this.request<PayrunEmployeeAdvances>(
+      `/payruns/${payrunId}/employees/${employeeId}/advances`,
+      "GET",
+      undefined,
+      "Failed to fetch payrun advances"
+    );
+  }
+
   // ── Repayments ─────────────────────────────────────────────────────────
 
   // POST /advances/{id}/manual-repayment
@@ -1036,6 +1117,8 @@ export type {
   RepaymentRecord,
   PayrunLine,
   PayrunOption,
+  PayrollSync,
+  PayrunEmployeeAdvances,
   RequestAdvancePayload,
   CreateAdvancePayload,
   ApprovePayload,

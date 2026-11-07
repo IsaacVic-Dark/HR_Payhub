@@ -92,15 +92,15 @@ const ACTION_CONFIG: Record<AdvanceDialogAction, ActionConfig> = {
     confirmLabel: "Reject",
   },
   disburse: {
-    title: "Disburse Advance",
+    title: "Mark Advance as Paid Out",
     icon: <Banknote className="h-5 w-5 text-teal-600" />,
     description: (name, amount) => (
       <>
-        Confirm disbursement of <strong>{amount}</strong> to <strong>{name}</strong>.
+        Confirm that <strong>{amount}</strong> has been paid out to <strong>{name}</strong>. Repayment is then deducted from their payrun.
       </>
     ),
     confirmClass: "bg-teal-600 hover:bg-teal-700 text-white",
-    confirmLabel: "Confirm Disbursement",
+    confirmLabel: "Confirm Paid Out",
   },
   cancel: {
     title: "Cancel Advance",
@@ -301,7 +301,7 @@ export function AdvanceActionDialog({
         {action === "disburse" && (
           <div className="space-y-4 py-2">
             <div className="p-3 bg-teal-50 border border-teal-100 rounded-lg text-sm text-teal-800">
-              Amount to disburse:{" "}
+              Amount paid out:{" "}
               <strong>{formatKES(advance.amount_approved ?? requested)}</strong>
             </div>
             <div className="space-y-1.5">

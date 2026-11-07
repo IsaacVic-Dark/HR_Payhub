@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import { useOpenOnNew } from "@/hooks/use-open-on-new";
 import {
   Filter,
   Plus,
@@ -132,6 +133,8 @@ const DataTableReimbursements: React.FC = () => {
 
   // New claim dialog state
   const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  // Opened by the header "+" quick-add menu (?new=1)
+  useOpenOnNew(() => setApplyDialogOpen(true));
   const [applyLoading, setApplyLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
