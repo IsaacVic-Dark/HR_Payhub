@@ -55,6 +55,8 @@ interface PayrunDetailFilters {
   employee_id?: number;
   page?: number;
   per_page?: number;
+  /** Employee name search (first / middle / surname), matched server-side. */
+  search?: string;
 }
 
 class PayrunDetailAPI {
@@ -108,6 +110,9 @@ class PayrunDetailAPI {
     }
     if (filters.per_page) {
       params.append("per_page", filters.per_page.toString());
+    }
+    if (filters.search && filters.search.trim()) {
+      params.append("search", filters.search.trim());
     }
 
     return params.toString();
