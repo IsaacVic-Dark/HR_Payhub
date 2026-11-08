@@ -1,5 +1,7 @@
 "use client";
 
+import { formatCurrencyOrDash as fmtKES } from "@/utils/currency";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useMemo } from "react";
 import { Eye, Gavel, Inbox } from "lucide-react";
 import {
@@ -21,14 +23,6 @@ import { cn } from "@/lib/utils";
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtKES = (v: number | null | undefined) =>
-  v == null
-    ? "—"
-    : new Intl.NumberFormat("en-KE", {
-        style: "currency",
-        currency: "KES",
-        minimumFractionDigits: 2,
-      }).format(v);
 
 const PAGE_SIZE = 10;
 
@@ -67,8 +61,18 @@ const MyLoansTable: React.FC<MyLoansTableProps> = ({ loans, loading, error, onRe
   const userType = user?.user_type ?? "employee";
 
   // ── View drawer ─────────────────────────────────────────────────────────────
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewLoan, setViewLoan] = useState<LoanType | null>(null);
+  const urlDrawer = useUrlDrawer<LoanType>({
+    rows: loans,
+    rowsReady: !loading,
+    getId: (r) => r.loan_id,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await loanAPI.getLoanById(user!.organization_id, Number(id)); return r.success ? ((r.data) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewLoan = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // ── Appeal dialog ────────────────────────────────────────────────────────────
   const [appealOpen, setAppealOpen] = useState(false);
@@ -184,7 +188,7 @@ const MyLoansTable: React.FC<MyLoansTableProps> = ({ loans, loading, error, onRe
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => { setViewLoan(loan); setDrawerOpen(true); }}
+              onClick={() => { urlDrawer.show(loan); }}
               className="h-7 w-7 p-0 text-gray-500 hover:text-gray-700"
               title="View details"
             >

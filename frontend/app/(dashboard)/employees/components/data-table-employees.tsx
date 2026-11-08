@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
 import { Filter, Search, Plus, Eye } from "lucide-react";
 import { employeeAPI, EmployeeType } from "@/services/api/employee";
@@ -69,9 +70,20 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
   // ── URL drawer state ──────────────────────────────────────────────────────
   const { drawerType, drawerId, openDrawer, closeDrawer } = useDrawerParams();
   // Derive which employee the URL is pointing at (once data is loaded).
-  const urlEmployee = drawerId
-    ? employees.find((e) => String(e.id) === drawerId) ?? null
-    : null;
+  // The view/edit drawers load the employee from the loaded rows, or by id
+  // when someone opens a shared link (?drawer=view&id=42).
+  const employeeDrawer = useUrlDrawer<EmployeeType>({
+    rows: employees,
+    getId: (e) => e.id,
+    type: drawerType === "edit" ? "edit" : "view",
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await employeeAPI.getEmployeeById(user!.organization_id, Number(id));
+      return r.success ? ((r.data as EmployeeType) ?? null) : null;
+    },
+  });
+  const urlEmployee = employeeDrawer.record;
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");

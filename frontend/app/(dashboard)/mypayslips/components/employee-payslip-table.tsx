@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import React, { useState, useEffect, useCallback } from "react";
 import { Download, FileText, Filter } from "lucide-react";
 import { payslipAPI, PayslipType, PayslipFilters } from "@/services/api/payslip";
@@ -124,12 +125,6 @@ const EmployeePayslipTable: React.FC = () => {
     }
   };
 
-  const formatCurrency = (value: number) =>
-    new Intl.NumberFormat("en-KE", {
-      style: "currency",
-      currency: "KES",
-      minimumFractionDigits: 2,
-    }).format(value);
 
   const getStatusBadge = (status: string) => {
     const config: Record<string, string> = {

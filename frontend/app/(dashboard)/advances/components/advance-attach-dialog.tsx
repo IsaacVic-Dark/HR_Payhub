@@ -1,5 +1,6 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -242,12 +243,10 @@ export function AdvanceAttachDialog({
             </p>
           ) : (
             <div className="space-y-1.5">
-              <Label htmlFor="att_amount">Amount to recover in this payrun (KES)</Label>
-              <Input
+              <Label htmlFor="att_amount">Amount to recover in this payrun</Label>
+              <AmountInput
                 id="att_amount"
-                type="number"
                 min={0}
-                step="0.01"
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 disabled={busy}

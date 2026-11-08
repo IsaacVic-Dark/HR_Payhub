@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency as kes } from "@/utils/currency";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Settings2 } from "lucide-react";
@@ -9,7 +10,6 @@ import AdvanceTable from "@/app/(dashboard)/advances/components/data-table-advan
 import { advanceAPI, AdvanceStatistics, isAdminUser } from "@/services/api/advance";
 import { useAuth } from "@/lib/AuthContext";
 
-const kes = (v: number | null | undefined) => `KES ${Number(v ?? 0).toLocaleString()}`;
 
 export default function AdvancesPage() {
   const { user } = useAuth();

@@ -400,7 +400,7 @@ const UntitledUISignup = () => {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="companyName">Company Name*</Label>
+                <Label htmlFor="companyName">Company Name <span className="text-red-500">*</span></Label>
                 <Input
                   id="companyName"
                   type="text"
@@ -415,7 +415,7 @@ const UntitledUISignup = () => {
               <div className="flex space-x-4 justify-between">
                 <div className="w-full">
                   <Label htmlFor="currency" className="mb-2">
-                    Currency*
+                    Currency <span className="text-red-500">*</span>
                   </Label>
                   <Select
                     onValueChange={(value) =>
@@ -436,7 +436,7 @@ const UntitledUISignup = () => {
                 </div>
                 <div className="w-full">
                   <Label htmlFor="location" className="mb-2">
-                    Location*
+                    Location <span className="text-red-500">*</span>
                   </Label>
                   <Select
                     onValueChange={(value) =>
@@ -446,7 +446,7 @@ const UntitledUISignup = () => {
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="Select county" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent searchable searchPlaceholder="Search counties...">
                       {kenyanCounties.map((county) => (
                         <SelectItem key={county} value={county}>
                           {county}

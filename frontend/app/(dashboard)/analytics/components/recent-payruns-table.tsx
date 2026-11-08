@@ -1,3 +1,4 @@
+import { formatCurrency } from "@/utils/currency";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -24,14 +25,6 @@ const STATUS_LABELS: Record<PayrunStatus, string> = {
   pending_approval: "Pending approval",
   failed: "Failed",
 };
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
 
 interface RecentPayrunsTableProps {
   data: PayrunRecord[] | null;

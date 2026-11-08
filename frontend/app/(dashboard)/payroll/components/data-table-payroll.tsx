@@ -1,5 +1,9 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
+import { formatCurrency } from "@/utils/currency";
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Filter,
@@ -40,8 +44,18 @@ const PayrollTable: React.FC = () => {
   const [actionType, setActionType] = useState<"approve" | "pay">("approve");
 
   // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewPayroll, setViewPayroll] = useState<PayrollType | null>(null);
+  const urlDrawer = useUrlDrawer<PayrollType>({
+    rows: payrolls,
+    getId: (r) => r.payroll_id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await payrollAPI.getPayrollById(user!.organization_id, Number(id)); return r.success ? ((r.data) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewPayroll = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -58,7 +72,9 @@ const PayrollTable: React.FC = () => {
   const [totalPages, setTotalPages] = useState(0);
 
   // Generate Payroll Dialog state
-  const [generateDialogOpen, setGenerateDialogOpen] = useState(false);
+  const createModal = useUrlModal("create");
+  const generateDialogOpen = createModal.open;
+  const setGenerateDialogOpen = createModal.onOpenChange;
   const [generateLoading, setGenerateLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
@@ -149,8 +165,7 @@ const PayrollTable: React.FC = () => {
   };
 
   const handleViewClick = (payroll: PayrollType) => {
-    setViewPayroll(payroll);
-    setDrawerOpen(true);
+    urlDrawer.show(payroll);
   };
 
   const handleActionClick = (payroll: PayrollType, action: "approve" | "pay") => {
@@ -273,13 +288,6 @@ const PayrollTable: React.FC = () => {
   const hasActiveFilters =
     searchTerm || selectedStatus || selectedMonth || selectedYear;
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-KE", {
-      style: "currency",
-      currency: "KES",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
 
   const formatPeriod = (month: number, year: number) => {
     const monthName = new Date(year, month - 1).toLocaleString("default", {
@@ -565,7 +573,7 @@ const PayrollTable: React.FC = () => {
               >
                 <SelectValue placeholder="Select employee" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent searchable searchPlaceholder="Search employees...">
                 <SelectGroup>
                   <SelectLabel>Employees</SelectLabel>
                   {employees.map((emp) => (
@@ -647,8 +655,7 @@ const PayrollTable: React.FC = () => {
             <label className="text-sm font-medium text-gray-700">
               Basic Salary (Optional - uses employee default if not provided)
             </label>
-            <input
-              type="number"
+            <AmountInput
               value={formData.basic_salary || ""}
               onChange={(e) => {
                 setFormData((prev) => ({

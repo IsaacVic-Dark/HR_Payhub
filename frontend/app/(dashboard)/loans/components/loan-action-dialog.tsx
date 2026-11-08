@@ -1,5 +1,6 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -269,9 +270,8 @@ export function LoanActionDialog({
               <label className="text-sm font-medium text-gray-700">
                 Monthly Deduction (KES) <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
-                min="1"
+              <AmountInput
+                min={1}
                 placeholder="e.g. 5000"
                 value={monthlyDeduction}
                 onChange={(e) => setMonthlyDeduction(e.target.value)}

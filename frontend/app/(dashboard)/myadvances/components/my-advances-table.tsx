@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useMemo } from "react";
 import { Eye, Inbox, Pencil, Send, X } from "lucide-react";
 import {
@@ -48,8 +49,18 @@ const MyAdvancesTable: React.FC<MyAdvancesTableProps> = ({
   const orgId = user?.organization_id;
 
   // ── View drawer ──────────────────────────────────────────────────────────────
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewAdvance, setViewAdvance] = useState<AdvanceType | null>(null);
+  const urlDrawer = useUrlDrawer<AdvanceType>({
+    rows: advances,
+    getId: (r) => r.advance_id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await advanceAPI.getAdvanceById(user!.organization_id, Number(id)); return r.success ? ((r.data) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewAdvance = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // ── Cancel dialog ────────────────────────────────────────────────────────────
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -190,8 +201,7 @@ const MyAdvancesTable: React.FC<MyAdvancesTableProps> = ({
               size="sm"
               variant="ghost"
               onClick={() => {
-                setViewAdvance(a);
-                setDrawerOpen(true);
+                urlDrawer.show(a);
               }}
               className="h-7 w-7 p-0 text-gray-500 hover:text-gray-700"
               title="View details"

@@ -1,5 +1,6 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { usePermissions } from "@/hooks/usePermissions";
@@ -459,10 +460,8 @@ export default function OvertimeApprovalsPage() {
               <Label htmlFor="overtime-rate" className="text-xs text-gray-600">
                 Overtime rate (optional — currency per hour)
               </Label>
-              <Input
+              <AmountInput
                 id="overtime-rate"
-                type="number"
-                step="0.01"
                 placeholder="e.g. 250.00"
                 value={overtimeRateInput}
                 onChange={(e) => setOvertimeRateInput(e.target.value)}

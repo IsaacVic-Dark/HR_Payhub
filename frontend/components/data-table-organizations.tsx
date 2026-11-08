@@ -1,5 +1,6 @@
 "use client";
 
+import { useDrawerParams } from "@/hooks/use-drawer-params";
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import {
   Filter,
@@ -61,15 +62,18 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const locationTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Drawer state
-  const [drawerState, setDrawerState] = useState<{
-    isOpen: boolean;
-    mode: "add" | "edit" | "view";
-    organizationId?: number;
-  }>({
-    isOpen: false,
-    mode: "add",
-  });
+  // Drawer state — URL-driven: ?drawer=view|edit&id=<org id>, ?drawer=add
+  const {
+    drawerType,
+    drawerId,
+    openDrawer: openUrlDrawer,
+    closeDrawer,
+  } = useDrawerParams();
+  const drawerState = {
+    isOpen: drawerType !== null,
+    mode: (drawerType ?? "add") as "add" | "edit" | "view",
+    organizationId: drawerId ? Number(drawerId) : undefined,
+  };
 
   // Delete confirmation state
   const [deleteConfirm, setDeleteConfirm] = useState<{
@@ -189,18 +193,7 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
     mode: "add" | "edit" | "view",
     organizationId?: number
   ) => {
-    setDrawerState({
-      isOpen: true,
-      mode,
-      organizationId,
-    });
-  };
-
-  const closeDrawer = () => {
-    setDrawerState({
-      isOpen: false,
-      mode: "add",
-    });
+    openUrlDrawer(mode, organizationId !== undefined ? String(organizationId) : undefined);
   };
 
   const handleDrawerSuccess = () => {

@@ -1,5 +1,7 @@
 'use client';
 
+import { AmountInput } from "@/components/ui/amount-input";
+import { formatCurrency } from "@/utils/currency";
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams, usePathname } from 'next/navigation';
 import { toast } from 'sonner';
@@ -239,12 +241,12 @@ function SetupWizard() {
         if (currentStep === 0) return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div className="space-y-1">
-                    <Label>KRA PIN *</Label>
+                    <Label>KRA PIN <span className="text-red-500">*</span></Label>
                     <Input {...field('kra_pin')} placeholder="A000000000A" />
                     {errors.kra_pin && <p className="text-xs text-destructive">{errors.kra_pin}</p>}
                 </div>
                 <div className="space-y-1">
-                    <Label>Legal Type *</Label>
+                    <Label>Legal Type <span className="text-red-500">*</span></Label>
                     <Select value={data.legal_type} onValueChange={v => set('legal_type', v)}>
                         <SelectTrigger aria-invalid={!!errors.legal_type}><SelectValue placeholder="Select…" /></SelectTrigger>
                         <SelectContent>{LEGAL_TYPES.map(t => <SelectItem key={t} value={t}>{t.replace('_', ' ')}</SelectItem>)}</SelectContent>
@@ -261,20 +263,20 @@ function SetupWizard() {
         if (currentStep === 1) return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div className="space-y-1 md:col-span-2">
-                    <Label>Physical Address *</Label>
+                    <Label>Physical Address <span className="text-red-500">*</span></Label>
                     <Input {...field('physical_address')} placeholder="123 Moi Avenue, Nairobi" />
                     {errors.physical_address && <p className="text-xs text-destructive">{errors.physical_address}</p>}
                 </div>
                 {/* <div className="space-y-1">
-                    <Label>Location / City *</Label>
+                    <Label>Location / City <span className="text-red-500">*</span></Label>
                     <Input {...field('location')} placeholder="Nairobi" />
                     {errors.location && <p className="text-xs text-destructive">{errors.location}</p>}
                 </div>
                 <div className="space-y-1">
-                    <Label>County *</Label>
+                    <Label>County <span className="text-red-500">*</span></Label>
                     <Select value={data.county_id} onValueChange={v => set('county_id', v)}>
                         <SelectTrigger aria-invalid={!!errors.county_id}><SelectValue placeholder="Select county…" /></SelectTrigger>
-                        <SelectContent>
+                        <SelectContent searchable searchPlaceholder="Search counties...">
                             {COUNTIES.map(c => <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>)}
                         </SelectContent>
                     </Select>
@@ -290,7 +292,7 @@ function SetupWizard() {
         if (currentStep === 2) return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div className="space-y-1">
-                    <Label>Payroll Schedule *</Label>
+                    <Label>Payroll Schedule <span className="text-red-500">*</span></Label>
                     <Select value={data.payroll_schedule} onValueChange={v => set('payroll_schedule', v)}>
                         <SelectTrigger aria-invalid={!!errors.payroll_schedule}><SelectValue placeholder="Select…" /></SelectTrigger>
                         <SelectContent>{SCHEDULES.map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent>
@@ -298,12 +300,12 @@ function SetupWizard() {
                     {errors.payroll_schedule && <p className="text-xs text-destructive">{errors.payroll_schedule}</p>}
                 </div>
                 <div className="space-y-1">
-                    <Label>Default Payday (1–31) *</Label>
+                    <Label>Default Payday (1–31) <span className="text-red-500">*</span></Label>
                     <Input {...field('default_payday')} type="number" min={1} max={31} placeholder="28" />
                     {errors.default_payday && <p className="text-xs text-destructive">{errors.default_payday}</p>}
                 </div>
                 <div className="space-y-1">
-                    <Label>Currency *</Label>
+                    <Label>Currency <span className="text-red-500">*</span></Label>
                     <Select value={data.currency} onValueChange={v => set('currency', v)}>
                         <SelectTrigger aria-invalid={!!errors.currency}><SelectValue /></SelectTrigger>
                         <SelectContent>{CURRENCIES.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
@@ -316,12 +318,12 @@ function SetupWizard() {
         if (currentStep === 3) return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div className="space-y-1">
-                    <Label>Account Name *</Label>
+                    <Label>Account Name <span className="text-red-500">*</span></Label>
                     <Input {...field('bank_account_name')} placeholder="Acme Ltd" />
                     {errors.bank_account_name && <p className="text-xs text-destructive">{errors.bank_account_name}</p>}
                 </div>
                 <div className="space-y-1">
-                    <Label>Account Number *</Label>
+                    <Label>Account Number <span className="text-red-500">*</span></Label>
                     <Input {...field('bank_account_number')} placeholder="1234567890" />
                     {errors.bank_account_number && <p className="text-xs text-destructive">{errors.bank_account_number}</p>}
                 </div>
@@ -339,33 +341,33 @@ function SetupWizard() {
         if (currentStep === 4) return (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div>
-                    <Label>First Name *</Label>
+                    <Label>First Name <span className="text-red-500">*</span></Label>
                     <Input {...field('admin_firstname')} placeholder="John" />
                     {errors.admin_firstname && <p className="text-red-500 text-xs mt-1">{errors.admin_firstname}</p>}
                 </div>
                 <div>
-                    <Label>Surname *</Label>
+                    <Label>Surname <span className="text-red-500">*</span></Label>
                     <Input {...field('admin_surname')} placeholder="Doe" />
                     {errors.admin_surname && <p className="text-red-500 text-xs mt-1">{errors.admin_surname}</p>}
                 </div>
                 <div className="md:col-span-2">
-                    <Label>Personal Email *</Label>
+                    <Label>Personal Email <span className="text-red-500">*</span></Label>
                     <Input {...field('admin_email')} type="email" placeholder="john@personal.com" />
                     {errors.admin_email && <p className="text-red-500 text-xs mt-1">{errors.admin_email}</p>}
                 </div>
                 <div>
-                    <Label>Hire Date *</Label>
+                    <Label>Hire Date <span className="text-red-500">*</span></Label>
                     <Input {...field('admin_hire_date')} type="date" />
                     {errors.admin_hire_date && <p className="text-red-500 text-xs mt-1">{errors.admin_hire_date}</p>}
                 </div>
                 <div>
-                    <Label>Start Date *</Label>
+                    <Label>Start Date <span className="text-red-500">*</span></Label>
                     <Input {...field('admin_start_date')} type="date" />
                     {errors.admin_start_date && <p className="text-red-500 text-xs mt-1">{errors.admin_start_date}</p>}
                 </div>
                 <div>
-                    <Label>Base Salary (KES) *</Label>
-                    <Input {...field('admin_base_salary')} type="number" min={0} placeholder="50000" />
+                    <Label>Base Salary <span className="text-red-500">*</span></Label>
+                    <AmountInput {...field('admin_base_salary')} min={0} currency={data.currency || undefined} placeholder="50000" />
                     {errors.admin_base_salary && <p className="text-red-500 text-xs mt-1">{errors.admin_base_salary}</p>}
                 </div>
             </div>
@@ -392,7 +394,7 @@ function SetupWizard() {
             { label: 'Admin Email', value: data.admin_email },
             { label: 'Hire Date', value: data.admin_hire_date },
             { label: 'Start Date', value: data.admin_start_date },
-            { label: 'Base Salary', value: `KES ${Number(data.admin_base_salary).toLocaleString()}` },
+            { label: 'Base Salary', value: `${formatCurrency(Number(data.admin_base_salary))}` },
         ];
 
         return (

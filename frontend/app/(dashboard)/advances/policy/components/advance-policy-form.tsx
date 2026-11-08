@@ -1,5 +1,6 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -216,20 +217,18 @@ export function AdvancePolicyForm() {
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="p_min">Minimum amount (KES)</Label>
-            <Input
+            <Label htmlFor="p_min">Minimum amount</Label>
+            <AmountInput
               id="p_min"
-              type="number"
               min={1}
               value={s.minimum_amount}
               onChange={(e) => set("minimum_amount", num(e.target.value))}
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="p_max">Maximum amount (KES)</Label>
-            <Input
+            <Label htmlFor="p_max">Maximum amount</Label>
+            <AmountInput
               id="p_max"
-              type="number"
               min={1}
               value={s.maximum_amount}
               onChange={(e) => set("maximum_amount", num(e.target.value))}
@@ -281,12 +280,10 @@ export function AdvancePolicyForm() {
           onChange={(v) => set("allow_partial_recovery", v)}
         />
         <div className="space-y-1.5 max-w-xs mt-4">
-          <Label htmlFor="p_minnet">Minimum net pay after recovery (KES)</Label>
-          <Input
+          <Label htmlFor="p_minnet">Minimum net pay after recovery</Label>
+          <AmountInput
             id="p_minnet"
-            type="number"
             min={0}
-            step="0.01"
             value={s.minimum_net_pay_after_recovery ?? 0}
             onChange={(e) => set("minimum_net_pay_after_recovery", Number(e.target.value) || 0)}
           />
@@ -316,10 +313,9 @@ export function AdvancePolicyForm() {
           ))}
         </div>
         <div className="space-y-1.5 max-w-xs">
-          <Label htmlFor="p_fin">Finance approval threshold (KES)</Label>
-          <Input
+          <Label htmlFor="p_fin">Finance approval threshold</Label>
+          <AmountInput
             id="p_fin"
-            type="number"
             min={0}
             placeholder="No finance step"
             disabled

@@ -1,11 +1,21 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   advanceAPI,
   AdvanceType,
@@ -188,25 +198,30 @@ export function AdvanceRequestForm({
       {/* Employee (admin only) */}
       {adminMode && (
         <div className="space-y-1.5">
-          <Label htmlFor="adv_employee">Employee *</Label>
+          <Label htmlFor="adv_employee">Employee <span className="text-red-500">*</span></Label>
           {employeesLoading ? (
             <div className="h-9 bg-muted rounded animate-pulse" />
           ) : (
-            <select
-              id="adv_employee"
-              className={selectClass}
+            <Select
               value={form.employee_id}
-              onChange={(e) => setForm((f) => ({ ...f, employee_id: e.target.value }))}
+              onValueChange={(value) => setForm((f) => ({ ...f, employee_id: value }))}
               disabled={busy}
             >
-              <option value="">Select an employee…</option>
-              {employees.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {empName(e)}
-                  {e.max_advance != null ? ` — max ${formatKES(e.max_advance)}` : ""}
-                </option>
-              ))}
-            </select>
+              <SelectTrigger id="adv_employee" className="w-full">
+                <SelectValue placeholder="Select employee" />
+              </SelectTrigger>
+              <SelectContent searchable searchPlaceholder="Search employees...">
+                <SelectGroup>
+                  <SelectLabel>Employees</SelectLabel>
+                  {employees.map((e) => (
+                    <SelectItem key={e.id} value={String(e.id)}>
+                      {empName(e)}
+                      {e.max_advance != null ? ` — max ${formatKES(e.max_advance)}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
+              </SelectContent>
+            </Select>
           )}
         </div>
       )}
@@ -214,17 +229,13 @@ export function AdvanceRequestForm({
       {/* Amount */}
       <div className="space-y-1.5">
         <Label htmlFor="adv_amount">
-          Amount (KES) *
+          Amount <span className="text-red-500">*</span>
           <span className="ml-2 text-xs text-muted-foreground font-normal">
             {formatKES(p.minimum_amount)} – {formatKES(maxAmount)}
           </span>
         </Label>
-        <Input
+        <AmountInput
           id="adv_amount"
-          type="number"
-          min={p.minimum_amount}
-          max={maxAmount}
-          step="0.01"
           placeholder="e.g. 20000"
           value={form.amount}
           onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
@@ -244,7 +255,7 @@ export function AdvanceRequestForm({
       {/* Recoveries + method */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="adv_recoveries">Repayment periods *</Label>
+          <Label htmlFor="adv_recoveries">Repayment periods <span className="text-red-500">*</span></Label>
           <select
             id="adv_recoveries"
             className={selectClass}
@@ -260,7 +271,7 @@ export function AdvanceRequestForm({
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label htmlFor="adv_method">Payout method *</Label>
+          <Label htmlFor="adv_method">Payout method <span className="text-red-500">*</span></Label>
           <select
             id="adv_method"
             className={selectClass}
@@ -288,7 +299,7 @@ export function AdvanceRequestForm({
 
       {/* Reason */}
       <div className="space-y-1.5">
-        <Label htmlFor="adv_reason">Reason{p.require_reason ? " *" : ""}</Label>
+        <Label htmlFor="adv_reason">Reason{p.require_reason && <span className="text-red-500"> *</span>}</Label>
         <textarea
           id="adv_reason"
           rows={3}

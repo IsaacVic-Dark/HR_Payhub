@@ -1,5 +1,7 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
 import { Filter, Search, Eye, Send, SendHorizonal } from "lucide-react";
 import {
@@ -16,12 +18,6 @@ import { DataTable, ColumnDef } from "@/components/table";
 import { useAuth } from "@/lib/AuthContext";
 
 // ─── Helper: format KES currency ────────────────────────────────────────────
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    minimumFractionDigits: 2,
-  }).format(amount);
 
 // ─── Helper: format pay period ──────────────────────────────────────────────
 const formatPeriod = (start: string, end: string) => {
@@ -72,8 +68,18 @@ const PayslipTable: React.FC = () => {
   const [selectedYear, setSelectedYear] = useState("");
 
   // Drawer
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewPayslip, setViewPayslip] = useState<PayslipType | null>(null);
+  const urlDrawer = useUrlDrawer<PayslipType>({
+    rows: payslips,
+    getId: (r) => r.payslip_id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await payslipAPI.getPayslip(user!.organization_id, Number(id)); return r.success ? ((r.data) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewPayslip = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Single send dialog
   const [sendDialogOpen, setSendDialogOpen] = useState(false);
@@ -150,8 +156,7 @@ const PayslipTable: React.FC = () => {
 
   // ── Actions ──────────────────────────────────────────────────────────────
   const handleViewClick = (payslip: PayslipType) => {
-    setViewPayslip(payslip);
-    setDrawerOpen(true);
+    urlDrawer.show(payslip);
   };
 
   const handleSendClick = (payslip: PayslipType) => {

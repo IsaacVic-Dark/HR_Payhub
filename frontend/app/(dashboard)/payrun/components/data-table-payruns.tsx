@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Filter,
@@ -24,8 +25,18 @@ const PayrunTable: React.FC = () => {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewPayrun, setViewPayrun] = useState<PayrunType | null>(null);
+  const urlDrawer = useUrlDrawer<PayrunType>({
+    rows: payruns,
+    getId: (r) => r.id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await payrunAPI.getPayrunById(user!.organization_id, Number(id)); return r.success ? ((r.data) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewPayrun = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Filter states
   const [selectedStatus, setSelectedStatus] = useState<string>("");
@@ -164,8 +175,7 @@ const PayrunTable: React.FC = () => {
   };
 
   const handleViewClick = (payrun: PayrunType) => {
-    setViewPayrun(payrun);
-    setDrawerOpen(true);
+    urlDrawer.show(payrun);
   };
 
   const handleDeleteClick = async (payrun: PayrunType) => {
@@ -263,7 +273,7 @@ const PayrunTable: React.FC = () => {
       key: "total_net_pay",
       header: "Total Net Pay",
       cell: (payrun) =>
-        `Kshs ${formatCurrency(payrun.total_net_pay)}`,
+        `${formatCurrency(payrun.total_net_pay)}`,
     },
     {
       key: "employee_count",

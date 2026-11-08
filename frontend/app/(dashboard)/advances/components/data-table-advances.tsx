@@ -1,7 +1,8 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
-import { useOpenOnNew } from "@/hooks/use-open-on-new";
 import { Filter, Search, Plus, Eye } from "lucide-react";
 import {
   advanceAPI,
@@ -96,11 +97,25 @@ const AdvanceTable: React.FC<AdvanceTableProps> = ({ onChanged }) => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [dialogAction, setDialogAction] = useState<AdvanceDialogAction>("approve");
   const [selectedAdvance, setSelectedAdvance] = useState<AdvanceType | null>(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewAdvance, setViewAdvance] = useState<AdvanceType | null>(null);
-  const [createOpen, setCreateOpen] = useState(false);
+  const urlDrawer = useUrlDrawer<AdvanceType>({
+    rows: advances,
+    getId: (r) => r.advance_id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await advanceAPI.getAdvanceById(user!.organization_id, Number(id)); return r.success ? ((r.data) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewAdvance = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
+  const createModal = useUrlModal("create");
+  const createOpen = createModal.open;
+  const setCreateOpen = createModal.onOpenChange;
   // Opened by the header "+" quick-add menu (?new=1)
-  useOpenOnNew(() => setCreateOpen(true), isAdmin);
+  useEffect(() => {
+    if (!(isAdmin) && createOpen) createModal.close();
+  }, [isAdmin, createOpen]);
   const [attachOpen, setAttachOpen] = useState(false);
   const [attachAdvance, setAttachAdvance] = useState<AdvanceType | null>(null);
   const [repayments, setRepayments] = useState<RepaymentRecord[]>([]);
@@ -379,8 +394,7 @@ const AdvanceTable: React.FC<AdvanceTableProps> = ({ onChanged }) => {
               size="sm"
               variant="ghost"
               onClick={() => {
-                setViewAdvance(a);
-                setDrawerOpen(true);
+                urlDrawer.show(a);
               }}
               className="h-7 w-7 p-0 text-gray-500 hover:text-gray-700"
               title="View details"

@@ -1,5 +1,7 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import { useAuth } from "@/lib/AuthContext";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -25,11 +27,30 @@ export default function DepartmentsPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Drawer
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewDepartment, setViewDepartment] = useState<DepartmentType | null>(null);
+  const urlDrawer = useUrlDrawer<DepartmentType>({
+    rows: departments,
+    getId: (r) => r.id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await departmentAPI.getDepartment(user!.organization_id, Number(id)); return r.success ? ((r.data) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewDepartment = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Create / Edit dialog
-  const [formOpen, setFormOpen] = useState(false);
+  // Create form is URL-driven (?modal=create); editing stays local state.
+  const createModal = useUrlModal("create");
+  const [editFormOpen, setEditFormOpen] = useState(false);
+  const formOpen = createModal.open || editFormOpen;
+  const setFormOpen = (open: boolean) => {
+    if (!open) {
+      createModal.close();
+      setEditFormOpen(false);
+    }
+  };
   const [editDepartment, setEditDepartment] = useState<DepartmentType | null>(null);
 
   // Filters
@@ -87,18 +108,17 @@ export default function DepartmentsPage() {
   }, [fetchDepartments]);
 
   const handleViewClick = (dept: DepartmentType) => {
-    setViewDepartment(dept);
-    setDrawerOpen(true);
+    urlDrawer.show(dept);
   };
 
   const handleEditClick = (dept: DepartmentType) => {
     setEditDepartment(dept);
-    setFormOpen(true);
+    setEditFormOpen(true);
   };
 
   const handleCreateClick = () => {
     setEditDepartment(null);
-    setFormOpen(true);
+    createModal.show();
   };
 
   const handleViewDetails = (dept: DepartmentType) => {

@@ -1,5 +1,6 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import { useEffect, useState } from "react";
 import {
   AlertDialog,
@@ -369,10 +370,8 @@ export function AllowanceTypeFormDialog({
               <label className="text-sm font-medium text-gray-700">
                 Default Amount (KES) <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
+              <AmountInput
                 min={0}
-                step="0.01"
                 value={form.amount}
                 onChange={(e) => update({ amount: e.target.value })}
                 disabled={loading}
@@ -469,12 +468,10 @@ export function AllowanceTypeFormDialog({
           {form.taxable_income && (
             <div className="space-y-1">
               <label className="text-sm font-medium text-gray-700">
-                Tax-Exempt Threshold (KES, optional)
+                Tax-Exempt Threshold (optional)
               </label>
-              <input
-                type="number"
+              <AmountInput
                 min={0}
-                step="0.01"
                 value={form.taxable_limit}
                 onChange={(e) => update({ taxable_limit: e.target.value })}
                 disabled={loading}

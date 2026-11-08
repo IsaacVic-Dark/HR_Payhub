@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrencyOrDash as formatCurrency } from "@/utils/currency";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -27,13 +28,6 @@ interface PayrollActionDialogProps {
   loading?: boolean;
 }
 
-const formatCurrency = (amount?: number) => {
-  if (amount === undefined) return "—";
-  return new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-  }).format(amount);
-};
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return "—";

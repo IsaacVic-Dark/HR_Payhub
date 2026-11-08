@@ -5,6 +5,7 @@ import React, {
 } from 'react';
 import { useRouter } from 'next/navigation';
 import { authService } from '@/services/api/auth';
+import { setOrgCurrency } from '@/utils/currency';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +33,8 @@ interface User {
   employee: Employee | null;
   setup_completed: number;
   subscription_status: string;
+  /** Organization currency code (e.g. "KES"), from organizations.currency */
+  currency?: string;
 }
 
 interface AuthContextType {
@@ -80,7 +83,14 @@ function getAccessTokenFromCookie(): string | null {
 interface AuthProviderProps { children: ReactNode }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUserState] = useState<User | null>(null);
+
+  // Keep the module-level organization currency (utils/currency.ts) in sync
+  // *before* children render, so every formatCurrency() call is correct.
+  const setUser = useCallback((next: User | null) => {
+    setOrgCurrency(next?.currency);
+    setUserState(next);
+  }, []);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
@@ -176,7 +186,7 @@ useEffect(() => {
    * so middleware.js stops redirecting to /setup on the very next navigation.
    */
   const markSetupComplete = useCallback(() => {
-    setUser(u => u ? { ...u, setup_completed: 1 } : u);
+    setUserState(u => u ? { ...u, setup_completed: 1 } : u);
   }, []);
 
   // ── Context value ──────────────────────────────────────────────────────────

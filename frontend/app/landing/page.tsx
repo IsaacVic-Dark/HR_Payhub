@@ -1056,7 +1056,7 @@ const PayrollLanding = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                          First Name *
+                          First Name <span className="text-red-500">*</span>
                         </label>
                         <input
                           name="firstName"
@@ -1082,7 +1082,7 @@ const PayrollLanding = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Company *
+                          Company <span className="text-red-500">*</span>
                         </label>
                         <input
                           name="company"
@@ -1094,7 +1094,7 @@ const PayrollLanding = () => {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Business Zip Code *
+                          Business Zip Code <span className="text-red-500">*</span>
                         </label>
                         <input
                           name="employees"
@@ -1108,7 +1108,7 @@ const PayrollLanding = () => {
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Email Address *
+                          Email Address <span className="text-red-500">*</span>
                         </label>
                         <input
                           name="email"
@@ -1121,7 +1121,7 @@ const PayrollLanding = () => {
                       </div>
                       <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">
-                          Last Title *
+                          Last Title <span className="text-red-500">*</span>
                         </label>
                         <input
                           placeholder="Job Title"

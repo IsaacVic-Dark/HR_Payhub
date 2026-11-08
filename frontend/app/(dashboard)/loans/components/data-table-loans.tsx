@@ -1,7 +1,10 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
+import { formatCurrencyOrDash as fmtKES } from "@/utils/currency";
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
-import { useOpenOnNew } from "@/hooks/use-open-on-new";
 import { Filter, Search, Plus, Eye, Trash2, AlertTriangle } from "lucide-react";
 import {
   loanAPI,
@@ -35,14 +38,6 @@ import {
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-const fmtKES = (v: number | null | undefined) =>
-  v == null
-    ? "—"
-    : new Intl.NumberFormat("en-KE", {
-        style: "currency",
-        currency: "KES",
-        minimumFractionDigits: 2,
-      }).format(v);
 
 /** Map a WorkflowAction to a button variant / colour class */
 function actionButtonClass(action: WorkflowAction): string {
@@ -100,11 +95,23 @@ const LoanTable: React.FC = () => {
   const [selectedLoan, setSelectedLoan] = useState<LoanType | null>(null);
 
   // ── View drawer ─────────────────────────────────────────────────────────────
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewLoan, setViewLoan] = useState<LoanType | null>(null);
+  const urlDrawer = useUrlDrawer<LoanType>({
+    rows: loans,
+    getId: (r) => r.loan_id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await loanAPI.getLoanById(user!.organization_id, Number(id)); return r.success ? ((r.data) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewLoan = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // ── Create loan dialog ───────────────────────────────────────────────────────
-  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const createModal = useUrlModal("create");
+  const createDialogOpen = createModal.open;
+  const setCreateDialogOpen = createModal.onOpenChange;
   const [createLoading, setCreateLoading] = useState(false);
   const [employees, setEmployees] = useState<{ id: number; firstname: string; middlename?: string; surname: string }[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
@@ -374,7 +381,9 @@ const LoanTable: React.FC = () => {
   const canCreateLoan = ["admin", "hr_manager", "payroll_manager"].includes(userType);
 
   // Opened by the header "+" quick-add menu (?new=1)
-  useOpenOnNew(() => setCreateDialogOpen(true), canCreateLoan);
+  useEffect(() => {
+    if (!(canCreateLoan) && createDialogOpen) createModal.close();
+  }, [canCreateLoan, createDialogOpen]);
 
   const empName = (e: { firstname: string; middlename?: string; surname: string }) =>
     [e.firstname, e.middlename, e.surname].filter(Boolean).join(" ");
@@ -441,7 +450,7 @@ const LoanTable: React.FC = () => {
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => { setViewLoan(loan); setDrawerOpen(true); }}
+              onClick={() => { urlDrawer.show(loan); }}
               className="h-7 w-7 p-0 text-gray-500 hover:text-gray-700"
               title="View details"
             >
@@ -623,7 +632,7 @@ const LoanTable: React.FC = () => {
               <SelectTrigger className={cn("w-full", formErrors.employee_id && "border-red-500")}>
                 <SelectValue placeholder={loadingEmployees ? "Loading…" : "Select employee"} />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent searchable searchPlaceholder="Search employees...">
                 <SelectGroup>
                   <SelectLabel>Employees</SelectLabel>
                   {employees.map((e) => <SelectItem key={e.id} value={String(e.id)}>{empName(e)}</SelectItem>)}
@@ -655,9 +664,8 @@ const LoanTable: React.FC = () => {
             </div>
 
             <div className="space-y-1.5">
-              <label className="text-sm font-medium text-gray-700">Amount (KES) <span className="text-red-500">*</span></label>
-              <input
-                type="number" min="0" step="0.01" value={formData.amount}
+              <label className="text-sm font-medium text-gray-700">Amount <span className="text-red-500">*</span></label>
+              <AmountInput min={0} value={formData.amount}
                 onChange={(e) => { setFormData((f) => ({ ...f, amount: e.target.value })); setFormErrors((er) => ({ ...er, amount: "" })); }}
                 placeholder="e.g. 50000" disabled={createLoading}
                 className={cn("w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500", formErrors.amount ? "border-red-500" : "border-gray-300")}
@@ -695,7 +703,7 @@ const LoanTable: React.FC = () => {
             </div>
             <div className="space-y-1.5">
               <label className="text-sm font-medium text-gray-700">Monthly Deduction <span className="text-gray-400 text-xs">(optional)</span></label>
-              <input type="number" min="0" step="0.01" value={formData.monthly_deduction} onChange={(e) => setFormData((f) => ({ ...f, monthly_deduction: e.target.value }))} placeholder="e.g. 5000" disabled={createLoading} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+              <AmountInput min={0} value={formData.monthly_deduction} onChange={(e) => setFormData((f) => ({ ...f, monthly_deduction: e.target.value }))} placeholder="e.g. 5000" disabled={createLoading} className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
             </div>
           </div>
 
@@ -725,9 +733,8 @@ const LoanTable: React.FC = () => {
           )}
 
           <div className="space-y-1.5">
-            <label className="text-sm font-medium text-gray-700">Amount (KES) <span className="text-red-500">*</span></label>
-            <input
-              type="number" min="0" step="0.01" value={repaymentForm.amount}
+            <label className="text-sm font-medium text-gray-700">Amount <span className="text-red-500">*</span></label>
+            <AmountInput min={0} value={repaymentForm.amount}
               onChange={(e) => { setRepaymentForm((f) => ({ ...f, amount: e.target.value })); setRepaymentErrors((er) => ({ ...er, amount: "" })); }}
               disabled={repaymentLoading} placeholder="e.g. 5000"
               className={cn("w-full px-3 py-2 border rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500", repaymentErrors.amount ? "border-red-500" : "border-gray-300")}

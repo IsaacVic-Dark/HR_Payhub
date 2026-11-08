@@ -1,7 +1,10 @@
 "use client";
 
+import { getOrgCurrency } from "@/utils/currency";
+import { formatCurrency } from "@/utils/currency";
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
-import { useOpenOnNew } from "@/hooks/use-open-on-new";
 import {
   Filter,
   Plus,
@@ -115,8 +118,18 @@ const DataTableReimbursements: React.FC = () => {
   const [actionType, setActionType] = useState<ReimbursementActionType>("approve");
 
   // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewReimbursement, setViewReimbursement] = useState<ReimbursementType | null>(null);
+  const urlDrawer = useUrlDrawer<ReimbursementType>({
+    rows: reimbursements,
+    getId: (r) => r.id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await reimbursementAPI.getReimbursement(user!.organization_id, Number(id)); return r.success ? ((r.data.reimbursement) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewReimbursement = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Filter state
   const [selectedStatus, setSelectedStatus] = useState("");
@@ -132,9 +145,10 @@ const DataTableReimbursements: React.FC = () => {
   const [totalPages, setTotalPages] = useState(0);
 
   // New claim dialog state
-  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  const createModal = useUrlModal("create");
+  const applyDialogOpen = createModal.open;
+  const setApplyDialogOpen = createModal.onOpenChange;
   // Opened by the header "+" quick-add menu (?new=1)
-  useOpenOnNew(() => setApplyDialogOpen(true));
   const [applyLoading, setApplyLoading] = useState(false);
   const [employees, setEmployees] = useState<any[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
@@ -142,7 +156,7 @@ const DataTableReimbursements: React.FC = () => {
     employee_id: 0,
     reimbursement_type: "expense",
     payout_method: "payroll",
-    currency: "KES",
+    currency: getOrgCurrency(),
     description: "",
   });
   const [claimItems, setClaimItems] = useState<ReimbursementItemInput[]>([emptyItem()]);
@@ -229,7 +243,7 @@ const DataTableReimbursements: React.FC = () => {
         employee_id: 0,
         reimbursement_type: "expense",
         payout_method: "payroll",
-        currency: "KES",
+        currency: getOrgCurrency(),
         description: "",
       });
       setClaimItems([emptyItem()]);
@@ -267,8 +281,7 @@ const DataTableReimbursements: React.FC = () => {
   };
 
   const handleViewClick = (reimbursement: ReimbursementType) => {
-    setViewReimbursement(reimbursement);
-    setDrawerOpen(true);
+    urlDrawer.show(reimbursement);
   };
 
   const handleConfirmAction = async (payload: Record<string, any>) => {
@@ -411,7 +424,7 @@ const DataTableReimbursements: React.FC = () => {
     {
       key: "amount",
       header: "Requested",
-      cell: (r) => `${Number(r.amount_requested).toLocaleString()} ${r.currency}`,
+      cell: (r) => formatCurrency(r.amount_requested, r.currency),
     },
     {
       key: "payout",
@@ -721,7 +734,7 @@ const DataTableReimbursements: React.FC = () => {
                   placeholder={loadingEmployees ? "Loading employees..." : "Select employee"}
                 />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent searchable searchPlaceholder="Search employees...">
                 <SelectGroup>
                   <SelectLabel>Employees</SelectLabel>
                   {employees.map((emp) => (

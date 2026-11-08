@@ -1,5 +1,8 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
+import { formatCurrency, setOrgCurrency } from "@/utils/currency";
+import { useUrlModal } from "@/hooks/use-url-modal";
 import { useState, useEffect } from "react";
 import {
   IconReceipt,
@@ -96,6 +99,23 @@ const ConfigSkeleton = () => (
   </div>
 );
 
+// Currencies selectable for the organization profile (organizations.currency
+// stores the 3-letter ISO 4217 code).
+const CURRENCY_OPTIONS = [
+  { value: "KES", label: "KES — Kenyan Shilling" },
+  { value: "UGX", label: "UGX — Ugandan Shilling" },
+  { value: "TZS", label: "TZS — Tanzanian Shilling" },
+  { value: "RWF", label: "RWF — Rwandan Franc" },
+  { value: "ETB", label: "ETB — Ethiopian Birr" },
+  { value: "ZAR", label: "ZAR — South African Rand" },
+  { value: "NGN", label: "NGN — Nigerian Naira" },
+  { value: "GHS", label: "GHS — Ghanaian Cedi" },
+  { value: "USD", label: "USD — US Dollar" },
+  { value: "EUR", label: "EUR — Euro" },
+  { value: "GBP", label: "GBP — British Pound" },
+  { value: "AED", label: "AED — UAE Dirham" },
+] as const;
+
 // Profile Section Component
 interface ProfileSectionProps {
   organization: OrganizationType | null;
@@ -169,6 +189,11 @@ function ProfileSection({
       key: "payroll_schedule",
       label: "Payroll Schedule",
       description: "Default payroll processing frequency",
+    },
+    {
+      key: "currency",
+      label: "Currency",
+      description: "Currency your organization pays and reports in",
     },
     {
       key: "primary_phone",
@@ -1213,12 +1238,9 @@ function AttendanceSettingsSection({
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">KES</span>
-              <Input
-                type="number"
-                min="0"
-                step="0.01"
-                className="w-28"
+              <AmountInput
+                min={0}
+                wrapperClassName="w-44"
                 placeholder="0.00"
                 value={values.overtime_rate}
                 onChange={(e) =>
@@ -1492,12 +1514,23 @@ export default function OrganizationConfigPage() {
   const isOrgAdmin = currentUser?.user_type === "admin";
   const [activeSection, setActiveSection] = useState("profile");
 
-  // Deep link, e.g. /company-settings?section=advance
+  // Deep link, e.g. /company-settings?section=advance — kept in sync both ways
+  // so the URL always reflects the section being viewed.
   useEffect(() => {
     const wanted = new URLSearchParams(window.location.search).get("section");
     if (wanted && sidebarItems.some((i) => i.key === wanted)) setActiveSection(wanted);
   }, []);
-  const [showAddModal, setShowAddModal] = useState(false);
+  const selectSection = (key: string) => {
+    setActiveSection(key);
+    const params = new URLSearchParams(window.location.search);
+    params.set("section", key);
+    params.delete("modal");
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  };
+  // "Add" modal is URL-driven (?modal=create) so it can be shared.
+  const createModal = useUrlModal("create");
+  const showAddModal = createModal.open;
+  const setShowAddModal = createModal.onOpenChange;
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingField, setEditingField] = useState<string>("");
   const [editValue, setEditValue] = useState<string>("");
@@ -1534,13 +1567,6 @@ export default function OrganizationConfigPage() {
     updateConfig,
   } = useOrganizationConfig();
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-KE", {
-      style: "currency",
-      currency: "KES",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
 
   const handleAddConfig = async () => {
     if (!newConfig.name.trim()) {
@@ -1619,6 +1645,9 @@ export default function OrganizationConfigPage() {
     try {
       const success = await updateOrganization(editingField, editValue || null);
       if (success) {
+        // formatCurrency() reads a module-level currency that AuthContext only
+        // sets at login, so refresh it now or amounts keep the old code until re-login.
+        if (editingField === "currency") setOrgCurrency(editValue);
         setShowEditModal(false);
         setEditingField("");
         setEditValue("");
@@ -1717,6 +1746,7 @@ export default function OrganizationConfigPage() {
       nssf_number: "NSSF Number",
       nhif_number: "NHIF Number",
       payroll_schedule: "Payroll Schedule",
+      currency: "Currency",
       primary_phone: "Primary Phone",
       official_email: "Official Email",
       physical_address: "Physical Address",
@@ -1732,6 +1762,7 @@ export default function OrganizationConfigPage() {
       nssf_number: "National Social Security Fund number",
       nhif_number: "National Hospital Insurance Fund number",
       payroll_schedule: "Default payroll processing frequency",
+      currency: "Currency your organization pays and reports in",
       primary_phone: "Main contact phone number",
       official_email: "Official organization email",
       physical_address: "Physical location address",
@@ -1784,7 +1815,7 @@ export default function OrganizationConfigPage() {
                         return (
                           <button
                             key={item.key}
-                            onClick={() => setActiveSection(item.key)}
+                            onClick={() => selectSection(item.key)}
                             className={`w-full flex items-center text-left px-3 py-2 rounded-md text-sm transition-colors ${
                               activeSection === item.key
                                 ? "bg-primary/10 text-primary font-medium"
@@ -2045,11 +2076,11 @@ export default function OrganizationConfigPage() {
               <Label htmlFor="value">
                 {newConfig.calculationType === "percentage"
                   ? "Percentage Value (%)"
-                  : "Fixed Amount (KES)"}
+                  : "Fixed Amount"}
               </Label>
-              <Input
+              <AmountInput
                 id="value"
-                type="number"
+                showCurrency={newConfig.calculationType !== "percentage"}
                 placeholder={
                   newConfig.calculationType === "percentage"
                     ? "Enter percentage"
@@ -2059,7 +2090,6 @@ export default function OrganizationConfigPage() {
                 onChange={(e) =>
                   setNewConfig({ ...newConfig, value: e.target.value })
                 }
-                step={newConfig.calculationType === "percentage" ? "0.01" : "1"}
               />
               {newConfig.calculationType === "percentage" && (
                 <p className="text-xs text-muted-foreground">
@@ -2099,12 +2129,32 @@ export default function OrganizationConfigPage() {
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label htmlFor="edit-value">{getFieldLabel(editingField)}</Label>
-              <Input
-                id="edit-value"
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                placeholder={`Enter ${getFieldLabel(editingField).toLowerCase()}`}
-              />
+              {editingField === "currency" ? (
+                <Select value={editValue} onValueChange={setEditValue}>
+                  <SelectTrigger id="edit-value" className="w-full">
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent className="w-full">
+                    {/* Keep a legacy/unlisted saved code selectable instead of blank */}
+                    {editValue &&
+                      !CURRENCY_OPTIONS.some((c) => c.value === editValue) && (
+                        <SelectItem value={editValue}>{editValue}</SelectItem>
+                      )}
+                    {CURRENCY_OPTIONS.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="edit-value"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  placeholder={`Enter ${getFieldLabel(editingField).toLowerCase()}`}
+                />
+              )}
             </div>
           </div>
           <DialogFooter>
@@ -2182,11 +2232,11 @@ export default function OrganizationConfigPage() {
               <Label htmlFor="edit-value">
                 {editingConfig.calculationType === "percentage"
                   ? "Percentage Value (%)"
-                  : "Fixed Amount (KES)"}
+                  : "Fixed Amount"}
               </Label>
-              <Input
+              <AmountInput
                 id="edit-value"
-                type="number"
+                showCurrency={editingConfig.calculationType !== "percentage"}
                 placeholder={
                   editingConfig.calculationType === "percentage"
                     ? "Enter percentage"
@@ -2195,9 +2245,6 @@ export default function OrganizationConfigPage() {
                 value={editingConfig.value}
                 onChange={(e) =>
                   setEditingConfig({ ...editingConfig, value: e.target.value })
-                }
-                step={
-                  editingConfig.calculationType === "percentage" ? "0.01" : "1"
                 }
               />
               {editingConfig.calculationType === "percentage" && (

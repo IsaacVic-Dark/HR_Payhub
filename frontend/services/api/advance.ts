@@ -1,3 +1,5 @@
+import { formatCurrencyOrDash as formatKES } from "@/utils/currency";
+
 // ============================================================
 // Advance API Service
 // Salary-advance lifecycle (backend v1 — single ADMIN approval step):
@@ -434,15 +436,6 @@ const IN_APPROVAL_STATUSES: AdvanceStatus[] = ["pending", "validated"];
 const AWAITING_DISBURSEMENT_STATUSES: AdvanceStatus[] = ["approved", "scheduled"];
 const ACTIVE_STATUSES: AdvanceStatus[] = ["disbursed", "partially_recovered"];
 const REJECTED_STATUSES: AdvanceStatus[] = ["system_rejected", "rejected"];
-
-const formatKES = (v: number | string | null | undefined) =>
-  v == null || v === ""
-    ? "—"
-    : new Intl.NumberFormat("en-KE", {
-        style: "currency",
-        currency: "KES",
-        minimumFractionDigits: 2,
-      }).format(Number(v));
 
 const formatDate = (d: string | null | undefined) =>
   d

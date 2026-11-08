@@ -484,7 +484,7 @@ function RegisterPageContent() {
                           <SelectTrigger id="country" className="w-full" aria-invalid={!!errors.country_id}>
                             <SelectValue placeholder={countriesLoading ? 'Loading…' : 'Select your country'} />
                           </SelectTrigger>
-                          <SelectContent>
+                          <SelectContent searchable searchPlaceholder="Search countries...">
                             {countries.map(c => (
                               <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                             ))}
@@ -504,7 +504,7 @@ function RegisterPageContent() {
                             <SelectTrigger id="county" className="w-full" aria-invalid={!!errors.county_id}>
                               <SelectValue placeholder={countiesLoading ? 'Loading…' : 'Select your county'} />
                             </SelectTrigger>
-                            <SelectContent>
+                            <SelectContent searchable searchPlaceholder="Search counties...">
                               {counties.map(c => (
                                 <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                               ))}

@@ -1,5 +1,7 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
+import { formatCurrency } from "@/utils/currency";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -179,7 +181,7 @@ export function ReimbursementActionDialog({
               <br />
               Requested:{" "}
               <strong className="text-gray-900">
-                {Number(reimbursement.amount_requested).toLocaleString()} {reimbursement.currency}
+                {formatCurrency(reimbursement.amount_requested, reimbursement.currency)}
               </strong>
             </AlertDialogDescription>
           )}
@@ -191,10 +193,8 @@ export function ReimbursementActionDialog({
           <div className="py-2 space-y-3">
             <div className="space-y-1">
               <label className="text-sm font-medium text-gray-700">Approved Amount</label>
-              <input
-                type="number"
+              <AmountInput
                 min={0}
-                step="0.01"
                 value={approvedAmount}
                 onChange={(e) => setApprovedAmount(e.target.value)}
                 disabled={loading}
@@ -282,10 +282,8 @@ export function ReimbursementActionDialog({
             {decision === "increase" && (
               <div className="space-y-1">
                 <label className="text-sm font-medium text-gray-700">New Amount</label>
-                <input
-                  type="number"
+                <AmountInput
                   min={0}
-                  step="0.01"
                   value={newAmount}
                   onChange={(e) => setNewAmount(e.target.value)}
                   disabled={loading}
@@ -342,10 +340,8 @@ export function ReimbursementActionDialog({
           <div className="py-2 space-y-3">
             <div className="space-y-1">
               <label className="text-sm font-medium text-gray-700">Amount Paid</label>
-              <input
-                type="number"
+              <AmountInput
                 min={0}
-                step="0.01"
                 value={amountPaid}
                 onChange={(e) => setAmountPaid(e.target.value)}
                 disabled={loading}

@@ -1,13 +1,8 @@
 "use client";
 
+import { formatCurrency as fmt } from "@/utils/currency";
 import { PayslipType } from "@/services/api/payslip";
 
-const fmt = (value: number) =>
-  new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    minimumFractionDigits: 2,
-  }).format(value);
 
 const fmtDate = (dateStr: string) =>
   new Date(dateStr).toLocaleDateString("en-KE", {

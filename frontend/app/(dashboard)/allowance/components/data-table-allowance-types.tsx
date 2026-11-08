@@ -1,5 +1,7 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
+import { useUrlModal } from "@/hooks/use-url-modal";
 import React, { useState, useEffect, useCallback } from "react";
 import { Filter, Plus, Pencil, Archive } from "lucide-react";
 import {
@@ -52,7 +54,7 @@ const getStatusBadge = (status: string) => {
 const formatCalculation = (row: AllowanceTypeType) => {
   switch (row.calculation_method) {
     case "FIXED_AMOUNT":
-      return row.amount ? `${Number(row.amount).toLocaleString()} KES` : "—";
+      return row.amount ? `${formatCurrency(row.amount)}` : "—";
     case "PERCENTAGE_OF_BASIC":
       return row.percentage ? `${Number(row.percentage)}% of basic` : "—";
     case "PERCENTAGE_OF_GROSS":
@@ -77,7 +79,16 @@ const DataTableAllowanceTypes: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  const [formOpen, setFormOpen] = useState(false);
+  // Create form is URL-driven (?modal=create-type); editing stays local state.
+  const create_typeModal = useUrlModal("create-type");
+  const [editFormOpen, setEditFormOpen] = useState(false);
+  const formOpen = create_typeModal.open || editFormOpen;
+  const setFormOpen = (open: boolean) => {
+    if (!open) {
+      create_typeModal.close();
+      setEditFormOpen(false);
+    }
+  };
   const [editingType, setEditingType] = useState<AllowanceTypeType | null>(null);
   const [formLoading, setFormLoading] = useState(false);
 
@@ -147,12 +158,12 @@ const DataTableAllowanceTypes: React.FC = () => {
 
   const openCreate = () => {
     setEditingType(null);
-    setFormOpen(true);
+    create_typeModal.show();
   };
 
   const openEdit = (row: AllowanceTypeType) => {
     setEditingType(row);
-    setFormOpen(true);
+    setEditFormOpen(true);
   };
 
   const handleFormSubmit = async (payload: CreateAllowanceTypePayload) => {
@@ -241,7 +252,7 @@ const DataTableAllowanceTypes: React.FC = () => {
           <span className="text-xs text-green-700">Exempt</span>
         ) : r.taxable_limit ? (
           <span className="text-xs text-gray-700">
-            Exempt up to {Number(r.taxable_limit).toLocaleString()}
+            Exempt up to {formatCurrency(r.taxable_limit)}
           </span>
         ) : (
           <span className="text-xs text-gray-700">Fully taxable</span>

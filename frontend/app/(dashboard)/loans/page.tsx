@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
 import { useEffect, useState } from "react";
 import LoanTable from "@/app/(dashboard)/loans/components/data-table-loans";
@@ -23,7 +24,7 @@ export default function LoansPage() {
           title: "Total Loans",
           value: statistics.total_loans?.toString() ?? "0",
           change: statistics.total_loaned
-            ? `KES ${Number(statistics.total_loaned).toLocaleString()}`
+            ? `${formatCurrency(Number(statistics.total_loaned))}`
             : "—",
           changeIcon: null,
           description: "All loan applications in the system.",
@@ -32,10 +33,10 @@ export default function LoansPage() {
         {
           title: "Outstanding Balance",
           value: statistics.total_outstanding
-            ? `KES ${Number(statistics.total_outstanding).toLocaleString()}`
-            : "KES 0",
+            ? `${formatCurrency(Number(statistics.total_outstanding))}`
+            : formatCurrency(0),
           change: statistics.total_repaid
-            ? `KES ${Number(statistics.total_repaid).toLocaleString()} repaid`
+            ? `${formatCurrency(Number(statistics.total_repaid))} repaid`
             : "—",
           changeIcon: null,
           description: "Total amount yet to be repaid.",

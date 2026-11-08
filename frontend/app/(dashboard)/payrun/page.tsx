@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { SectionCards, type CardDetail } from "@/components/section-cards"
@@ -17,7 +18,7 @@ export default function Page() {
   const cardDetails: CardDetail[] = [
     {
       title: "Gross Pay",
-      value: "Kshs 50,000.00",
+      value: formatCurrency(50000.00),
       change: "",
       changeIcon: null,
       description: "Total amount before deductions.",
@@ -25,7 +26,7 @@ export default function Page() {
     },
     {
       title: "Deductions",
-      value: "Kshs 5,000.00",
+      value: formatCurrency(5000.00),
       change: "",
       changeIcon: null,
       description: "Statutory & company deductions applied.",
@@ -33,7 +34,7 @@ export default function Page() {
     },
     {
       title: "Net Pay",
-      value: "Kshs 45,000.00",
+      value: formatCurrency(45000.00),
       change: "",
       changeIcon: null,
       description: "Final payout after deductions.",

@@ -1,5 +1,9 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
+import { formatCurrency } from "@/utils/currency";
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
 import {
@@ -69,7 +73,7 @@ const amountLabel = (r: EmployeeAllowanceType) => {
   switch (r.calculation_method) {
     case "FIXED_AMOUNT": {
       const amount = r.amount ?? r.type_default_amount;
-      return amount ? `${Number(amount).toLocaleString()} KES` : "—";
+      return amount ? `${formatCurrency(amount)}` : "—";
     }
     case "PERCENTAGE_OF_BASIC": {
       const pct = r.percentage ?? r.type_default_percentage;
@@ -127,11 +131,23 @@ const DataTableEmployeeAllowances: React.FC = () => {
   const [actionLoading, setActionLoading] = useState(false);
 
   // View drawer
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewRow, setViewRow] = useState<EmployeeAllowanceType | null>(null);
+  const urlDrawer = useUrlDrawer<EmployeeAllowanceType>({
+    rows: rows,
+    getId: (r) => r.id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await allowanceAPI.getEmployeeAllowance(user!.organization_id, Number(id)); return r.success ? ((r.data) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewRow = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Create ("apply") dialog
-  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  const createModal = useUrlModal("create");
+  const applyDialogOpen = createModal.open;
+  const setApplyDialogOpen = createModal.onOpenChange;
   const [applyLoading, setApplyLoading] = useState(false);
   const [formData, setFormData] = useState<ApplyFormState>(emptyApplyForm());
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -240,8 +256,7 @@ const DataTableEmployeeAllowances: React.FC = () => {
   };
 
   const openView = (row: EmployeeAllowanceType) => {
-    setViewRow(row);
-    setDrawerOpen(true);
+    urlDrawer.show(row);
   };
 
   const handleConfirmAction = async (payload: Record<string, any>) => {
@@ -722,18 +737,16 @@ const DataTableEmployeeAllowances: React.FC = () => {
           {selectedAllowanceType?.calculation_method === "FIXED_AMOUNT" && (
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">
-                Amount Override (KES, optional)
+                Amount Override (optional)
               </label>
-              <input
-                type="number"
+              <AmountInput
                 min={0}
-                step="0.01"
                 value={formData.amount}
                 onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
                 disabled={applyLoading}
                 placeholder={
                   selectedAllowanceType.amount
-                    ? `Default: ${Number(selectedAllowanceType.amount).toLocaleString()}`
+                    ? `Default: ${formatCurrency(selectedAllowanceType.amount)}`
                     : ""
                 }
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"

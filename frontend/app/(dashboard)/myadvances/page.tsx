@@ -1,5 +1,7 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
+import { useUrlModal } from "@/hooks/use-url-modal";
 import { useCallback, useEffect, useState } from "react";
 import { Info, Plus, AlertTriangle } from "lucide-react";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
@@ -32,7 +34,16 @@ export default function MyAdvancesPage() {
   const [error, setError] = useState<string | null>(null);
   const [policy, setPolicy] = useState<AdvancePolicySettings | null>(null);
 
-  const [formOpen, setFormOpen] = useState(false);
+  // New request form is URL-driven (?modal=create); editing a draft stays local.
+  const createModal = useUrlModal("create");
+  const [editFormOpen, setEditFormOpen] = useState(false);
+  const formOpen = createModal.open || editFormOpen;
+  const setFormOpen = (open: boolean) => {
+    if (!open) {
+      createModal.close();
+      setEditFormOpen(false);
+    }
+  };
   const [editAdvance, setEditAdvance] = useState<AdvanceType | null>(null);
 
   // ── Fetch the employee's advances ────────────────────────────────────────────
@@ -80,15 +91,15 @@ export default function MyAdvancesPage() {
     {
       title: "My Advances",
       value: advances.length.toString(),
-      change: totalRequested ? `KES ${totalRequested.toLocaleString()}` : "—",
+      change: totalRequested ? `${formatCurrency(totalRequested)}` : "—",
       changeIcon: null,
       description: "All advance requests you've made.",
       footerText: "Across all statuses",
     },
     {
       title: "Outstanding Balance",
-      value: `KES ${outstanding.toLocaleString()}`,
-      change: recovered ? `KES ${recovered.toLocaleString()} recovered` : "—",
+      value: `${formatCurrency(outstanding)}`,
+      change: recovered ? `${formatCurrency(recovered)} recovered` : "—",
       changeIcon: null,
       description: "Amount still to be deducted from your pay.",
       footerText: "Sum of active advance balances",
@@ -115,12 +126,12 @@ export default function MyAdvancesPage() {
 
   const openNew = () => {
     setEditAdvance(null);
-    setFormOpen(true);
+    createModal.show();
   };
 
   const openEdit = (advance: AdvanceType) => {
     setEditAdvance(advance);
-    setFormOpen(true);
+    setEditFormOpen(true);
   };
 
   const handleFormSuccess = () => {

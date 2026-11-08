@@ -1,5 +1,7 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
+import { useUrlModal } from "@/hooks/use-url-modal";
 import { useCallback, useEffect, useState } from "react";
 import { Plus } from "lucide-react";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
@@ -26,7 +28,9 @@ export default function MyLoansPage() {
   const [loans, setLoans] = useState<LoanType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [applyOpen, setApplyOpen] = useState(false);
+  const createModal = useUrlModal("create");
+  const applyOpen = createModal.open;
+  const setApplyOpen = createModal.onOpenChange;
 
   // ── Fetch the employee's loans ────────────────────────────────────────────
   const fetchLoans = useCallback(async () => {
@@ -63,15 +67,15 @@ export default function MyLoansPage() {
     {
       title: "My Loans",
       value: totalLoans.toString(),
-      change: totalLoaned ? `KES ${totalLoaned.toLocaleString()}` : "—",
+      change: totalLoaned ? `${formatCurrency(totalLoaned)}` : "—",
       changeIcon: null,
       description: "All loan applications you've submitted.",
       footerText: "Across all statuses",
     },
     {
       title: "Outstanding Balance",
-      value: `KES ${totalOutstanding.toLocaleString()}`,
-      change: totalRepaid ? `KES ${totalRepaid.toLocaleString()} repaid` : "—",
+      value: `${formatCurrency(totalOutstanding)}`,
+      change: totalRepaid ? `${formatCurrency(totalRepaid)} repaid` : "—",
       changeIcon: null,
       description: "Total amount you still owe.",
       footerText: "Sum of active loan balances",

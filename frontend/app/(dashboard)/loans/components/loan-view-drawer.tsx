@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrencyOrDash as fmtKES } from "@/utils/currency";
 import {
   Drawer,
   DrawerClose,
@@ -59,14 +60,6 @@ const fmtDateTime = (d: string | null) =>
       })
     : null;
 
-const fmtKES = (v: number | null | undefined) =>
-  v == null
-    ? "—"
-    : new Intl.NumberFormat("en-KE", {
-        style: "currency",
-        currency: "KES",
-        minimumFractionDigits: 2,
-      }).format(v);
 
 // ─── Sub-components ────────────────────────────────────────────────────────────
 

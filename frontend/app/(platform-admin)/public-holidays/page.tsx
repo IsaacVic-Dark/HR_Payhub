@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
 import { useCallback, useEffect, useState } from "react";
 import { Plus, Search, UploadCloud } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -62,12 +63,23 @@ export default function PublicHolidaysPage() {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  const [formOpen, setFormOpen] = useState(false);
+  // Create form is URL-driven (?modal=create); editing stays local state.
+  const createModal = useUrlModal("create");
+  const [editFormOpen, setEditFormOpen] = useState(false);
+  const formOpen = createModal.open || editFormOpen;
+  const setFormOpen = (open: boolean) => {
+    if (!open) {
+      createModal.close();
+      setEditFormOpen(false);
+    }
+  };
   const [editingHoliday, setEditingHoliday] = useState<MasterHolidayType | null>(
     null
   );
 
-  const [importOpen, setImportOpen] = useState(false);
+  const importModal = useUrlModal("import");
+  const importOpen = importModal.open;
+  const setImportOpen = importModal.onOpenChange;
   const [importCountry, setImportCountry] = useState<string>("");
   const [importYear, setImportYear] = useState<number>(new Date().getFullYear());
   const [importLoading, setImportLoading] = useState(false);
@@ -135,12 +147,12 @@ export default function PublicHolidaysPage() {
 
   const handleAdd = () => {
     setEditingHoliday(null);
-    setFormOpen(true);
+    createModal.show();
   };
 
   const handleEdit = (holiday: MasterHolidayType) => {
     setEditingHoliday(holiday);
-    setFormOpen(true);
+    setEditFormOpen(true);
   };
 
   const handleDeactivate = async (holiday: MasterHolidayType) => {

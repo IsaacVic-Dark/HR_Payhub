@@ -1,5 +1,6 @@
 'use client';
 
+import { formatCurrency } from "@/utils/currency";
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Filter, Search, Plus, Download, ChevronDown, ChevronLeft, ChevronRight, X } from 'lucide-react';
 import { payrunAPI, PayrunType, PayrunFilters } from '@/services/api/payrun';
@@ -88,9 +89,6 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
     fetchPayruns();
   }, [organizationId]);
 
-  const formatCurrency = (amount: string) => {
-    return `$${parseFloat(amount).toLocaleString()}`;
-  };
 
   const formatDateRange = (startDate: string, endDate: string) => {
     const start = new Date(startDate);

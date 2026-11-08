@@ -1,4 +1,5 @@
 // components/SectionCard.tsx
+import { formatCurrency } from "@/utils/currency";
 import { Badge } from "@/components/ui/badge"
 import {
   Card,
@@ -38,7 +39,7 @@ export function SectionCard({
       <CardHeader>
         <CardDescription>{title}</CardDescription>
         <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-          Kshs {price}
+          {formatCurrency(price)}
         </CardTitle>
         <CardAction>
           <Badge>

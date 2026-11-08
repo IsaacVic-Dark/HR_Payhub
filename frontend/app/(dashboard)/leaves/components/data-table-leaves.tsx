@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
 import React, { useState, useEffect, useCallback } from "react";
 import {
   Filter,
@@ -41,8 +42,7 @@ import {
 import { cn } from "@/lib/utils";
 import { employeeAPI } from "@/services/api/employee";
 import { useAuth } from "@/lib/AuthContext";
-import { useDrawerParams } from "@/hooks/use-drawer-params";
-import { useOpenOnNew } from "@/hooks/use-open-on-new";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 
 const LeaveTable: React.FC = () => {
   const { user } = useAuth();
@@ -56,12 +56,20 @@ const LeaveTable: React.FC = () => {
   const [selectedLeave, setSelectedLeave] = useState<LeaveType | null>(null);
   const [actionType, setActionType] = useState<"approve" | "reject">("approve");
 
-  // URL-driven drawer state
-  const { drawerType, drawerId, openDrawer, closeDrawer } = useDrawerParams();
-  // Derive the leave record the URL is pointing at once data is loaded.
-  const viewLeave = drawerId
-    ? leaves.find((l) => String(l.leave_id) === drawerId) ?? null
-    : null;
+  // URL-driven drawer state (?drawer=view&id=<leave_id>)
+  const urlDrawer = useUrlDrawer<LeaveType>({
+    rows: leaves,
+    getId: (l) => l.leave_id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await leaveAPI.getLeaveById(user!.organization_id, Number(id));
+      return r.success ? (r.data ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewLeave = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -79,9 +87,10 @@ const LeaveTable: React.FC = () => {
   const [totalPages, setTotalPages] = useState(0);
 
   // Apply Leave Dialog state
-  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  const createModal = useUrlModal("create");
+  const applyDialogOpen = createModal.open;
+  const setApplyDialogOpen = createModal.onOpenChange;
   // Opened by the header "+" quick-add menu (?new=1)
-  useOpenOnNew(() => setApplyDialogOpen(true));
   const [applyLoading, setApplyLoading] = useState(false);
 
   // Leave types for dropdowns
@@ -320,8 +329,7 @@ const LeaveTable: React.FC = () => {
   };
 
   const handleViewClick = (leave: LeaveType) => {
-    setViewLeave(leave);
-    setDrawerOpen(true);
+    urlDrawer.show(leave);
   };
 
   const handleConfirmAction = async (rejectionReason?: string) => {
@@ -836,7 +844,7 @@ const LeaveTable: React.FC = () => {
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a reliever" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent searchable searchPlaceholder="Search employees...">
                 <SelectGroup>
                   <SelectLabel>Employees</SelectLabel>
                   <SelectItem value="none">No Reliever</SelectItem>

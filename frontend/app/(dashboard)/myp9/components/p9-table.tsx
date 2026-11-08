@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import React, { useState, useEffect, useCallback } from "react";
 import { Download, FileText } from "lucide-react";
 import { p9API, P9FormType } from "@/services/api/p9";
@@ -75,12 +76,6 @@ const P9Table: React.FC = () => {
     }
   };
 
-  const formatCurrency = (value: string) =>
-    new Intl.NumberFormat("en-KE", {
-      style: "currency",
-      currency: "KES",
-      minimumFractionDigits: 2,
-    }).format(parseFloat(value));
 
   const getStatusBadge = (status: string) => {
     const config: Record<string, string> = {

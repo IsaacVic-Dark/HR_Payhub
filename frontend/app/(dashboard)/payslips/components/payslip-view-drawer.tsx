@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import {
   Drawer,
   DrawerClose,
@@ -20,12 +21,6 @@ interface PayslipViewDrawerProps {
   payslip: PayslipType | null;
 }
 
-const formatCurrency = (amount: number) =>
-  new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    minimumFractionDigits: 2,
-  }).format(amount);
 
 const formatDate = (dateString: string | null) => {
   if (!dateString) return "—";

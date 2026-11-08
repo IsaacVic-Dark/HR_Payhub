@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import {
   Drawer,
   DrawerClose,
@@ -27,13 +28,6 @@ export function PayrollViewDrawer({
 }: PayrollViewDrawerProps) {
   if (!payroll) return null;
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-KE", {
-      style: "currency",
-      currency: "KES",
-      minimumFractionDigits: 0,
-    }).format(amount);
-  };
 
   const formatPeriod = (month: number, year: number) => {
     const monthName = new Date(year, month - 1).toLocaleString("default", {

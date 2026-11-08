@@ -62,7 +62,7 @@ export function AnalyticsFiltersBar({
         <SelectTrigger className="w-full sm:w-[190px]">
           <SelectValue placeholder="Department" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent searchable searchPlaceholder="Search departments...">
           <SelectItem value="all">All departments</SelectItem>
           {departments.map((dept) => (
             <SelectItem key={dept.id} value={dept.id}>
@@ -81,7 +81,7 @@ export function AnalyticsFiltersBar({
         <SelectTrigger className="w-full sm:w-[190px]">
           <SelectValue placeholder="Employee" />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent searchable searchPlaceholder="Search employees...">
           <SelectItem value="all">All employees</SelectItem>
           {visibleEmployees.map((employee) => (
             <SelectItem key={employee.id} value={employee.id}>

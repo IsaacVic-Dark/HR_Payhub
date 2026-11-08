@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SiteHeader } from "@/components/site-header";
@@ -15,7 +16,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <AppSidebar variant="inset" />
       <SidebarInset>
         <SiteHeader />
-        {children}
+        <Suspense fallback={null}>{children}</Suspense>
       </SidebarInset>
     </SidebarProvider>
   );

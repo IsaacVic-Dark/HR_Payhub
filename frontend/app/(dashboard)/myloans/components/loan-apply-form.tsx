@@ -1,5 +1,7 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
+import { formatCurrency } from "@/utils/currency";
 import { useState, useEffect } from "react";
 import { useAuth } from "@/lib/AuthContext";
 import { toast } from "sonner";
@@ -77,7 +79,7 @@ export function LoanApplyForm({ onSuccess }: LoanApplyFormProps) {
     <form onSubmit={handleSubmit} className="space-y-5">
       {/* Loan type */}
       <div className="space-y-1.5">
-        <Label htmlFor="lt_select">Loan Type *</Label>
+        <Label htmlFor="lt_select">Loan Type <span className="text-red-500">*</span></Label>
         {typesLoading ? (
           <div className="h-9 bg-muted rounded animate-pulse" />
         ) : (
@@ -92,7 +94,7 @@ export function LoanApplyForm({ onSuccess }: LoanApplyFormProps) {
             {loanTypes.map((lt) => (
               <option key={lt.id} value={lt.id}>
                 {lt.name}
-                {lt.max_amount ? ` — max KES ${Number(lt.max_amount).toLocaleString()}` : ""}
+                {lt.max_amount ? ` — max ${formatCurrency(Number(lt.max_amount))}` : ""}
                 {lt.interest_rate ? ` · ${lt.interest_rate}% p.a.` : ""}
               </option>
             ))}
@@ -100,7 +102,7 @@ export function LoanApplyForm({ onSuccess }: LoanApplyFormProps) {
         )}
         {selectedType && (
           <p className="text-xs text-muted-foreground">
-            {selectedType.max_amount && `Maximum: KES ${Number(selectedType.max_amount).toLocaleString()}`}
+            {selectedType.max_amount && `Maximum: ${formatCurrency(Number(selectedType.max_amount))}`}
             {selectedType.interest_rate && ` · Interest: ${selectedType.interest_rate}% p.a.`}
           </p>
         )}
@@ -109,18 +111,16 @@ export function LoanApplyForm({ onSuccess }: LoanApplyFormProps) {
       {/* Amount */}
       <div className="space-y-1.5">
         <Label htmlFor="apply_amount">
-          Amount (KES) *
+          Amount <span className="text-red-500">*</span>
           {selectedType?.max_amount && (
             <span className="ml-2 text-xs text-muted-foreground font-normal">
-              Max: KES {Number(selectedType.max_amount).toLocaleString()}
+              Max: {formatCurrency(selectedType.max_amount)}
             </span>
           )}
         </Label>
-        <Input
+        <AmountInput
           id="apply_amount"
-          type="number"
           min={1}
-          max={selectedType?.max_amount ?? undefined}
           placeholder="e.g. 50000"
           value={form.amount}
           onChange={(e) => setForm((f) => ({ ...f, amount: e.target.value }))}
@@ -131,7 +131,7 @@ export function LoanApplyForm({ onSuccess }: LoanApplyFormProps) {
       {/* Dates */}
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <Label htmlFor="apply_start">Start Date *</Label>
+          <Label htmlFor="apply_start">Start Date <span className="text-red-500">*</span></Label>
           <Input
             id="apply_start"
             type="date"
@@ -154,10 +154,9 @@ export function LoanApplyForm({ onSuccess }: LoanApplyFormProps) {
 
       {/* Monthly deduction */}
       <div className="space-y-1.5">
-        <Label htmlFor="apply_monthly">Preferred Monthly Deduction (KES)</Label>
-        <Input
+        <Label htmlFor="apply_monthly">Preferred Monthly Deduction</Label>
+        <AmountInput
           id="apply_monthly"
-          type="number"
           min={1}
           placeholder="Optional — leave blank to let payroll set this"
           value={form.monthly_deduction}

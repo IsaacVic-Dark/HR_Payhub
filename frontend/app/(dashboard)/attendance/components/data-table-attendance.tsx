@@ -1,5 +1,7 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useMemo, useEffect } from "react";
 import { Filter, Search, Eye, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
@@ -125,11 +127,19 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({
   const [limit, setLimit] = useState(10);
 
   // Drawer
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewRecord, setViewRecord] = useState<AttendanceDay | null>(null);
+  const urlDrawer = useUrlDrawer<AttendanceDay>({
+    rows: records,
+    getId: (r) => r.id,
+    rowsReady: !loading,
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewRecord = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Manual entry modal
-  const [manualPunchOpen, setManualPunchOpen] = useState(false);
+  const createModal = useUrlModal("create");
+  const manualPunchOpen = createModal.open;
+  const setManualPunchOpen = createModal.onOpenChange;
 
   const activeFilters: AttendanceFilters = useMemo(
     () => ({
@@ -267,8 +277,7 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({
             variant="ghost"
             className="h-8 w-8 p-0"
             onClick={() => {
-              setViewRecord(record);
-              setDrawerOpen(true);
+              urlDrawer.show(record);
             }}
           >
             <Eye className="h-4 w-4" />
@@ -365,7 +374,7 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Employees" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent searchable searchPlaceholder="Search employees...">
                       <SelectGroup>
                         <SelectLabel>Employees</SelectLabel>
                         <SelectItem value="all">All Employees</SelectItem>
@@ -391,7 +400,7 @@ const AttendanceTable: React.FC<AttendanceTableProps> = ({
                     <SelectTrigger className="w-full">
                       <SelectValue placeholder="All Departments" />
                     </SelectTrigger>
-                    <SelectContent>
+                    <SelectContent searchable searchPlaceholder="Search departments...">
                       <SelectGroup>
                         <SelectLabel>Departments</SelectLabel>
                         <SelectItem value="all">All Departments</SelectItem>

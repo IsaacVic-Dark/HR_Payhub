@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,14 +23,6 @@ import type { DepartmentSummary } from "../lib/types";
 const chartConfig = {
   payrollCost: { label: "Payroll cost", color: "hsl(var(--chart-1))" },
 } satisfies ChartConfig;
-
-function formatCurrency(amount: number) {
-  return new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
 
 interface DepartmentBreakdownProps {
   data: DepartmentSummary[] | null;

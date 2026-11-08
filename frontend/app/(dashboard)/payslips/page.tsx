@@ -1,5 +1,7 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
+import { formatCompactCurrency as fmtKES } from "@/utils/currency";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -8,13 +10,6 @@ import { payslipAPI, type PayslipStatistics } from "@/services/api/payslip";
 import { useAuth } from "@/lib/AuthContext";
 
 // ─── Format KES currency for stat cards ─────────────────────────────────────
-const fmtKES = (value: number) =>
-  new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    notation: "compact",
-    maximumFractionDigits: 1,
-  }).format(value);
 
 export default function Page() {
   const { user } = useAuth();
@@ -56,7 +51,7 @@ export default function Page() {
       {
         title: "Total Gross Pay",
         value: fmtKES(statistics.total_gross_pay),
-        change: `KES ${statistics.total_gross_pay.toLocaleString("en-KE")}`,
+        change: `${formatCurrency(statistics.total_gross_pay)}`,
         changeIcon: null,
         description: "Cumulative gross pay across all payslips.",
         footerText: "Before deductions",
@@ -64,7 +59,7 @@ export default function Page() {
       {
         title: "Total Net Pay",
         value: fmtKES(statistics.total_net_pay),
-        change: `KES ${statistics.total_net_pay.toLocaleString("en-KE")}`,
+        change: `${formatCurrency(statistics.total_net_pay)}`,
         changeIcon: null,
         description: "Cumulative net pay disbursed to employees.",
         footerText: "After all statutory deductions",

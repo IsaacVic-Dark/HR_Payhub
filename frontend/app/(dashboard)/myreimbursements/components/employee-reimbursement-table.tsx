@@ -1,5 +1,9 @@
 "use client";
 
+import { getOrgCurrency } from "@/utils/currency";
+import { formatCurrency } from "@/utils/currency";
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
 import { Filter, Plus, Eye, Ban, Scale } from "lucide-react";
 import {
@@ -88,8 +92,18 @@ const EmployeeReimbursementTable: React.FC = () => {
   const [selected, setSelected] = useState<ReimbursementType | null>(null);
   const [actionType, setActionType] = useState<ReimbursementActionType>("cancel");
 
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewReimbursement, setViewReimbursement] = useState<ReimbursementType | null>(null);
+  const urlDrawer = useUrlDrawer<ReimbursementType>({
+    rows: reimbursements,
+    getId: (r) => r.id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await reimbursementAPI.getReimbursement(user!.organization_id, Number(id)); return r.success ? ((r.data.reimbursement) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewReimbursement = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   const [selectedStatus, setSelectedStatus] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("");
@@ -99,12 +113,14 @@ const EmployeeReimbursementTable: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  const createModal = useUrlModal("create");
+  const applyDialogOpen = createModal.open;
+  const setApplyDialogOpen = createModal.onOpenChange;
   const [applyLoading, setApplyLoading] = useState(false);
   const [formData, setFormData] = useState({
     reimbursement_type: "expense",
     payout_method: "payroll",
-    currency: "KES",
+    currency: getOrgCurrency(),
     description: "",
   });
   const [claimItems, setClaimItems] = useState<ReimbursementItemInput[]>([emptyItem()]);
@@ -159,7 +175,7 @@ const EmployeeReimbursementTable: React.FC = () => {
       setFormData({
         reimbursement_type: "expense",
         payout_method: "payroll",
-        currency: "KES",
+        currency: getOrgCurrency(),
         description: "",
       });
       setClaimItems([emptyItem()]);
@@ -192,8 +208,7 @@ const EmployeeReimbursementTable: React.FC = () => {
   };
 
   const handleViewClick = (reimbursement: ReimbursementType) => {
-    setViewReimbursement(reimbursement);
-    setDrawerOpen(true);
+    urlDrawer.show(reimbursement);
   };
 
   const handleConfirmAction = async (payload: Record<string, any>) => {
@@ -287,12 +302,12 @@ const EmployeeReimbursementTable: React.FC = () => {
     {
       key: "amount",
       header: "Requested",
-      cell: (r) => `${Number(r.amount_requested).toLocaleString()} ${r.currency}`,
+      cell: (r) => formatCurrency(r.amount_requested, r.currency),
     },
     {
       key: "approved",
       header: "Approved",
-      cell: (r) => `${Number(r.amount_approved).toLocaleString()} ${r.currency}`,
+      cell: (r) => formatCurrency(r.amount_approved, r.currency),
     },
     {
       key: "status",

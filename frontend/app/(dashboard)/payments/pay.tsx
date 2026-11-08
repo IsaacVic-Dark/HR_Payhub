@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,12 +31,27 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 
 export function PaymentsModule() {
   const isMobile = useIsMobile();
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
-  const [activePaymentType, setActivePaymentType] = useState("");
+  // URL-driven drawer: ?drawer=add&payment=<type>
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const activePaymentType = searchParams.get("payment") ?? "";
+  const isDrawerOpen = searchParams.get("drawer") === "add" && !!activePaymentType;
 
   const handleOpenDrawer = (paymentType: string) => {
-    setActivePaymentType(paymentType);
-    setIsDrawerOpen(true);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("drawer", "add");
+    params.set("payment", paymentType);
+    router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  };
+
+  const setIsDrawerOpen = (open: boolean) => {
+    if (open) return;
+    const params = new URLSearchParams(searchParams.toString());
+    params.delete("drawer");
+    params.delete("payment");
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
   return (

@@ -1,5 +1,6 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import * as React from "react";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Button } from "@/components/ui/button";
@@ -225,7 +226,7 @@ function JobTitleField({
                 }
               />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent searchable searchPlaceholder="Search job titles...">
               {jobTitles.length > 0 ? (
                 jobTitles.map((jt) => (
                   <SelectItem key={jt.id} value={jt.id.toString()}>
@@ -719,7 +720,7 @@ export function EmployeeDrawerAdd({
                       >
                         <SelectValue placeholder="Select department" />
                       </SelectTrigger>
-                      <SelectContent>
+                      <SelectContent searchable searchPlaceholder="Search departments...">
                         {departments.length > 0 ? (
                           departments.map((dept) => (
                             <SelectItem
@@ -830,7 +831,7 @@ export function EmployeeDrawerAdd({
                         </SelectValue>
                       </SelectTrigger>
 
-                      <SelectContent>
+                      <SelectContent searchable searchPlaceholder="Search managers...">
                         {operationsManagers && operationsManagers.length > 0 ? (
                           operationsManagers.map((manager) => (
                             <SelectItem
@@ -885,10 +886,9 @@ export function EmployeeDrawerAdd({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">
-                      Base Salary ($) <span className="text-red-500">*</span>
+                      Base Salary <span className="text-red-500">*</span>
                     </label>
-                    <Input
-                      type="number"
+                    <AmountInput
                       placeholder="e.g., 75000"
                       value={formData.base_salary}
                       onChange={(e) =>
@@ -1775,10 +1775,9 @@ export function EmployeeDrawerEdit({
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-sm font-medium text-gray-700">
-                      Base Salary ($) <span className="text-red-500">*</span>
+                      Base Salary <span className="text-red-500">*</span>
                     </label>
-                    <Input
-                      type="number"
+                    <AmountInput
                       placeholder="e.g., 75000"
                       value={formData.base_salary}
                       onChange={(e) =>

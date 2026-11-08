@@ -3,23 +3,22 @@
 /**
  * useDrawerParams
  *
- * A thin hook that reads and writes drawer state via URL search params,
- * so that any open drawer can be bookmarked / shared by URL.
+ * Reads and writes drawer / modal state via URL search params so that any open
+ * drawer or create modal can be copied, shared and bookmarked.
  *
  * URL shape:
- *   ?drawer=view&id=42     → view drawer for record 42
- *   ?drawer=edit&id=42     → edit drawer for record 42
- *   ?drawer=add            → create drawer (no id needed)
+ *   ?drawer=view&id=42              → view drawer for record 42
+ *   ?drawer=edit&id=42              → edit drawer for record 42
+ *   ?drawer=add                     → create drawer
+ *   ?modal=create                   → create modal (dialog)
+ *   ?drawer=view&id=42&detail=7     → a drawer nested inside the view drawer
+ *                                     (e.g. a payrun's employee detail)
  *
- * Usage:
- *   const { drawerType, drawerId, openDrawer, closeDrawer } = useDrawerParams();
+ * Approve / reject / cancel / delete confirmation dialogs deliberately do NOT
+ * use the URL.
  *
- *   openDrawer("view", String(row.id));
- *   openDrawer("add");
- *   closeDrawer();
- *
- * The hook is a thin wrapper around Next.js App Router's
- * useSearchParams / useRouter — no external libraries required.
+ * All writes use router.replace so the Back button doesn't step through every
+ * open/close.
  */
 
 import { useCallback } from "react";
@@ -27,19 +26,21 @@ import { useRouter, useSearchParams, usePathname } from "next/navigation";
 
 export type DrawerType = "view" | "edit" | "add" | null;
 
+export const DRAWER_PARAM_KEYS = ["drawer", "id", "modal", "detail"] as const;
+
 export interface UseDrawerParamsReturn {
-  /** Which drawer variant is open, or null if closed. */
   drawerType: DrawerType;
-  /** The record id from the URL (string), or null. */
   drawerId: string | null;
-  /**
-   * Open a drawer and push the state into the URL.
-   * @param type  - "view" | "edit" | "add"
-   * @param id    - Record identifier (not required for "add")
-   */
+  /** Current create-modal name from ?modal=..., e.g. "create". */
+  modalType: string | null;
+  /** Nested drawer record id from ?detail=... */
+  detailId: string | null;
   openDrawer: (type: DrawerType, id?: string) => void;
-  /** Close the drawer and remove the drawer params from the URL. */
   closeDrawer: () => void;
+  openModal: (name?: string) => void;
+  closeModal: () => void;
+  openDetail: (id: string) => void;
+  closeDetail: () => void;
 }
 
 export function useDrawerParams(): UseDrawerParamsReturn {
@@ -49,33 +50,72 @@ export function useDrawerParams(): UseDrawerParamsReturn {
 
   const drawerType = (searchParams.get("drawer") as DrawerType) ?? null;
   const drawerId = searchParams.get("id");
+  const modalType = searchParams.get("modal");
+  const detailId = searchParams.get("detail");
 
-  const openDrawer = useCallback(
-    (type: DrawerType, id?: string) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (type) {
-        params.set("drawer", type);
-      } else {
-        params.delete("drawer");
-      }
-      if (id !== undefined) {
-        params.set("id", id);
-      } else {
-        params.delete("id");
-      }
-      // Use replace so the back-button doesn't loop through each open-drawer state
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+  const write = useCallback(
+    (mutate: (p: URLSearchParams) => void) => {
+      // Read the live URL (not the render-time snapshot) so two quick updates
+      // don't overwrite each other.
+      const params = new URLSearchParams(
+        typeof window !== "undefined" ? window.location.search : searchParams.toString(),
+      );
+      mutate(params);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
     [router, pathname, searchParams],
   );
 
-  const closeDrawer = useCallback(() => {
-    const params = new URLSearchParams(searchParams.toString());
-    params.delete("drawer");
-    params.delete("id");
-    const qs = params.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-  }, [router, pathname, searchParams]);
+  const openDrawer = useCallback(
+    (type: DrawerType, id?: string) =>
+      write((p) => {
+        p.delete("modal");
+        p.delete("detail");
+        if (type) p.set("drawer", type);
+        else p.delete("drawer");
+        if (id !== undefined) p.set("id", id);
+        else p.delete("id");
+      }),
+    [write],
+  );
 
-  return { drawerType, drawerId, openDrawer, closeDrawer };
+  const closeDrawer = useCallback(
+    () =>
+      write((p) => {
+        p.delete("drawer");
+        p.delete("id");
+        p.delete("detail");
+      }),
+    [write],
+  );
+
+  const openModal = useCallback(
+    (name: string = "create") =>
+      write((p) => {
+        p.delete("drawer");
+        p.delete("id");
+        p.delete("detail");
+        p.set("modal", name);
+      }),
+    [write],
+  );
+
+  const closeModal = useCallback(() => write((p) => p.delete("modal")), [write]);
+
+  const openDetail = useCallback((id: string) => write((p) => p.set("detail", id)), [write]);
+  const closeDetail = useCallback(() => write((p) => p.delete("detail")), [write]);
+
+  return {
+    drawerType,
+    drawerId,
+    modalType,
+    detailId,
+    openDrawer,
+    closeDrawer,
+    openModal,
+    closeModal,
+    openDetail,
+    closeDetail,
+  };
 }

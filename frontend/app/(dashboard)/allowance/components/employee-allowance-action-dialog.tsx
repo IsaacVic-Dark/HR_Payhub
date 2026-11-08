@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -103,9 +104,9 @@ export function EmployeeAllowanceActionDialog({
 
   const isApply = action === "apply";
   const amountLabel = (ea: EmployeeAllowanceType) => {
-    if (ea.amount) return `${Number(ea.amount).toLocaleString()} KES`;
+    if (ea.amount) return `${formatCurrency(ea.amount)}`;
     if (ea.percentage) return `${Number(ea.percentage)}%`;
-    if (ea.type_default_amount) return `${Number(ea.type_default_amount).toLocaleString()} KES (default)`;
+    if (ea.type_default_amount) return `${formatCurrency(ea.type_default_amount)} (default)`;
     if (ea.type_default_percentage) return `${Number(ea.type_default_percentage)}% (default)`;
     return "—";
   };

@@ -1,5 +1,7 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useMemo, useEffect } from "react";
 import { Filter, Search, Plus, Eye, Pencil, Power } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -214,11 +216,18 @@ const UserTable: React.FC = () => {
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewUser, setViewUser] = useState<UserType | null>(null);
+  const urlDrawer = useUrlDrawer<UserType>({
+    rows: users,
+    getId: (r) => r.id,
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewUser = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Add User dialog state
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const createModal = useUrlModal("create");
+  const addDialogOpen = createModal.open;
+  const setAddDialogOpen = createModal.onOpenChange;
   const [addLoading, setAddLoading] = useState(false);
   const [addFormData, setAddFormData] = useState<UserFormState>(EMPTY_FORM);
   const [addFormErrors, setAddFormErrors] = useState<Record<string, string>>(
@@ -331,8 +340,7 @@ const UserTable: React.FC = () => {
   };
 
   const handleViewClick = (user: UserType) => {
-    setViewUser(user);
-    setDrawerOpen(true);
+    urlDrawer.show(user);
   };
 
   const handleEditClick = (user: UserType) => {

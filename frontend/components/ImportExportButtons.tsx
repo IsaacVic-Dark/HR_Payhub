@@ -670,7 +670,7 @@ function MappingRow({ field, headers, value, onChange, firstRow }: MappingRowPro
           <SeverityIcon severity={severity} />
           <p className="text-sm font-medium leading-none">
             {field.name}
-            {field.required && <span className="text-destructive ml-1 text-xs">*</span>}
+            {field.required && <span className="text-red-500 ml-1 text-xs">*</span>}
           </p>
           {isMapped && !isError && !valueWarning && (
             <Check className="h-3.5 w-3.5 text-primary" />
@@ -803,7 +803,7 @@ function ReviewSummary({ fields, mapping, headers, rowCount }: ReviewSummaryProp
                   <span className={isMapped ? "" : "text-muted-foreground"}>
                     {field.name}
                     {field.required && (
-                      <span className="text-destructive ml-1 text-xs">*</span>
+                      <span className="text-red-500 ml-1 text-xs">*</span>
                     )}
                   </span>
                   <span className="text-[11px] text-muted-foreground/60">

@@ -1,5 +1,7 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
 import { Filter, Search, Plus, Eye, ChevronDownIcon } from "lucide-react";
 import {
@@ -41,8 +43,18 @@ const EmployeeLeaveTable: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewLeave, setViewLeave] = useState<EmployeeLeaveType | null>(null);
+  const urlDrawer = useUrlDrawer<EmployeeLeaveType>({
+    rows: leaves,
+    getId: (r) => r.leave_id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await leaveAPI.getLeaveById(user!.organization_id, Number(id)); return r.success ? ((r.data as unknown as EmployeeLeaveType) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewLeave = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Filter states
   const [searchTerm, setSearchTerm] = useState("");
@@ -60,7 +72,9 @@ const EmployeeLeaveTable: React.FC = () => {
   const [totalPages, setTotalPages] = useState(0);
 
   // Apply Leave Dialog state
-  const [applyDialogOpen, setApplyDialogOpen] = useState(false);
+  const createModal = useUrlModal("create");
+  const applyDialogOpen = createModal.open;
+  const setApplyDialogOpen = createModal.onOpenChange;
   const [applyLoading, setApplyLoading] = useState(false);
 
   // Leave types for dropdowns
@@ -297,8 +311,7 @@ const EmployeeLeaveTable: React.FC = () => {
   };
 
   const handleViewClick = (leave: EmployeeLeaveType) => {
-    setViewLeave(leave);
-    setDrawerOpen(true);
+    urlDrawer.show(leave);
   };
 
   const handlePageChange = (newPage: number) => {
@@ -740,7 +753,7 @@ const EmployeeLeaveTable: React.FC = () => {
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a reliever" />
               </SelectTrigger>
-              <SelectContent>
+              <SelectContent searchable searchPlaceholder="Search employees...">
                 <SelectGroup>
                   <SelectLabel>Employees</SelectLabel>
                   <SelectItem value="none">No Reliever</SelectItem>

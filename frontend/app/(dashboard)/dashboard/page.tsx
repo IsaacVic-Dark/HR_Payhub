@@ -1,4 +1,5 @@
 "use client";
+import { formatCurrency } from "@/utils/currency";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
 import {
   IconTrendingDown,
@@ -58,7 +59,7 @@ if (user.employee?.firstname && user.employee?.surname) {
   const cardDetails: CardDetail[] = [
     {
       title: "Company expenses",
-      value: "Kshs 1,250.00",
+      value: formatCurrency(1250.00),
       change: "+12.5%",
       changeIcon: <IconTrendingUp className="text-green-500 size-3" />,
       description: "Trending up this month",
@@ -66,7 +67,7 @@ if (user.employee?.firstname && user.employee?.surname) {
     },
     {
       title: "Monthly Payroll",
-      value: "Kshs 45,678",
+      value: formatCurrency(45678),
       change: "+12.5%",
       changeIcon: <IconTrendingUp className="text-green-500 size-3" />,
       description: "Strong user retention",

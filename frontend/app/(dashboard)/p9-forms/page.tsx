@@ -1,5 +1,7 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -31,9 +33,21 @@ export default function P9FormsPage() {
   const [showFilters, setShowFilters] = useState(false);
 
   // Modal states
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [generateModalOpen, setGenerateModalOpen] = useState(false);
-  const [viewP9Form, setViewP9Form] = useState<P9FormType | null>(null);
+  const urlDrawer = useUrlDrawer<P9FormType>({
+    rows: p9Forms,
+    getId: (r) => r.id,
+    rowsReady: !loading,
+    enabled: !!user?.organization_id,
+    fetchById: async (id) => {
+      const r = await p9FormAPI.getP9FormById(user!.organization_id, Number(id)); return r.success ? ((r.data as unknown as P9FormType) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewP9Form = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
+  const createModal = useUrlModal("create");
+  const generateModalOpen = createModal.open;
+  const setGenerateModalOpen = createModal.onOpenChange;
 
   // Pagination
   const [filters, setFilters] = useState<P9FormFilters>({
@@ -143,7 +157,7 @@ export default function P9FormsPage() {
   //       change: "",
   //       changeIcon: null,
   //       description: "Ready to send",
-  //       footerText: `PAYE: Kshs ${(yearStats.generated?.sum_paye || 0).toLocaleString()}`,
+  //       footerText: `PAYE: ${formatCurrency((yearStats.generated?.sum_paye || 0))}`,
   //     },
   //     {
   //       title: "Sent",
@@ -151,7 +165,7 @@ export default function P9FormsPage() {
   //       change: "",
   //       changeIcon: null,
   //       description: "Sent to employees",
-  //       footerText: `PAYE: Kshs ${(yearStats.sent?.sum_paye || 0).toLocaleString()}`,
+  //       footerText: `PAYE: ${formatCurrency((yearStats.sent?.sum_paye || 0))}`,
   //     },
   //     {
   //       title: "Filed",
@@ -159,7 +173,7 @@ export default function P9FormsPage() {
   //       change: "",
   //       changeIcon: null,
   //       description: "Filed with KRA",
-  //       footerText: `PAYE: Kshs ${(yearStats.filed?.sum_paye || 0).toLocaleString()}`,
+  //       footerText: `PAYE: ${formatCurrency((yearStats.filed?.sum_paye || 0))}`,
   //     },
   //     {
   //       title: "Total PAYE",
@@ -225,8 +239,7 @@ export default function P9FormsPage() {
   };
 
   const handleViewClick = (p9Form: P9FormType) => {
-    setViewP9Form(p9Form);
-    setDrawerOpen(true);
+    urlDrawer.show(p9Form);
   };
 
   const handleGenerateSuccess = () => {

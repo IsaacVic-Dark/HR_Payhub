@@ -1,5 +1,7 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import { useAuth } from "@/lib/AuthContext";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
@@ -25,11 +27,30 @@ export default function CountriesPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
 
   // Drawer
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewCountry, setViewCountry] = useState<CountryType | null>(null);
+  const urlDrawer = useUrlDrawer<CountryType>({
+    rows: countries,
+    getId: (r) => r.id,
+    rowsReady: !loading,
+    enabled: true,
+    fetchById: async (id) => {
+      const r = await countryAPI.getCountryById(Number(id)); return r.success ? ((r.data as unknown as CountryType) ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewCountry = urlDrawer.record;
+  const setDrawerOpen = urlDrawer.onOpenChange;
 
   // Create / Edit dialog
-  const [formOpen, setFormOpen] = useState(false);
+  // Create form is URL-driven (?modal=create); editing stays local state.
+  const createModal = useUrlModal("create");
+  const [editFormOpen, setEditFormOpen] = useState(false);
+  const formOpen = createModal.open || editFormOpen;
+  const setFormOpen = (open: boolean) => {
+    if (!open) {
+      createModal.close();
+      setEditFormOpen(false);
+    }
+  };
   const [editCountry, setEditCountry] = useState<CountryType | null>(null);
 
   // Filters
@@ -77,18 +98,17 @@ export default function CountriesPage() {
   }, [fetchCountries]);
 
   const handleViewClick = (country: CountryType) => {
-    setViewCountry(country);
-    setDrawerOpen(true);
+    urlDrawer.show(country);
   };
 
   const handleEditClick = (country: CountryType) => {
     setEditCountry(country);
-    setFormOpen(true);
+    setEditFormOpen(true);
   };
 
   const handleCreateClick = () => {
     setEditCountry(null);
-    setFormOpen(true);
+    createModal.show();
   };
 
   const handleViewDetails = (country: CountryType) => {

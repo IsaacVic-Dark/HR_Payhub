@@ -1,5 +1,6 @@
 'use client';
 
+import { formatCurrency } from "@/utils/currency";
 import React, { useState } from 'react';
 import { Button } from "@/components/ui/button";
 import { Filter, Search, UserPlus, Download, MoreHorizontal, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -159,9 +160,6 @@ const PayrollTable = () => {
     setCurrentPage(1); // Reset to first page when changing items per page
   };
 
-  const formatCurrency = (amount) => {
-    return `$${amount.toLocaleString()}`;
-  };
 
   const formatDate = (dateString) => {
     const date = new Date(dateString);

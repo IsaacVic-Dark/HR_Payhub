@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import { SectionCards, type CardDetail } from "@/components/section-cards";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -72,10 +73,7 @@ export default function Page() {
       },
       {
         title: "Total Gross Pay",
-        value: `Kshs ${statistics.total_gross_pay.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`,
+        value: formatCurrency(statistics.total_gross_pay),
         change: "",
         changeIcon: null,
         description: "Total gross pay across all payruns.",
@@ -83,10 +81,7 @@ export default function Page() {
       },
       {
         title: "Total Net Pay",
-        value: `Kshs ${statistics.total_net_pay.toLocaleString("en-US", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`,
+        value: formatCurrency(statistics.total_net_pay),
         change: "",
         changeIcon: null,
         description: "Total net pay across all payruns.",

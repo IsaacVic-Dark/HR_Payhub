@@ -1,14 +1,8 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import { P9FormType } from "@/services/api/p9";
 
-const formatCurrency = (value: string) => {
-  return new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency: "KES",
-    minimumFractionDigits: 2,
-  }).format(parseFloat(value));
-};
 
 export function generateP9PDF(form: P9FormType, employeeName?: string) {
   const printWindow = window.open("", "_blank");
@@ -225,7 +219,7 @@ export function generateP9PDF(form: P9FormType, employeeName?: string) {
         <thead>
           <tr>
             <th>Description</th>
-            <th>Amount (KES)</th>
+            <th>Amount</th>
           </tr>
         </thead>
         <tbody>

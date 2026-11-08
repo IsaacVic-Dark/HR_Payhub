@@ -1,5 +1,6 @@
 "use client";
 
+import { formatCurrency } from "@/utils/currency";
 import {
   Drawer,
   DrawerClose,
@@ -59,7 +60,7 @@ const amountLabel = (ea: EmployeeAllowanceType) => {
   switch (ea.calculation_method) {
     case "FIXED_AMOUNT": {
       const amount = ea.amount ?? ea.type_default_amount;
-      return amount ? `${Number(amount).toLocaleString()} KES` : "—";
+      return amount ? `${formatCurrency(amount)}` : "—";
     }
     case "PERCENTAGE_OF_BASIC": {
       const pct = ea.percentage ?? ea.type_default_percentage;
@@ -153,7 +154,7 @@ export function EmployeeAllowanceViewDrawer({
                   {!employeeAllowance.taxable_income
                     ? "Exempt"
                     : employeeAllowance.taxable_limit
-                      ? `Exempt up to ${Number(employeeAllowance.taxable_limit).toLocaleString()}`
+                      ? `Exempt up to ${formatCurrency(employeeAllowance.taxable_limit)}`
                       : "Fully taxable"}
                 </p>
               </div>

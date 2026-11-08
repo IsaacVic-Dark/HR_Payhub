@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus } from "lucide-react";
@@ -16,7 +17,16 @@ export default function SubscriptionPlansPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [dialogOpen, setDialogOpen] = useState(false);
+  // Create form is URL-driven (?modal=create); editing stays local state.
+  const createModal = useUrlModal("create");
+  const [editFormOpen, setEditFormOpen] = useState(false);
+  const dialogOpen = createModal.open || editFormOpen;
+  const setDialogOpen = (open: boolean) => {
+    if (!open) {
+      createModal.close();
+      setEditFormOpen(false);
+    }
+  };
   const [editingPlan, setEditingPlan] = useState<SubscriptionPlan | null>(null);
 
   const fetchPlans = useCallback(async () => {
@@ -41,12 +51,12 @@ export default function SubscriptionPlansPage() {
 
   const openCreateDialog = () => {
     setEditingPlan(null);
-    setDialogOpen(true);
+    createModal.show();
   };
 
   const openEditDialog = (plan: SubscriptionPlan) => {
     setEditingPlan(plan);
-    setDialogOpen(true);
+    setEditFormOpen(true);
   };
 
   if (!isSuperAdmin) {

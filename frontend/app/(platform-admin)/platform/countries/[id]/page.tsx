@@ -1,5 +1,6 @@
 "use client";
 
+import { useUrlModal } from "@/hooks/use-url-modal";
 import { useAuth } from "@/lib/AuthContext";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -49,7 +50,16 @@ export default function CountryDetailPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   const [countryFormOpen, setCountryFormOpen] = useState(false);
-  const [countyFormOpen, setCountyFormOpen] = useState(false);
+  // Create form is URL-driven (?modal=create-county); editing stays local state.
+  const create_countyModal = useUrlModal("create-county");
+  const [editFormOpen, setEditFormOpen] = useState(false);
+  const countyFormOpen = create_countyModal.open || editFormOpen;
+  const setCountyFormOpen = (open: boolean) => {
+    if (!open) {
+      create_countyModal.close();
+      setEditFormOpen(false);
+    }
+  };
   const [editCounty, setEditCounty] = useState<CountyType | null>(null);
 
   const canWrite = user?.user_type === "super_admin";
@@ -96,12 +106,12 @@ export default function CountryDetailPage() {
 
   const handleAddCountyClick = () => {
     setEditCounty(null);
-    setCountyFormOpen(true);
+    create_countyModal.show();
   };
 
   const handleEditCountyClick = (county: CountyType) => {
     setEditCounty(county);
-    setCountyFormOpen(true);
+    setEditFormOpen(true);
   };
 
   const handleDeactivateCounty = async (county: CountyType) => {

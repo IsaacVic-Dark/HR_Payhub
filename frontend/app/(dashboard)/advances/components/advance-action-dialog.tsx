@@ -1,5 +1,6 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -279,11 +280,8 @@ export function AdvanceActionDialog({
                 max {formatKES(requested)}
               </span>
             </label>
-            <input
-              type="number"
+            <AmountInput
               min={1}
-              max={requested}
-              step="0.01"
               value={approveAmount}
               onChange={(e) => setApproveAmount(e.target.value)}
               disabled={loading}
@@ -362,11 +360,8 @@ export function AdvanceActionDialog({
                 <label className="text-sm font-medium text-gray-700">
                   Amount (KES) <span className="text-red-500">*</span>
                 </label>
-                <input
-                  type="number"
+                <AmountInput
                   min={1}
-                  max={balance}
-                  step="0.01"
                   value={repayAmount}
                   onChange={(e) => setRepayAmount(e.target.value)}
                   disabled={loading}

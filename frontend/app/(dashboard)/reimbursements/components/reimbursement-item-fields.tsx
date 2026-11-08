@@ -1,5 +1,6 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -91,10 +92,8 @@ export function ReimbursementItemFields({
               <label className="text-xs font-medium text-gray-700">
                 Amount <span className="text-red-500">*</span>
               </label>
-              <input
-                type="number"
+              <AmountInput
                 min={0}
-                step="0.01"
                 value={item.amount || ""}
                 onChange={(e) => updateItem(index, { amount: Number(e.target.value) })}
                 disabled={disabled}

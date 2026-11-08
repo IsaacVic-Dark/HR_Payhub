@@ -130,19 +130,19 @@ export function PayrunViewDrawer({
               <div>
                 <span className="text-gray-600">Total Gross Pay</span>
                 <p className="font-medium">
-                  Kshs {formatCurrency(payrun.total_gross_pay)}
+                  {formatCurrency(payrun.total_gross_pay)}
                 </p>
               </div>
               <div>
                 <span className="text-gray-600">Total Deductions</span>
                 <p className="font-medium">
-                  Kshs {formatCurrency(payrun.total_deductions)}
+                  {formatCurrency(payrun.total_deductions)}
                 </p>
               </div>
               <div>
                 <span className="text-gray-600">Total Net Pay</span>
                 <p className="font-medium text-green-600">
-                  Kshs {formatCurrency(payrun.total_net_pay)}
+                  {formatCurrency(payrun.total_net_pay)}
                 </p>
               </div>
             </div>

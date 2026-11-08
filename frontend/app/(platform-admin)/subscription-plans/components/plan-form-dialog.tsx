@@ -1,5 +1,6 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -229,11 +230,9 @@ export function PlanFormDialog({
               <Label htmlFor="base_price">
                 Base price (KES) <span className="text-red-500">*</span>
               </Label>
-              <Input
+              <AmountInput
                 id="base_price"
-                type="number"
-                min="0"
-                step="0.01"
+                min={0}
                 placeholder="0.00"
                 value={form.base_price}
                 onChange={(e) => updateField("base_price", e.target.value)}
@@ -244,11 +243,9 @@ export function PlanFormDialog({
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
               <Label htmlFor="price_per_employee">Price per employee</Label>
-              <Input
+              <AmountInput
                 id="price_per_employee"
-                type="number"
-                min="0"
-                step="0.01"
+                min={0}
                 placeholder="Leave blank if flat-rate"
                 value={form.price_per_employee}
                 onChange={(e) => updateField("price_per_employee", e.target.value)}

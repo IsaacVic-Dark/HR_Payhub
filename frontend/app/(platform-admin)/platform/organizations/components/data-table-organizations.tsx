@@ -1,8 +1,8 @@
 "use client";
 
+import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
 import { Search, Eye } from "lucide-react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   organizationAPI,
   type OrganizationType,
@@ -21,10 +21,6 @@ import { DataTable, ColumnDef } from "@/components/table";
 import { OrganizationViewDrawer } from "@/app/(platform-admin)/platform/organizations/components/organization-view-drawer";
 
 const OrganizationsTable: React.FC = () => {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
   const [organizations, setOrganizations] = useState<OrganizationType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,9 +35,18 @@ const OrganizationsTable: React.FC = () => {
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
 
-  // Drawer state
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [viewOrg, setViewOrg] = useState<OrganizationType | null>(null);
+  // Drawer state — URL-driven: ?drawer=view&id=<org id>
+  const urlDrawer = useUrlDrawer<OrganizationType>({
+    rows: organizations,
+    getId: (o) => o.id,
+    rowsReady: !loading,
+    fetchById: async (id) => {
+      const r = await organizationAPI.getOrganizationDetails(Number(id));
+      return r.success ? (r.data ?? null) : null;
+    },
+  });
+  const drawerOpen = urlDrawer.open;
+  const viewOrg = urlDrawer.record;
 
   const fetchOrganizations = useCallback(async () => {
     try {
@@ -77,31 +82,9 @@ const OrganizationsTable: React.FC = () => {
     fetchOrganizations();
   }, [fetchOrganizations]);
 
-  // Deep-linking: ?id=42 in the URL opens that org's drawer directly —
-  // covers both clicking "View" and loading/sharing a link with ?id= set.
-  useEffect(() => {
-    const id = searchParams.get("id");
-    if (!id) {
-      setDrawerOpen(false);
-      return;
-    }
-    const org = organizations.find((o) => o.id === Number(id));
-    if (org) {
-      setViewOrg(org);
-      setDrawerOpen(true);
-    }
-  }, [searchParams, organizations]);
+  const handleViewClick = (org: OrganizationType) => urlDrawer.show(org);
 
-  const handleViewClick = (org: OrganizationType) => {
-    router.push(`${pathname}?id=${org.id}`, { scroll: false });
-  };
-
-  const handleDrawerOpenChange = (open: boolean) => {
-    setDrawerOpen(open);
-    if (!open) {
-      router.push(pathname, { scroll: false });
-    }
-  };
+  const handleDrawerOpenChange = urlDrawer.onOpenChange;
 
   const handlePageChange = (newPage: number) => {
     if (newPage > 0 && newPage <= totalPages) {

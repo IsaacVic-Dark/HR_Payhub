@@ -1,3 +1,4 @@
+import { formatCurrency } from "@/utils/currency";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -9,14 +10,6 @@ import {
   Users,
 } from "lucide-react";
 import type { KpiDelta, KpiSummary } from "../lib/types";
-
-function formatCurrency(amount: number, currency: string) {
-  return new Intl.NumberFormat("en-KE", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 0,
-  }).format(amount);
-}
 
 function DeltaBadge({ delta, invertColor = false }: { delta: KpiDelta; invertColor?: boolean }) {
   if (delta.direction === "flat") {

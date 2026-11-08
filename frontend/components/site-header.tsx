@@ -35,8 +35,8 @@ import { useAuth } from "@/lib/AuthContext";
 
 // Quick-add menu. Roles match who can actually use each create form, so a user
 // is never sent to a page where the form wouldn't open.
-// Navigation opens the create form via ?drawer=add (employees, which already
-// uses useDrawerParams) or ?new=1 (handled by hooks/use-open-on-new.ts).
+// Navigation opens the create form via ?drawer=add (employees) or
+// ?modal=create (handled by hooks/use-url-modal.ts). Both are shareable URLs.
 type QuickAdd = {
   label: string;
   description: string;
@@ -56,28 +56,28 @@ const QUICK_ADD_ITEMS: QuickAdd[] = [
   {
     label: "Apply Leave",
     description: "Record a leave request",
-    href: "/leaves?new=1",
+    href: "/leaves?modal=create",
     icon: CalendarPlus,
     roles: ["admin", "hr_manager", "department_manager"],
   },
   {
     label: "New Loan",
     description: "Create an employee loan",
-    href: "/loans?new=1",
+    href: "/loans?modal=create",
     icon: HandCoins,
     roles: ["admin", "hr_manager", "payroll_manager"],
   },
   {
     label: "New Advance",
     description: "Salary advance for an employee",
-    href: "/advances?new=1",
+    href: "/advances?modal=create",
     icon: Banknote,
     roles: ["admin"],
   },
   {
     label: "New Reimbursement",
     description: "Submit an expense claim",
-    href: "/reimbursements?new=1",
+    href: "/reimbursements?modal=create",
     icon: ReceiptText,
     roles: ["admin", "hr_manager", "finance_manager"],
   },

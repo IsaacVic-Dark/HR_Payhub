@@ -1,10 +1,26 @@
 "use client";
 
+import { Suspense } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DataTableAllowanceTypes from "./components/data-table-allowance-types";
 import DataTableEmployeeAllowances from "./components/data-table-employee-allowances";
 
-export default function AllowancesPage() {
+function AllowancesContent() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tab = searchParams.get("tab") === "allowance-types" ? "allowance-types" : "employee-allowances";
+
+  // The active tab lives in the URL (?tab=allowance-types) so shared links land
+  // on the right tab. Switching tabs drops any drawer / modal params.
+  const handleTabChange = (next: string) => {
+    const params = new URLSearchParams();
+    if (next !== "employee-allowances") params.set("tab", next);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
+
   return (
     <div className="flex flex-1 flex-col">
       <div className="@container/main flex flex-1 flex-col gap-2">
@@ -16,7 +32,7 @@ export default function AllowancesPage() {
           </p>
         </div>
         <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
-          <Tabs defaultValue="employee-allowances" className="mx-6">
+          <Tabs value={tab} onValueChange={handleTabChange} className="mx-6">
             <TabsList>
               <TabsTrigger value="employee-allowances">Employee Allowances</TabsTrigger>
               <TabsTrigger value="allowance-types">Allowance Types</TabsTrigger>
@@ -31,5 +47,13 @@ export default function AllowancesPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function AllowancesPage() {
+  return (
+    <Suspense fallback={null}>
+      <AllowancesContent />
+    </Suspense>
   );
 }

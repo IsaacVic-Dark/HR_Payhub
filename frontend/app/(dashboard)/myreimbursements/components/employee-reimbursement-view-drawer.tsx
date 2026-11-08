@@ -1,5 +1,7 @@
 "use client";
 
+import { AmountInput } from "@/components/ui/amount-input";
+import { formatCurrency } from "@/utils/currency";
 import {
   Drawer,
   DrawerClose,
@@ -245,19 +247,19 @@ export function EmployeeReimbursementViewDrawer({
               <div>
                 <span className="text-gray-600">Requested</span>
                 <p className="font-medium">
-                  {Number(reimbursement.amount_requested).toLocaleString()} {reimbursement.currency}
+                  {formatCurrency(reimbursement.amount_requested, reimbursement.currency)}
                 </p>
               </div>
               <div>
                 <span className="text-gray-600">Approved</span>
                 <p className="font-medium">
-                  {Number(reimbursement.amount_approved).toLocaleString()} {reimbursement.currency}
+                  {formatCurrency(reimbursement.amount_approved, reimbursement.currency)}
                 </p>
               </div>
               <div>
                 <span className="text-gray-600">Paid</span>
                 <p className="font-medium">
-                  {Number(reimbursement.amount_paid).toLocaleString()} {reimbursement.currency}
+                  {formatCurrency(reimbursement.amount_paid, reimbursement.currency)}
                 </p>
               </div>
               <div>
@@ -344,7 +346,7 @@ export function EmployeeReimbursementViewDrawer({
                     </div>
                     <div className="flex items-center gap-2">
                       <span className="font-medium">
-                        {Number(item.amount).toLocaleString()} {item.currency}
+                        {formatCurrency(item.amount, item.currency)}
                       </span>
                       {canEditItems && (
                         <>
@@ -375,8 +377,7 @@ export function EmployeeReimbursementViewDrawer({
             {editingItemId !== null && itemForm && (
               <div className="mt-3 border border-blue-200 bg-blue-50 rounded-lg p-3 space-y-2">
                 <div className="grid grid-cols-2 gap-2">
-                  <input
-                    type="number"
+                  <AmountInput
                     placeholder="Amount"
                     value={itemForm.amount || ""}
                     onChange={(e) =>
