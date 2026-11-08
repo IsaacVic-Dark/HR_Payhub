@@ -166,7 +166,7 @@ export default function MyAdvancesPage() {
             <Info className="h-4 w-4 mt-0.5 shrink-0 text-blue-500" />
             <p>
               You can request an advance of up to{" "}
-              <strong>{Number(policy.max_percentage_of_net)}% of your net pay</strong>.
+              <strong>{Number(policy.max_percentage_of_basic)}% of your basic salary</strong>.
             </p>
           </div>
         )}
