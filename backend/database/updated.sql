@@ -264,6 +264,7 @@ CREATE TABLE advances (
 
     request_date DATE NOT NULL,
     requested_payrun_id INT DEFAULT NULL,
+    payout_payrun_id INT DEFAULT NULL,  -- payrun that pays the advance OUT (payroll-method only)
     recovery_start_date DATE DEFAULT NULL,
     recovery_end_date DATE DEFAULT NULL,
     number_of_recoveries INT DEFAULT 1,
@@ -325,6 +326,7 @@ CREATE TABLE advances (
     KEY idx_advances_status (organization_id, status),
     KEY idx_advances_policy (policy_config_id),
     KEY idx_advances_requested_payrun (requested_payrun_id),
+    KEY idx_advances_payout_payrun (payout_payrun_id),
     KEY idx_advances_recovery_dates
         (recovery_start_date, recovery_end_date),
 
@@ -345,6 +347,11 @@ CREATE TABLE advances (
 
     CONSTRAINT adv_requested_payrun_fk
         FOREIGN KEY (requested_payrun_id)
+        REFERENCES payruns(id)
+        ON DELETE SET NULL,
+
+    CONSTRAINT advances_payout_payrun_fk
+        FOREIGN KEY (payout_payrun_id)
         REFERENCES payruns(id)
         ON DELETE SET NULL,
 
@@ -2023,6 +2030,15 @@ ALTER TABLE `payrun_details`
   ADD COLUMN `taxable_allowance`    DECIMAL(15,2) NOT NULL DEFAULT '0.00' AFTER `nontaxable_reimbursement`,
   ADD COLUMN `nontaxable_allowance` DECIMAL(15,2) NOT NULL DEFAULT '0.00' AFTER `taxable_allowance`,
   ADD COLUMN `allowance_metadata`   JSON          DEFAULT NULL             AFTER `nontaxable_allowance`;
+
+-- -----------------------------------------------------------------------------
+-- 5. payrun_details — salary advance payout as its own earning
+--    (non-taxable, joins gross/net like a non-taxable reimbursement).
+--    Merged from advance_payrun_integration.sql.
+-- -----------------------------------------------------------------------------
+ALTER TABLE `payrun_details`
+  ADD COLUMN `advance_payout` DECIMAL(15,2) NOT NULL DEFAULT '0.00' AFTER `allowance_metadata`,
+  ADD COLUMN `advance_payout_metadata` JSON DEFAULT NULL AFTER `advance_payout`;
 
 -- Optional: auto-purge expired rows every hour (requires MySQL Event Scheduler)
 -- SET GLOBAL event_scheduler = ON;
