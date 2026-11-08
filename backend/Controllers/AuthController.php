@@ -126,6 +126,7 @@ class AuthController
                     'username' => $user['username'],
                     'user_type' => $user['user_type'],
                     'organization_id' => $user['organization_id'],
+                    'currency' => $org['currency'] ?? 'KES',
                     'employee' => $employee ? [
                         'id' => $employee['id'],
                         'firstname' => $employee['firstname'],
@@ -541,8 +542,9 @@ class AuthController
 
             $org = DB::table('organizations')
                 ->where(['id' => $user['organization_id']])
-                ->get(['setup_completed']);
+                ->get(['setup_completed', 'currency']);
             $setupCompleted = !empty($org) ? (int)((array)$org[0])['setup_completed'] : 0;
+            $currency = !empty($org) ? (((array)$org[0])['currency'] ?? 'KES') : 'KES';
 
             http_response_code(200);
             echo json_encode([
@@ -554,6 +556,7 @@ class AuthController
                     'user_type' => $user['user_type'],
                     'organization_id' => $user['organization_id'],
                     'setup_completed'     => $setupCompleted,
+                    'currency'            => strtoupper($currency ?: 'KES'),
                     'subscription_status' => 'trialing',
                     'employee' => $employee ? [
                         'id' => $employee['id'],
@@ -630,7 +633,7 @@ class AuthController
     {
         $result = DB::table('organizations')
             ->where(['id' => $orgId])
-            ->get(['id', 'setup_completed']);
+            ->get(['id', 'setup_completed', 'currency']);
 
         return !empty($result) ? (array) $result[0] : null;
     }
