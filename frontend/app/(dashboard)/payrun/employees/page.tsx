@@ -1,5 +1,6 @@
 "use client";
 
+import { useDrawerParams } from "@/hooks/use-drawer-params";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
 import {
@@ -9,9 +10,10 @@ import {
 import { payrunAPI, PayrunType } from "@/services/api/payrun";
 import { useAuth } from "@/lib/AuthContext";
 import { DataTable, ColumnDef } from "@/components/table";
-import { ArrowLeft, Eye, Filter } from "lucide-react";
+import { ArrowLeft, Eye, Filter, Search, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { PayrollActionDialog } from "@/app/(dashboard)/payrun/components/payroll-action-dialog";
 import { PayrunDetailDrawer } from "@/app/(dashboard)/payrun/components/payrun-detail-drawer";
 import { formatCurrency } from "@/utils/currency";
@@ -32,14 +34,22 @@ function PageContent() {
   const [perPage, setPerPage] = useState(10);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
+  // Employee search: `searchTerm` is what's typed, `search` is the debounced
+  // value actually sent to the API.
+  const [searchTerm, setSearchTerm] = useState("");
+  const [search, setSearch] = useState("");
   const [processDialogOpen, setProcessDialogOpen] = useState(false);
   const [processLoading, setProcessLoading] = useState(false);
   const [dialogAction, setDialogAction] = useState<"review" | "finalize" | "reopen">(
     "review",
   );
 
-  // Detail drawer state
-  const [detailDrawerOpen, setDetailDrawerOpen] = useState(false);
+  // Detail drawer state — nested drawer, URL-driven: ?payrun_id=5&detail=<detail id>
+  const { detailId, openDetail, closeDetail } = useDrawerParams();
+  const detailDrawerOpen = !!detailId;
+  const setDetailDrawerOpen = (open: boolean) => {
+    if (!open) closeDetail();
+  };
   const [selectedDetail, setSelectedDetail] = useState<PayrunDetailType | null>(null);
   const [detailLoading, setDetailLoading] = useState(false);
 
@@ -90,9 +100,21 @@ function PageContent() {
     redirectToLatest();
   }, [payrunId, user?.organization_id, router]);
 
+  // Debounce typing (300ms) and jump back to page 1 whenever the term changes.
+  useEffect(() => {
+    const id = setTimeout(() => {
+      const next = searchTerm.trim();
+      setSearch(next);
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(id);
+  }, [searchTerm]);
+
   // Main data fetch — only runs when payrun_id is present in the URL
   useEffect(() => {
     if (!payrunId) return;
+    // Ignore responses that arrive after a newer search / page was requested.
+    let cancelled = false;
 
     const fetchData = async () => {
       if (!user?.organization_id) {
@@ -109,8 +131,9 @@ function PageContent() {
         const detailsResponse = await payrunDetailAPI.getPayrunEmployees(
           user.organization_id,
           parseInt(payrunId),
-          { page, per_page: perPage },
+          { page, per_page: perPage, search },
         );
+        if (cancelled) return;
 
         if (detailsResponse.success && detailsResponse.data) {
           const details = Array.isArray(detailsResponse.data)
@@ -132,6 +155,7 @@ function PageContent() {
               user.organization_id,
               parseInt(payrunId),
             );
+            if (cancelled) return;
             if (payrunResponse.success && payrunResponse.data) {
               setPayrun(payrunResponse.data);
             }
@@ -141,17 +165,21 @@ function PageContent() {
           setPayrunDetails([]);
         }
       } catch (err) {
+        if (cancelled) return;
         const errorMessage =
           err instanceof Error ? err.message : "An error occurred";
         setError(errorMessage);
         setPayrunDetails([]);
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchData();
-  }, [user?.organization_id, payrunId, page, perPage]);
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.organization_id, payrunId, page, perPage, search]);
 
   const handlePageChange = (newPage: number) => {
     if (newPage > 0 && newPage <= totalPages) {
@@ -253,33 +281,38 @@ function PageContent() {
     setProcessDialogOpen(true);
   };
 
-  const handleViewDetail = async (detail: PayrunDetailType) => {
-    if (!user?.organization_id || !payrunId) return;
-    console.log("Row data from table:", detail);
-    setSelectedDetail(null);
-    setDetailDrawerOpen(true);
-    setDetailLoading(true);
-    try {
-      const response = await payrunDetailAPI.getPayrunDetailById(
-        user.organization_id,
-        parseInt(payrunId),
-        detail.id,
-      );
-      if (response.success && response.data) {
-        setSelectedDetail(response.data);
-      } else {
-        toast.error(response.error || "Failed to load employee detail");
-        setDetailDrawerOpen(false);
-      }
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "An unexpected error occurred",
-      );
-      setDetailDrawerOpen(false);
-    } finally {
-      setDetailLoading(false);
-    }
+  const handleViewDetail = (detail: PayrunDetailType) => {
+    openDetail(String(detail.id));
   };
+
+  // Load the employee detail whenever ?detail=<id> is present — either from a
+  // click above or from a shared link. Unknown / forbidden → /unauthorized.
+  useEffect(() => {
+    if (!detailId) {
+      setSelectedDetail(null);
+      return;
+    }
+    if (!user?.organization_id || !payrunId) return;
+    let cancelled = false;
+    setSelectedDetail(null);
+    setDetailLoading(true);
+    payrunDetailAPI
+      .getPayrunDetailById(user.organization_id, parseInt(payrunId), Number(detailId))
+      .then((response) => {
+        if (cancelled) return;
+        if (response.success && response.data) setSelectedDetail(response.data);
+        else router.replace("/unauthorized");
+      })
+      .catch(() => {
+        if (!cancelled) router.replace("/unauthorized");
+      })
+      .finally(() => {
+        if (!cancelled) setDetailLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [detailId, payrunId, user?.organization_id, router]);
 
   const columns: ColumnDef<PayrunDetailType>[] = [
     {
@@ -439,6 +472,26 @@ function PageContent() {
           <div className="flex flex-col gap-4 py-4 md:gap-6 md:py-6">
             <div className="w-full mx-auto p-4 bg-white">
               <div className="rounded-lg shadow-sm border p-4">
+                <div className="relative mb-4 max-w-sm">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <Input
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    placeholder="Find Employee"
+                    aria-label="Search employees by name"
+                    className="pl-9 pr-9"
+                  />
+                  {searchTerm && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchTerm("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 hover:text-gray-600"
+                      title="Clear search"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
                 <DataTable
                   data={payrunDetails}
                   columns={columns}
@@ -454,7 +507,6 @@ function PageContent() {
                       <Filter className="w-3 h-3" /> Filters
                     </button>
                   }
-                  searchInput={{ placeholder: "Find Employee" }}
                   button={
                     user && payrun?.status !== "finalized" && (
                       <div className="flex items-center gap-2">
@@ -504,7 +556,11 @@ function PageContent() {
                   onLimitChange={handleLimitChange}
                   loading={loading}
                   error={error}
-                  emptyMessage="No employee pay details found"
+                  emptyMessage={
+                    search
+                      ? `No employees match "${search}"`
+                      : "No employee pay details found"
+                  }
                 />
               </div>
             </div>
