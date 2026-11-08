@@ -58,6 +58,22 @@ class PayrunDetailController
             $perPage = isset($_GET['per_page']) ? max(1, min(100, (int) $_GET['per_page'])) : 10;
             $offset = ($page - 1) * $perPage;
 
+            // Optional employee-name search (?search=john kam). The term is split on
+            // whitespace and every word must appear somewhere in "first middle surname",
+            // so "john kam", "kam john" and "kamau" all find John Kamau. Each word gets
+            // its own placeholder (a named PDO param can't be reused with native prepares).
+            $search = isset($_GET['search']) ? trim((string) $_GET['search']) : '';
+            $searchSql = '';
+            $searchParams = [];
+            if ($search !== '') {
+                $words = array_slice(preg_split('/\s+/', $search, -1, PREG_SPLIT_NO_EMPTY), 0, 5);
+                foreach ($words as $i => $word) {
+                    $searchSql .= " AND CONCAT_WS(' ', employees.firstname, employees.middlename, employees.surname) LIKE :search_$i";
+                    // Escape LIKE wildcards so '%' / '_' typed by the user are matched literally.
+                    $searchParams[":search_$i"] = '%' . addcslashes($word, '\\%_') . '%';
+                }
+            }
+
             // Fetch payrun details with employee information
             // NOTE: users table has no name fields — names live on employees (firstname, middlename, surname).
             //       employees.job_title does not exist — job title is via job_title_id FK to job_titles.
@@ -79,6 +95,7 @@ class PayrunDetailController
                 LEFT JOIN departments ON employees.department_id = departments.id
                 LEFT JOIN job_titles  ON employees.job_title_id  = job_titles.id
                 WHERE payrun_details.payrun_id = :payrun_id
+                $searchSql
                 ORDER BY employees.surname, employees.firstname
                 LIMIT :pagination_limit OFFSET :pagination_offset
             ";
@@ -86,17 +103,19 @@ class PayrunDetailController
             $countQuery = "
                 SELECT COUNT(*) as total
                 FROM payrun_details
-                WHERE payrun_id = :payrun_id
+                INNER JOIN employees ON payrun_details.employee_id = employees.id
+                WHERE payrun_details.payrun_id = :payrun_id
+                $searchSql
             ";
 
-            $countResult = DB::raw($countQuery, [':payrun_id' => $payrun_id]);
+            $countResult = DB::raw($countQuery, [':payrun_id' => $payrun_id] + $searchParams);
             $total = $countResult[0]->total ?? 0;
 
             $payrunDetails = DB::raw($query, [
                 ':payrun_id' => $payrun_id,
                 ':pagination_limit' => $perPage,
                 ':pagination_offset' => $offset
-            ]);
+            ] + $searchParams);
 
             // Calculate pagination metadata
             $totalPages = ceil($total / $perPage);
