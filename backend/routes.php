@@ -28,6 +28,7 @@ use App\Controllers\OvertimeApprovalController;
 use App\Controllers\CountryController;
 use App\Controllers\CountyController;
 use App\Controllers\AllowanceTypeController;
+use App\Controllers\DocumentTemplateController;
 use App\Controllers\EmployeeAllowanceController;
 use App\Controllers\AdvanceController;
 
@@ -859,6 +860,17 @@ Router::patch('api/v1/organizations/{org_id}/payslips/{id}/pdf-path', PayslipCon
     'PayslipAuthorizationMiddleware',
 ]);
 
+// GET /api/v1/organizations/{org_id}/payslips/{id}/download
+// Streams the stored payslip PDF (generated from the active template version).
+// Roles: org-wide (admin, payroll_manager, finance_manager, auditor), department/team scoped
+//        (payroll_officer, hr_*, department_manager) and employees for their OWN payslips only.
+// Scope + tenant checks live in PayslipDownloadMiddleware.
+Router::get('api/v1/organizations/{org_id}/payslips/{id}/download', PayslipController::class . '@download', [
+    'AuthMiddleware',
+    'PayslipDownloadMiddleware',
+    ['RateLimitMiddleware', ['bucket' => 'payslip_download', 'limit' => 60, 'window' => 60]],
+]);
+
 // ---------------------------------------------------------------------------
 // Employee-scoped
 // ---------------------------------------------------------------------------
@@ -890,6 +902,7 @@ Router::get('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips', Paysli
 Router::post('api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/generate', PayslipController::class . '@generate', [
     ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
     'PayslipAuthorizationMiddleware',
+    ['RateLimitMiddleware', ['bucket' => 'payslip_generate', 'limit' => 5, 'window' => 60]],
 ]);
 
 // POST /api/v1/organizations/{org_id}/payruns/{payrun_id}/payslips/bulk-send
@@ -1861,4 +1874,91 @@ Router::get('api/v1/employees/{employee}/advance-balance', AdvanceController::cl
 // Draft payruns for the attach-recovery screen
 Router::get('api/v1/advance-payruns', AdvanceController::class . '@payrunOptions', [
     'AuthMiddleware', ['AdvanceAuthorizationMiddleware', 'payrun_options'],
+]);
+
+
+// =============================================================================
+// DOCUMENT TEMPLATES (payslip layouts & branding)
+// Roles: admin, payroll_manager, payroll_officer. DocumentTemplateAuthorizationMiddleware
+// also verifies {org_id} is the caller's own organisation on EVERY route.
+// =============================================================================
+
+// Static routes first (they have fewer params than /templates/{id}, so the router
+// matches them before the {id} patterns).
+
+// GET /api/v1/organizations/{org_id}/templates/meta  — layouts, defaults, limits, variable allowlist
+Router::get('api/v1/organizations/{org_id}/templates/meta', DocumentTemplateController::class . '@meta', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+]);
+
+// GET /api/v1/organizations/{org_id}/templates/preview-options?payrun_id=
+// Payruns (and, when payrun_id is given, employees) that can be used for a real-data preview
+Router::get('api/v1/organizations/{org_id}/templates/preview-options', DocumentTemplateController::class . '@previewOptions', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/templates/logo  (multipart/form-data, field "logo")
+Router::post('api/v1/organizations/{org_id}/templates/logo', DocumentTemplateController::class . '@uploadLogo', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+]);
+
+// GET /api/v1/organizations/{org_id}/templates?template_type=payslip&status=
+Router::get('api/v1/organizations/{org_id}/templates', DocumentTemplateController::class . '@index', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/templates
+Router::post('api/v1/organizations/{org_id}/templates', DocumentTemplateController::class . '@store', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+]);
+
+// GET /api/v1/organizations/{org_id}/templates/{id}
+Router::get('api/v1/organizations/{org_id}/templates/{id}', DocumentTemplateController::class . '@show', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+]);
+
+// PUT /api/v1/organizations/{org_id}/templates/{id}
+// Saves the working copy only. An active template keeps generating from its active
+// version until it is explicitly re-activated.
+Router::put('api/v1/organizations/{org_id}/templates/{id}', DocumentTemplateController::class . '@update', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/templates/{id}/activate
+Router::post('api/v1/organizations/{org_id}/templates/{id}/activate', DocumentTemplateController::class . '@activate', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/templates/{id}/archive
+Router::post('api/v1/organizations/{org_id}/templates/{id}/archive', DocumentTemplateController::class . '@archive', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+]);
+
+// POST /api/v1/organizations/{org_id}/templates/{id}/preview
+// Body: { payrun_id?, employee_id?, draft?, format?: "html" | "pdf", live?: bool }  — 30 / minute / user
+Router::post('api/v1/organizations/{org_id}/templates/{id}/preview', DocumentTemplateController::class . '@preview', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+    ['RateLimitMiddleware', ['bucket' => 'template_preview', 'limit' => 30, 'window' => 60]],
+]);
+
+// GET /api/v1/organizations/{org_id}/templates/{id}/versions
+Router::get('api/v1/organizations/{org_id}/templates/{id}/versions', DocumentTemplateController::class . '@versions', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
+]);
+
+// GET /api/v1/organizations/{org_id}/templates/{id}/versions/{version_id}
+Router::get('api/v1/organizations/{org_id}/templates/{id}/versions/{version_id}', DocumentTemplateController::class . '@version', [
+    ['AuthMiddleware', ['admin', 'payroll_manager', 'payroll_officer']],
+    'DocumentTemplateAuthorizationMiddleware',
 ]);

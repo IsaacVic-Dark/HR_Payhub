@@ -3,6 +3,12 @@
 namespace App\Controllers;
 
 use App\Services\DB;
+use App\Services\DocumentTemplateService;
+use App\Services\Templates\PayslipDataBuilder;
+use App\Services\Templates\PayslipPdfGenerator;
+use App\Services\Templates\PayslipTemplateRenderer;
+use App\Services\Templates\TemplateAuditLogger;
+use App\Services\Templates\TemplateException;
 
 class PayslipController
 {
@@ -23,6 +29,8 @@ class PayslipController
             ps.generated_at,
             ps.sent_at,
             ps.pdf_path,
+            ps.template_id,
+            ps.template_version_id,
 
             -- Payrun details (raw — nested by formatPayslip())
             pr.payrun_name,
@@ -650,12 +658,28 @@ class PayslipController
 
     /**
      * POST /organizations/{org_id}/payruns/{payrun_id}/payslips/generate
-     * Generate payslips from finalized payrun_details.
+     * Generate payslips (rows + PDFs) from a finalized payrun, using the
+     * organisation's ACTIVE payslip template version.
+     * Body (optional): { "employee_ids": [..], "regenerate": false }
      * Roles: admin, payroll_manager, payroll_officer
+     *
+     * Idempotent: (payrun_id, employee_id) is unique. Existing payslips that
+     * already have a PDF are skipped unless regenerate=true; an existing row
+     * with no PDF simply gets its PDF attached.
+     *
+     * Response keeps the original counters (generated, skipped, errors) and adds
+     * generated_payslips / skipped_payslips / failed_payslips lists plus the template used.
      */
     public function generate(int $orgId, int $payrunId): mixed
     {
         try {
+            // Tenant guard: the URL organisation must be the caller's organisation.
+            $user = \App\Middleware\AuthMiddleware::getCurrentUser();
+            if (!$user || (int) $user['organization_id'] !== (int) $orgId) {
+                TemplateAuditLogger::log((int) ($user['organization_id'] ?? 0), (int) ($user['id'] ?? 0), 'payrun', $payrunId, 'access_denied', ['reason' => 'organization_mismatch', 'action' => 'generate_payslips', 'requested_org_id' => $orgId]);
+                return responseJson(success: false, data: null, message: 'Access to this organization is denied', code: 403);
+            }
+
             $payrun = $this->getPayrunWithValidation($payrunId, $orgId);
             if (!$payrun['success']) return $payrun['data'];
 
@@ -670,10 +694,10 @@ class PayslipController
                 );
             }
 
-            $data = json_decode(file_get_contents('php://input'), true);
+            $data = json_decode(file_get_contents('php://input'), true) ?: [];
 
             // Optional: generate for specific employees only
-            $employeeIds = $data['employee_ids'] ?? [];
+            $employeeIds = array_values(array_unique(array_filter(array_map('intval', (array) ($data['employee_ids'] ?? [])))));
             $regenerate  = (bool) ($data['regenerate'] ?? false);
 
             // Fetch all payrun_details for this payrun (optionally filtered by employee)
@@ -699,34 +723,51 @@ class PayslipController
                 );
             }
 
-            $generated = 0;
-            $skipped   = 0;
-            $errors    = [];
+            // ---- Active template (immutable version) --------------------------------
+            $templates = new DocumentTemplateService();
+            try {
+                $active = $templates->getActiveForGeneration($orgId, (int) $user['id']);
+            } catch (TemplateException $e) {
+                return responseJson(success: false, data: null, message: $e->getMessage(), code: $e->getCode() ?: 409);
+            }
+            $template = $active['template'];
+            $version  = $active['version'];
+
+            $builder  = new PayslipDataBuilder();
+            $renderer = new PayslipTemplateRenderer();
+            $pdfGen   = new PayslipPdfGenerator();
+            $orgRow   = $builder->organization($orgId);
+            // Render from the immutable VERSION, never from the editable working copy.
+            $ctx      = $templates->renderContext($version, $orgRow->logo_url ?? null);
+            $showLeave = !empty($ctx['config']['showLeaveSummary']);
+
+            @set_time_limit(300);   // PDF rendering is CPU-bound; large payruns can be sent in batches via employee_ids
+
+            $generated = [];
+            $skipped   = [];
+            $failed    = [];
+            $regenerated = [];
+            $period    = new \DateTime($payrunData->pay_period_start);
 
             foreach ($details as $detail) {
+                $empId = (int) $detail->employee_id;
                 try {
-                    // Check if payslip already exists for this payrun+employee
                     $existing = DB::raw(
-                        "SELECT id FROM payslips WHERE payrun_id = :run AND employee_id = :emp LIMIT 1",
-                        [':run' => $payrunId, ':emp' => $detail->employee_id]
+                        "SELECT id, pdf_path FROM payslips WHERE payrun_id = :run AND employee_id = :emp AND organization_id = :org LIMIT 1",
+                        [':run' => $payrunId, ':emp' => $empId, ':org' => $orgId]
                     );
+                    $exists = !empty($existing);
 
-                    if (!empty($existing) && !$regenerate) {
-                        $skipped++;
+                    // Already has a PDF (ours, or one supplied through PATCH .../pdf-path): leave it alone.
+                    if ($exists && !$regenerate && !empty($existing[0]->pdf_path)) {
+                        $skipped[] = ['employee_id' => $empId, 'payslip_id' => (int) $existing[0]->id, 'reason' => 'already_generated'];
                         continue;
                     }
 
                     // Build payslip number: PAYSLIP-{PAY_PERIOD_YEAR}-{PAY_PERIOD_MONTH}-{EMP_ID}
-                    $period         = new \DateTime($payrunData->pay_period_start);
-                    $payslipNumber  = sprintf(
-                        'PAYSLIP-%s-%s-EMP%d',
-                        $period->format('Y'),
-                        $period->format('m'),
-                        $detail->employee_id
-                    );
+                    $payslipNumber = sprintf('PAYSLIP-%s-%s-EMP%d', $period->format('Y'), $period->format('m'), $empId);
 
-                    if (!empty($existing) && $regenerate) {
-                        // Update existing
+                    if ($exists && $regenerate) {
                         DB::table('payslips')->update([
                             'payrun_detail_id' => $detail->id,
                             'payslip_number'   => $payslipNumber,
@@ -735,34 +776,101 @@ class PayslipController
                             'sent_at'          => null,
                             'pdf_path'         => null,
                         ], 'id', $existing[0]->id);
+                        $payslipId = (int) $existing[0]->id;
+                        $regenerated[] = $empId;
+                    } elseif ($exists) {
+                        // Row exists without a PDF (created before templates): attach the PDF, keep status/sent_at.
+                        $payslipId = (int) $existing[0]->id;
                     } else {
-                        DB::table('payslips')->insert([
-                            'organization_id'  => $orgId,
-                            'payrun_id'        => $payrunId,
-                            'payrun_detail_id' => $detail->id,
-                            'employee_id'      => $detail->employee_id,
-                            'payslip_number'   => $payslipNumber,
-                            'status'           => 'generated',
-                            'generated_at'     => date('Y-m-d H:i:s'),
-                        ]);
+                        try {
+                            DB::table('payslips')->insert([
+                                'organization_id'  => $orgId,
+                                'payrun_id'        => $payrunId,
+                                'payrun_detail_id' => $detail->id,
+                                'employee_id'      => $empId,
+                                'payslip_number'   => $payslipNumber,
+                                'status'           => 'generated',
+                                'generated_at'     => date('Y-m-d H:i:s'),
+                            ]);
+                            $payslipId = (int) DB::lastInsertId();
+                        } catch (\Exception $dup) {
+                            if (stripos($dup->getMessage(), 'Duplicate entry') !== false) {   // concurrent request won the race
+                                $skipped[] = ['employee_id' => $empId, 'reason' => 'already_generated'];
+                                continue;
+                            }
+                            throw $dup;
+                        }
                     }
 
-                    $generated++;
-                } catch (\Exception $e) {
-                    error_log("Payslip generation error for emp {$detail->employee_id}: " . $e->getMessage());
-                    $errors[] = "Employee ID {$detail->employee_id}: " . $e->getMessage();
+                    // ---- Render + store PDF ------------------------------------------------
+                    $slipRows = DB::raw("SELECT * FROM payslips WHERE id = :id AND organization_id = :org LIMIT 1", [':id' => $payslipId, ':org' => $orgId]);
+                    $payload  = $builder->build($orgId, (int) $detail->id, $slipRows[0] ?? null, $ctx['logo_data_uri'], $showLeave);
+                    if ($payload === null) {
+                        throw new \RuntimeException('Payroll data could not be loaded');
+                    }
+                    $html  = $renderer->render($ctx, $payload);
+                    $bytes = $pdfGen->render($html, [
+                        'title'   => ($ctx['config']['documentTitle'] ?? 'Payslip') . ' ' . $payslipNumber,
+                        'subject' => $payslipNumber,
+                    ]);
+                    $path = $pdfGen->store($orgId, $payslipNumber, $payrunData->pay_period_start, $bytes);
+
+                    DB::raw(
+                        "UPDATE payslips SET pdf_path = :path, template_id = :tid, template_version_id = :vid
+                          WHERE id = :id AND organization_id = :org",
+                        [':path' => $path, ':tid' => $template['id'], ':vid' => $version['id'], ':id' => $payslipId, ':org' => $orgId]
+                    );
+
+                    $generated[] = ['employee_id' => $empId, 'payslip_id' => $payslipId, 'payslip_number' => $payslipNumber, 'regenerated' => $exists && $regenerate];
+                } catch (\Throwable $e) {
+                    error_log("Payslip generation error for emp {$empId}: " . $e->getMessage());
+                    // Internal detail stays in the log; the client gets a safe reason.
+                    $failed[] = ['employee_id' => $empId, 'error' => $e instanceof \RuntimeException ? $e->getMessage() : 'Unexpected error while generating this payslip'];
                 }
+            }
+
+            // ---- Audit ------------------------------------------------------------------
+            TemplateAuditLogger::log($orgId, (int) $user['id'], 'payrun', $payrunId, 'payslips_generated', [
+                'payrun_id'           => $payrunId,
+                'template_id'         => $template['id'],
+                'template_version_id' => $version['id'],
+                'template_version'    => $version['version'],
+                'employee_count'      => count($generated),
+                'skipped_count'       => count($skipped),
+                'failed_count'        => count($failed),
+                'failed_employee_ids' => array_slice(array_column($failed, 'employee_id'), 0, 200),
+                'regenerate'          => $regenerate,
+            ]);
+            if ($regenerated) {
+                TemplateAuditLogger::log($orgId, (int) $user['id'], 'payrun', $payrunId, 'payslip_regenerated', [
+                    'payrun_id'           => $payrunId,
+                    'template_id'         => $template['id'],
+                    'template_version_id' => $version['id'],
+                    'employee_count'      => count($regenerated),
+                    'employee_ids'        => array_slice($regenerated, 0, 500),
+                ]);
+            }
+
+            $result = [
+                'generated'          => count($generated),
+                'skipped'            => count($skipped),
+                'failed'             => count($failed),
+                'errors'             => array_map(fn($f) => "Employee ID {$f['employee_id']}: {$f['error']}", $failed),
+                'generated_payslips' => $generated,
+                'skipped_payslips'   => $skipped,
+                'failed_payslips'    => $failed,
+                'template'           => ['id' => $template['id'], 'name' => $template['name'], 'version_id' => $version['id'], 'version' => $version['version']],
+            ];
+
+            if (!$generated && !$skipped && $failed) {
+                return responseJson(success: false, data: $result, message: 'No payslips could be generated', code: 500);
             }
 
             return responseJson(
                 success: true,
-                data: [
-                    'generated' => $generated,
-                    'skipped'   => $skipped,
-                    'errors'    => $errors,
-                ],
-                message: "Payslips generated: {$generated}, skipped (already exist): {$skipped}",
-                code: 201
+                data: $result,
+                message: "Payslips generated: " . count($generated) . ", skipped (already exist): " . count($skipped) . ", failed: " . count($failed),
+                code: $generated ? 201 : 200
             );
         } catch (\Exception $e) {
             error_log("Generate payslips error: " . $e->getMessage());
@@ -772,6 +880,47 @@ class PayslipController
                 message: "Failed to generate payslips: " . $e->getMessage(),
                 code: 500
             );
+        }
+    }
+
+    // -------------------------------------------------------------------------
+
+    /**
+     * GET /organizations/{org_id}/payslips/{id}/download
+     * Streams the stored payslip PDF. Authorisation (role scope + tenant) is done
+     * by PayslipDownloadMiddleware; the org match is re-checked here and the file
+     * is only served from inside storage/payslips (no path is ever returned to the client).
+     */
+    public function download(int $orgId, int $payslipId): mixed
+    {
+        try {
+            $user = \App\Middleware\AuthMiddleware::getCurrentUser();
+            if (!$user || (int) $user['organization_id'] !== (int) $orgId) {
+                return responseJson(success: false, data: null, message: 'Access to this organization is denied', code: 403);
+            }
+
+            $payslip = $this->getPayslipWithValidation($payslipId, $orgId);
+            if (!$payslip['success']) return $payslip['data'];
+
+            $file = PayslipPdfGenerator::resolveStored($payslip['data']->pdf_path ?? null);
+            if ($file === null) {
+                return responseJson(success: false, data: null, message: 'The PDF for this payslip has not been generated yet', code: 404);
+            }
+
+            $name = preg_replace('/[^A-Za-z0-9._-]/', '_', (string) $payslip['data']->payslip_number) ?: 'payslip';
+
+            header_remove('Content-Type');
+            header('Content-Type: application/pdf');
+            header('Content-Disposition: attachment; filename="' . $name . '.pdf"');
+            header('Content-Length: ' . filesize($file));
+            header('Cache-Control: private, no-store');
+            header('X-Content-Type-Options: nosniff');
+            http_response_code(200);
+            readfile($file);
+            exit;
+        } catch (\Throwable $e) {
+            error_log("Download payslip error: " . $e->getMessage());
+            return responseJson(success: false, data: null, message: 'Failed to download payslip', code: 500);
         }
     }
 
