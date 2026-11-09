@@ -601,13 +601,31 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
     'advance_partially_recovered',
     'advance_repaid',
     'advance_reversed',
-    'advance_manual_repayment'
+    'advance_manual_repayment',
+
+    -- Added by audit_logs_action_enum_fix.sql
+    'bootstrap_create',
+    'approve',
+    'reject',
+    'advance_payout_scheduled',
+    'advance_payout_detached',
+
+    -- Document templates / payslip generation (Templates module)
+    'template_created',
+    'template_updated',
+    'template_activated',
+    'template_archived',
+    'template_previewed',
+    'payslips_generated',
+    'payslip_regenerated',
+    'access_denied'
   ) NOT NULL,
   `details` json DEFAULT NULL,
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
   KEY `organization_id` (`organization_id`),
   KEY `user_id` (`user_id`),
+  KEY `idx_audit_logs_org_created` (`organization_id`, `created_at`),
   CONSTRAINT `audit_logs_ibfk_1` FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
   CONSTRAINT `audit_logs_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
@@ -1106,7 +1124,7 @@ CREATE TABLE IF NOT EXISTS `payrun_deductions` (
 CREATE TABLE IF NOT EXISTS `payrun_details` (
   `id` int NOT NULL AUTO_INCREMENT,
   `payrun_id` int NOT NULL,
-  `organization_id` int NOT NULL,
+  `organization_id` int NOT NULL,   -- NOTE: the live table has DEFAULT 221 here (see docs); a tenant column should have no default
   `employee_id` int NOT NULL,
 
   `basic_salary` decimal(15,2) NOT NULL,
@@ -1114,10 +1132,6 @@ CREATE TABLE IF NOT EXISTS `payrun_details` (
   `overtime_amount` decimal(15,2) DEFAULT '0.00',
   `bonus_amount` decimal(15,2) DEFAULT '0.00',
   `commission_amount` decimal(15,2) DEFAULT '0.00',
-
-  `taxable_reimbursement` decimal(15,2) NOT NULL DEFAULT '0.00',
-  `nontaxable_reimbursement` decimal(15,2) NOT NULL DEFAULT '0.00',
-  `reimbursement_metadata` json DEFAULT NULL,
 
   `nssf` decimal(15,2) DEFAULT '0.00',
   `shif` decimal(15,2) DEFAULT '0.00',
@@ -1135,6 +1149,21 @@ CREATE TABLE IF NOT EXISTS `payrun_details` (
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP
     ON UPDATE CURRENT_TIMESTAMP,
+
+  -- Reimbursements (taxable / non-taxable split + audit trail of what was paid)
+  `taxable_reimbursement` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `nontaxable_reimbursement` decimal(15,2) NOT NULL DEFAULT '0.00',
+
+  -- Allowances (same trio as reimbursements)
+  `taxable_allowance` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `nontaxable_allowance` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `allowance_metadata` json DEFAULT NULL,
+
+  -- Salary advance paid out through this payrun (its own non-taxable earning)
+  `advance_payout` decimal(15,2) NOT NULL DEFAULT '0.00',
+  `advance_payout_metadata` json DEFAULT NULL,
+
+  `reimbursement_metadata` json DEFAULT NULL,
 
   PRIMARY KEY (`id`),
 
@@ -1177,9 +1206,16 @@ CREATE TABLE p9forms (
     `pdfpath` VARCHAR(500),
     `status` ENUM('generated','sent','filed') DEFAULT 'generated',
     `generatedat` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    -- Reserved for the future P9 template renderer (not used yet)
+    `template_id` INT UNSIGNED NULL,
+    `template_version_id` INT UNSIGNED NULL,
     FOREIGN KEY (organizationid) REFERENCES organizations(id) ON DELETE CASCADE,
     FOREIGN KEY (employeeid) REFERENCES employees(id) ON DELETE CASCADE,
-    UNIQUE KEY unique_p9 (organizationid, employeeid, year)
+    CONSTRAINT `fk_p9forms_template` FOREIGN KEY (`template_id`) REFERENCES `document_templates` (`id`) ON DELETE SET NULL,
+    CONSTRAINT `fk_p9forms_template_version` FOREIGN KEY (`template_version_id`) REFERENCES `document_template_versions` (`id`) ON DELETE SET NULL,
+    UNIQUE KEY unique_p9 (organizationid, employeeid, year),
+    KEY `idx_p9forms_template` (`template_id`),
+    KEY `idx_p9forms_template_version` (`template_version_id`)
 );
 
 
@@ -1219,6 +1255,69 @@ CREATE TABLE IF NOT EXISTS `refunds` (
   CONSTRAINT `refunds_ibfk_2` FOREIGN KEY (`config_id`) REFERENCES `organization_configs` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
+-- -----------------------------------------------------------------------------
+-- DOCUMENT TEMPLATES (Templates module — payslip layouts & branding)
+--   document_templates          working copy of each template (what the editor edits)
+--   document_template_versions  immutable snapshots; payslips point at the one they used
+--   document_templates.active_version_id = snapshot used for PDF generation
+-- Presentation only: nothing here can change a payroll value.
+-- -----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `document_templates` (
+  `id`                INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `organization_id`   INT NOT NULL,
+  `template_type`     ENUM('payslip','p9','employment_letter','loan_statement','advance_statement','reimbursement_statement') NOT NULL DEFAULT 'payslip',
+  `name`              VARCHAR(100) NOT NULL,
+  `layout_key`        VARCHAR(50)  NOT NULL DEFAULT 'modern',
+  `config`            JSON NOT NULL,
+  `header_logo_url`   VARCHAR(500) NULL COMMENT 'NULL = no logo, @organization = organization logo, storage/template-logos/... = uploaded',
+  `primary_color`     VARCHAR(20)  NULL,
+  `accent_color`      VARCHAR(20)  NULL,
+  `footer_text`       TEXT NULL,
+  `is_default`        TINYINT(1) NOT NULL DEFAULT 0,
+  `status`            ENUM('draft','active','archived') NOT NULL DEFAULT 'draft',
+  `active_version_id` INT UNSIGNED NULL COMMENT 'Snapshot used for PDF generation (set on activation)',
+  `created_by`        INT NULL,
+  `updated_by`        INT NULL,
+  `created_at`        TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+  `updated_at`        TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+
+  CONSTRAINT `fk_document_templates_org`
+    FOREIGN KEY (`organization_id`) REFERENCES `organizations` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_document_templates_created_by`
+    FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_document_templates_updated_by`
+    FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+
+  UNIQUE KEY `unique_org_template_name` (`organization_id`, `template_type`, `name`),
+  KEY `idx_document_templates_org_type` (`organization_id`, `template_type`, `status`),
+  KEY `idx_document_templates_active_version` (`active_version_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+CREATE TABLE IF NOT EXISTS `document_template_versions` (
+  `id`              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  `template_id`     INT UNSIGNED NOT NULL,
+  `version`         INT UNSIGNED NOT NULL,
+  `config`          JSON NOT NULL,
+  `header_logo_url` VARCHAR(500) NULL,
+  `primary_color`   VARCHAR(20)  NULL,
+  `accent_color`    VARCHAR(20)  NULL,
+  `footer_text`     TEXT NULL,
+  `created_by`      INT NULL,
+  `created_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
+
+  CONSTRAINT `fk_template_versions_template`
+    FOREIGN KEY (`template_id`) REFERENCES `document_templates` (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_template_versions_created_by`
+    FOREIGN KEY (`created_by`) REFERENCES `users` (`id`) ON DELETE SET NULL,
+
+  UNIQUE KEY `unique_template_version` (`template_id`, `version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Circular reference (template → its active snapshot) is added after both tables exist.
+ALTER TABLE `document_templates`
+  ADD CONSTRAINT `fk_document_templates_active_version`
+    FOREIGN KEY (`active_version_id`) REFERENCES `document_template_versions` (`id`) ON DELETE SET NULL;
+
 CREATE TABLE IF NOT EXISTS `payslips` (
   `id`                INT  NOT NULL AUTO_INCREMENT,
   `organization_id`   INT  NOT NULL,
@@ -1229,18 +1328,27 @@ CREATE TABLE IF NOT EXISTS `payslips` (
   `status`            ENUM('generated','sent','acknowledged') DEFAULT 'generated',
   `generated_at`      TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP,
   `sent_at`           TIMESTAMP NULL DEFAULT NULL,
-  `pdf_path`          VARCHAR(500)  DEFAULT NULL  COMMENT 'Server path to stored PDF',
+  `pdf_path`          VARCHAR(500)  DEFAULT NULL  COMMENT 'Storage path (relative to the backend root) of the stored PDF',
   `metadata`          JSON DEFAULT NULL COMMENT 'e.g. {"type":"off_cycle_adjustment","original_payrun_id":12,"overtime_approval_id":45}',
+  -- Which template and which immutable version produced the PDF (history is never rewritten)
+  `template_id`         INT UNSIGNED NULL,
+  `template_version_id` INT UNSIGNED NULL,
  
   PRIMARY KEY (`id`),
   UNIQUE KEY `unique_payslip` (`payrun_id`, `employee_id`),
   KEY `payslips_org`    (`organization_id`),
   KEY `payslips_detail` (`payrun_detail_id`),
+  KEY `idx_payslips_org_employee` (`organization_id`, `employee_id`),
+  KEY `idx_payslips_org_payrun`   (`organization_id`, `payrun_id`),
+  KEY `idx_payslips_template`         (`template_id`),
+  KEY `idx_payslips_template_version` (`template_version_id`),
  
   CONSTRAINT `payslips_org_fk`    FOREIGN KEY (`organization_id`)  REFERENCES `organizations`  (`id`) ON DELETE CASCADE,
   CONSTRAINT `payslips_run_fk`    FOREIGN KEY (`payrun_id`)        REFERENCES `payruns`        (`id`) ON DELETE CASCADE,
   CONSTRAINT `payslips_detail_fk` FOREIGN KEY (`payrun_detail_id`) REFERENCES `payrun_details` (`id`) ON DELETE CASCADE,
-  CONSTRAINT `payslips_emp_fk`    FOREIGN KEY (`employee_id`)      REFERENCES `employees`      (`id`) ON DELETE CASCADE
+  CONSTRAINT `payslips_emp_fk`    FOREIGN KEY (`employee_id`)      REFERENCES `employees`      (`id`) ON DELETE CASCADE,
+  CONSTRAINT `fk_payslips_template`         FOREIGN KEY (`template_id`)         REFERENCES `document_templates`         (`id`) ON DELETE SET NULL,
+  CONSTRAINT `fk_payslips_template_version` FOREIGN KEY (`template_version_id`) REFERENCES `document_template_versions` (`id`) ON DELETE SET NULL
  
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -2022,23 +2130,10 @@ CREATE TABLE IF NOT EXISTS `employee_allowance_payrun_lines` (
 
 
 -- -----------------------------------------------------------------------------
--- 4. payrun_details — new allowance columns, mirroring the existing
---    taxable_reimbursement / nontaxable_reimbursement / reimbursement_metadata
---    trio.
+-- (payrun_details allowance / advance_payout columns are now part of the CREATE TABLE
+--  above, so the two ALTER TABLE statements that used to live here were removed.
+--  Existing databases already have these columns — do not re-run them.)
 -- -----------------------------------------------------------------------------
-ALTER TABLE `payrun_details`
-  ADD COLUMN `taxable_allowance`    DECIMAL(15,2) NOT NULL DEFAULT '0.00' AFTER `nontaxable_reimbursement`,
-  ADD COLUMN `nontaxable_allowance` DECIMAL(15,2) NOT NULL DEFAULT '0.00' AFTER `taxable_allowance`,
-  ADD COLUMN `allowance_metadata`   JSON          DEFAULT NULL             AFTER `nontaxable_allowance`;
-
--- -----------------------------------------------------------------------------
--- 5. payrun_details — salary advance payout as its own earning
---    (non-taxable, joins gross/net like a non-taxable reimbursement).
---    Merged from advance_payrun_integration.sql.
--- -----------------------------------------------------------------------------
-ALTER TABLE `payrun_details`
-  ADD COLUMN `advance_payout` DECIMAL(15,2) NOT NULL DEFAULT '0.00' AFTER `allowance_metadata`,
-  ADD COLUMN `advance_payout_metadata` JSON DEFAULT NULL AFTER `advance_payout`;
 
 -- Optional: auto-purge expired rows every hour (requires MySQL Event Scheduler)
 -- SET GLOBAL event_scheduler = ON;
@@ -2477,3 +2572,33 @@ VALUES
     'approved',
     1
 );
+
+
+-- -----------------------------------------------------------------------------
+-- Default payslip template for every existing organisation (modern layout, active).
+-- New organisations get theirs lazily the first time the Templates module is opened
+-- (DocumentTemplateService::ensureDefault). Safe to re-run: it only inserts where missing.
+-- -----------------------------------------------------------------------------
+INSERT INTO `document_templates`
+  (`organization_id`, `template_type`, `name`, `layout_key`, `config`, `header_logo_url`,
+   `primary_color`, `accent_color`, `footer_text`, `is_default`, `status`)
+SELECT o.`id`, 'payslip', 'Default Modern', 'modern',
+       CAST('{"layout":"modern","documentTitle":"Payslip","showCompanyHeader":true,"showEmployeeDetails":true,"showPaymentSummary":true,"showEarnings":true,"showDeductions":true,"showStatutoryDeductions":true,"showAllowances":true,"showReimbursements":true,"showAdvances":true,"showLoanDeductions":true,"showLeaveSummary":false,"showBankDetails":false,"showPaymentDate":true,"showFooter":true,"footerText":"This is a system-generated payslip.","labels":{"employee":"Employee","employeeNumber":"Employee No.","payPeriod":"Pay Period","basicSalary":"Basic Salary","grossPay":"Gross Pay","totalDeductions":"Total Deductions","netPay":"Net Pay","paye":"PAYE","nssf":"NSSF","shif":"SHIF","housingLevy":"Housing Levy","jobTitle":"Job Title","department":"Department","hireDate":"Date Hired","payslipNumber":"Payslip No.","paymentDate":"Payment Date","earnings":"Earnings","deductions":"Deductions","statutoryDeductions":"Statutory Deductions","allowances":"Allowances","reimbursements":"Reimbursements","advances":"Advance Recoveries","loans":"Loan Repayments","overtime":"Overtime","bonus":"Bonus","commission":"Commission","taxableIncome":"Taxable Income","personalRelief":"Personal Relief","bankDetails":"Bank Details","leaveSummary":"Leave Summary","paymentSummary":"Payment Summary"},"sections":{"earnings":{"visible":true,"order":1},"deductions":{"visible":true,"order":2}}}' AS JSON),
+       '@organization', '#1E3A8A', '#2563EB', 'This is a system-generated payslip.', 1, 'active'
+  FROM `organizations` o
+ WHERE NOT EXISTS (
+         SELECT 1 FROM `document_templates` t
+          WHERE t.`organization_id` = o.`id` AND t.`template_type` = 'payslip'
+       );
+
+INSERT INTO `document_template_versions`
+  (`template_id`, `version`, `config`, `header_logo_url`, `primary_color`, `accent_color`, `footer_text`)
+SELECT t.`id`, 1, t.`config`, t.`header_logo_url`, t.`primary_color`, t.`accent_color`, t.`footer_text`
+  FROM `document_templates` t
+ WHERE t.`template_type` = 'payslip' AND t.`status` = 'active' AND t.`active_version_id` IS NULL
+   AND NOT EXISTS (SELECT 1 FROM `document_template_versions` v WHERE v.`template_id` = t.`id`);
+
+UPDATE `document_templates` t
+  JOIN `document_template_versions` v ON v.`template_id` = t.`id` AND v.`version` = 1
+   SET t.`active_version_id` = v.`id`
+ WHERE t.`status` = 'active' AND t.`active_version_id` IS NULL;
