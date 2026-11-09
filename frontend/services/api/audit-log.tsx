@@ -4,13 +4,27 @@ type AuditLogType = {
   user_id: number;
   entity_type: string;
   entity_id: number;
+  /** Current name of the referenced record, or null if deleted / not resolvable. */
+  entity_name?: string | null;
   action: string;
-  details: any;
+  /**
+   * Shape varies by module:
+   *  - { action, user_id, new_data, old_data, timestamp }  (organization_config)
+   *  - a flat object of whatever fields were relevant       (everything else)
+   */
+  details: Record<string, any> | null;
   created_at: string;
-  user_first_name: string;
-  user_surname: string;
-  user_email: string;
-  user_full_name: string;
+  user_first_name: string | null;
+  user_surname: string | null;
+  user_email: string | null;
+  user_role?: string | null;
+  user_full_name: string | null;
+};
+
+type AuditLogFilterOptions = {
+  entity_types: string[];
+  actions: string[];
+  users: { id: number; full_name: string | null; email: string | null }[];
 };
 
 interface ApiResponse<T = any> {
@@ -27,6 +41,12 @@ interface AuditLogFilters {
   entity_id?: number;
   action?: string;
   user_id?: number;
+  /** YYYY-MM-DD, inclusive */
+  date_from?: string;
+  /** YYYY-MM-DD, inclusive */
+  date_to?: string;
+  /** Free text: user, email, entity type/id, action, or anything inside details */
+  search?: string;
   page?: number;
   per_page?: number;
 }
@@ -74,24 +94,15 @@ class AuditLogAPI {
   private buildQueryParams(filters: AuditLogFilters): string {
     const params = new URLSearchParams();
 
-    if (filters.entity_type) {
-      params.append("entity_type", filters.entity_type);
-    }
-    if (filters.entity_id) {
-      params.append("entity_id", filters.entity_id.toString());
-    }
-    if (filters.action) {
-      params.append("action", filters.action);
-    }
-    if (filters.user_id) {
-      params.append("user_id", filters.user_id.toString());
-    }
-    if (filters.page) {
-      params.append("page", filters.page.toString());
-    }
-    if (filters.per_page) {
-      params.append("per_page", filters.per_page.toString());
-    }
+    if (filters.entity_type) params.append("entity_type", filters.entity_type);
+    if (filters.entity_id) params.append("entity_id", filters.entity_id.toString());
+    if (filters.action) params.append("action", filters.action);
+    if (filters.user_id) params.append("user_id", filters.user_id.toString());
+    if (filters.date_from) params.append("date_from", filters.date_from);
+    if (filters.date_to) params.append("date_to", filters.date_to);
+    if (filters.search) params.append("search", filters.search);
+    if (filters.page) params.append("page", filters.page.toString());
+    if (filters.per_page) params.append("per_page", filters.per_page.toString());
 
     return params.toString();
   }
@@ -162,10 +173,32 @@ class AuditLogAPI {
       };
     }
   }
+
+  /** Distinct actions, entity types and users present in this org's logs (for filter dropdowns). */
+  async getFilterOptions(
+    organizationId: number
+  ): Promise<ApiResponse<AuditLogFilterOptions>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/audit-logs/filters`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<AuditLogFilterOptions>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to fetch audit log filters",
+      };
+    }
+  }
 }
 
 export const auditLogAPI = new AuditLogAPI();
-export type { AuditLogType, AuditLogFilters, ApiResponse };
-
-
-
+export type { AuditLogType, AuditLogFilters, AuditLogFilterOptions, ApiResponse };
