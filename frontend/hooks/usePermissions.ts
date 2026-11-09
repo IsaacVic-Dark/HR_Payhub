@@ -44,7 +44,8 @@ export function usePermissions() {
 
     // Reports & Analytics
     canViewReports: ['super_admin', 'admin', 'hr_manager', 'payroll_manager', 'finance_manager', 'auditor'].includes(userRole || ''),
-    canViewAuditLogs: ['super_admin', 'admin', 'auditor'].includes(userRole || ''),
+    // Matches AuditLogAuthorizationMiddleware: organization admins only
+    canViewAuditLogs: userRole === 'admin',
 
     // User specific
     isSuperAdmin: userRole === 'super_admin',
