@@ -482,6 +482,35 @@ class PayslipAPI {
       };
     }
   }
+
+  // ─── GET /organizations/{org_id}/payslips/{id}/download ──────────────────
+  // Returns the stored PDF (generated from the active payslip template) as a Blob.
+  async downloadPdf(
+    organizationId: number,
+    payslipId: number
+  ): Promise<{ success: boolean; blob?: Blob; error?: string }> {
+    try {
+      const url = `${this.baseUrl}/organizations/${organizationId}/payslips/${payslipId}/download`;
+      const headers = this.getAuthHeaders() as Record<string, string>;
+      delete headers["Content-Type"];
+      const response = await fetch(url, { method: "GET", credentials: "include", headers });
+      if (!response.ok) {
+        let message = `Download failed (status ${response.status})`;
+        try {
+          message = (await response.json()).message || message;
+        } catch {
+          /* non-JSON error body */
+        }
+        return { success: false, error: message };
+      }
+      return { success: true, blob: await response.blob() };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : "Failed to download payslip",
+      };
+    }
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

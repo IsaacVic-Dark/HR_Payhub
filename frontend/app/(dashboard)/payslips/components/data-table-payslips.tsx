@@ -3,7 +3,7 @@
 import { formatCurrency } from "@/utils/currency";
 import { useUrlDrawer } from "@/hooks/use-url-drawer";
 import React, { useState, useEffect, useCallback } from "react";
-import { Filter, Search, Eye, Send, SendHorizonal } from "lucide-react";
+import { Filter, Search, Eye, Send, SendHorizonal, Download } from "lucide-react";
 import {
   payslipAPI,
   PayslipType,
@@ -159,6 +159,23 @@ const PayslipTable: React.FC = () => {
     urlDrawer.show(payslip);
   };
 
+  const handleDownloadClick = async (payslip: PayslipType) => {
+    if (!user?.organization_id) return;
+    const res = await payslipAPI.downloadPdf(user.organization_id, payslip.payslip_id);
+    if (!res.success || !res.blob) {
+      toast.error(res.error ?? "Could not download the payslip");
+      return;
+    }
+    const url = URL.createObjectURL(res.blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${payslip.payslip_number}.pdf`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  };
+
   const handleSendClick = (payslip: PayslipType) => {
     setSelectedPayslip(payslip);
     setSendDialogOpen(true);
@@ -309,6 +326,17 @@ const PayslipTable: React.FC = () => {
           >
             <Eye className="h-4 w-4" />
           </Button>
+          {p.pdf_path && (
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => handleDownloadClick(p)}
+              className="h-8 w-8 p-0"
+              title="Download PDF"
+            >
+              <Download className="h-4 w-4" />
+            </Button>
+          )}
           {p.status === "generated" && (
             <Button
               size="sm"
