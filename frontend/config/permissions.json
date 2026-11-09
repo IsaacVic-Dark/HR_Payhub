@@ -59,7 +59,10 @@
         "/approval-workflows",
         "/reports",
         "/audit-logs",
-        "/data-export"
+        "/data-export",
+        "/templates",
+        "/templates/new",
+        "/templates/:id"
       ]
     },
     {
@@ -142,7 +145,10 @@
         "/payroll-export",
         "/employees/:id/view",
         "/employees/:id/salary",
-        "/leave-balances/view"
+        "/leave-balances/view",
+        "/templates",
+        "/templates/new",
+        "/templates/:id"
       ]
     },
     {
@@ -163,7 +169,10 @@
         "/payroll-history/view",
         "/payroll-reports/view",
         "/employees/:id/view",
-        "/documentation"
+        "/documentation",
+        "/templates",
+        "/templates/new",
+        "/templates/:id"
       ]
     },
     {
