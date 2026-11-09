@@ -24,6 +24,7 @@ import {
   IconShieldCheck,
   IconReportMoney,
   IconUsersGroup,
+  IconTemplate,
 } from "@tabler/icons-react";
 
 import { NavUser } from "@/components/nav-user";
@@ -162,6 +163,12 @@ const data = {
       url: "/payslips",
       icon: IconReceipt,
       roles: ["super_admin", "admin", "payroll_manager"],
+    },
+    {
+      title: "Templates",
+      url: "/templates",
+      icon: IconTemplate,
+      roles: ["admin", "payroll_manager", "payroll_officer"],
     },
     {
       title: "P9 Forms",
@@ -354,6 +361,12 @@ const data = {
       url: "/users",
       icon: IconUsers,
       roles: ["super_admin", "admin"],
+    },
+    {
+      title: "Audit Logs",
+      url: "/audit-logs",
+      icon: IconShieldCheck,
+      roles: ["admin"],
     },
   ],
 
