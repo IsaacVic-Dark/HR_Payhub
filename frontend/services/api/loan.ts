@@ -593,8 +593,8 @@ class LoanAPI {
       const apiResponse = await this.handleResponse<any>(response);
 
       if (apiResponse.success && apiResponse.data) {
-        let loans = [];
-        let metadata = {};
+        let loans: LoanType[] = [];
+        let metadata = {} as EmployeeLoansResponseData["metadata"];
 
         if (Array.isArray(apiResponse.data)) {
           loans = apiResponse.data;

@@ -513,14 +513,14 @@ const LeaveTable: React.FC = () => {
       key: "employee",
       header: "Employee",
       cell: (leave) =>
-        leave.employee.full_name ||
+        leave.employee_full_name ||
         `${leave.employee_first_name} ${leave.employee_surname}`,
     },
     {
       key: "leave_type",
       header: "Leave Type",
       cell: (leave) => (
-        <span className="capitalize">{leave.leave_type.name}</span>
+        <span className="capitalize">{leave.leave_type_name}</span>
       ),
     },
     {
@@ -536,7 +536,7 @@ const LeaveTable: React.FC = () => {
     {
       key: "email",
       header: "Email",
-      cell: (leave) => leave.employee.email || "—",
+      cell: (leave) => leave.employee_email || "—",
     },
     {
       key: "actions",

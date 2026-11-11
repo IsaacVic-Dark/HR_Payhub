@@ -12,7 +12,7 @@ import {
 } from "@/services/api/leave";
 import { Button } from "@/components/ui/button";
 import { LeaveActionDialog } from "@/app/(dashboard)/leaves/components/leave-action-dialog";
-import { LeaveViewDrawer } from "@/app/(dashboard)/leaves/components/leave-view-drawer";
+import { EmployeeLeaveViewDrawer } from "@/app/(dashboard)/myleave/components/employee-leave-view-drawer";
 import { toast } from "sonner";
 import { DataTable, ColumnDef } from "@/components/table";
 import { format } from "date-fns";
@@ -801,7 +801,7 @@ const EmployeeLeaveTable: React.FC = () => {
         </div>
       </LeaveActionDialog>
 
-      <LeaveViewDrawer
+      <EmployeeLeaveViewDrawer
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
         leave={viewLeave}

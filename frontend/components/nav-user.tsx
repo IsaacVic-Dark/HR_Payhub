@@ -40,16 +40,18 @@ export function NavUser() {
   // Helper functions to replace Zustand methods
   const getUserName = () => {
     if (!user) return '';
-    if (user.first_name && user.surname) {
-      return `${user.first_name} ${user.surname}`;
+    const employee = user.employee;
+    if (employee?.firstname && employee?.surname) {
+      return `${employee.firstname} ${employee.surname}`;
     }
     return user.email || '';
   };
 
   const getUserInitials = () => {
     if (!user) return 'U';
-    if (user.first_name && user.surname) {
-      return `${user.first_name[0]}${user.surname[0]}`.toUpperCase();
+    const employee = user.employee;
+    if (employee?.firstname && employee?.surname) {
+      return `${employee.firstname[0]}${employee.surname[0]}`.toUpperCase();
     }
     return user.email ? user.email[0].toUpperCase() : 'U';
   };

@@ -42,27 +42,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-import { EmployeeDrawer, EmployeeDrawerAdd, EmployeeDrawerEdit } from "@/app/(dashboard)/employees/components/employee-drawer";
-
-export type Employee = {
-  id: string;
-  img: React.ReactNode;
-  salary: number;
-  status:
-    | "deceased"
-    | "retired"
-    | "active"
-    | "on leave"
-    | "terminated"
-    | "resigned"
-    | "suspended"
-    | "probation";
-  name: string;
-  position: string;
-  department: string;
-  p_email: string;
-  email: string;
-};
+import { EmployeeDrawer, EmployeeDrawerAdd, EmployeeDrawerEdit, Employee } from "@/app/(dashboard)/employees/components/employee-drawer";
 
 // Define the columns for the employee data table
 export const columns: ColumnDef<Employee>[] = [
@@ -286,7 +266,7 @@ export function DataTablePayroll() {
       ) : !employees || employees.length === 0 ? (
         <div className="text-center py-16">
           <p className="text-gray-600 mb-4">No employees yet.</p>
-          <EmployeeDrawerAdd employees={employees}>
+          <EmployeeDrawerAdd employees={employees as any}>
             <Button>
               <Plus />
               Add Employee
@@ -334,7 +314,7 @@ export function DataTablePayroll() {
             </DropdownMenu>
 
             {/* CHANGE 1: Pass employees data to EmployeeDrawerAdd */}
-            <EmployeeDrawerAdd employees={employees}>
+            <EmployeeDrawerAdd employees={employees as any}>
               <Button
                 variant="outline"
                 className="ml-auto"

@@ -41,7 +41,7 @@ const PayrollTable: React.FC = () => {
   // Dialog state
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedPayroll, setSelectedPayroll] = useState<PayrollType | null>(null);
-  const [actionType, setActionType] = useState<"approve" | "pay">("approve");
+  const [actionType, setActionType] = useState<"review" | "finalize">("review");
 
   // Drawer state
   const urlDrawer = useUrlDrawer<PayrollType>({
@@ -168,7 +168,7 @@ const PayrollTable: React.FC = () => {
     urlDrawer.show(payroll);
   };
 
-  const handleActionClick = (payroll: PayrollType, action: "approve" | "pay") => {
+  const handleActionClick = (payroll: PayrollType, action: "review" | "finalize") => {
     setSelectedPayroll(payroll);
     setActionType(action);
     setDialogOpen(true);
@@ -181,7 +181,7 @@ const PayrollTable: React.FC = () => {
       setActionLoading(true);
       let response;
 
-      if (actionType === "approve") {
+      if (actionType === "review") {
         response = await payrollAPI.approvePayroll(
           user.organization_id,
           selectedPayroll.payroll_id
@@ -195,7 +195,7 @@ const PayrollTable: React.FC = () => {
 
       if (response.success) {
         toast.success(
-          `Payroll ${actionType === "approve" ? "approved" : "marked as paid"} successfully`
+          `Payroll ${actionType === "review" ? "approved" : "marked as paid"} successfully`
         );
         setDialogOpen(false);
         setSelectedPayroll(null);
@@ -265,7 +265,12 @@ const PayrollTable: React.FC = () => {
       } else {
         toast.error(response.error || "Failed to generate payroll");
         if (response.errors) {
-          setFormErrors(response.errors);
+          // Flatten array errors to single strings for display
+          const flattened: Record<string, string> = {};
+          Object.entries(response.errors).forEach(([k, v]) => {
+            flattened[k] = Array.isArray(v) ? v[0] : String(v);
+          });
+          setFormErrors(flattened);
         }
       }
     } catch (err) {
@@ -383,7 +388,7 @@ const PayrollTable: React.FC = () => {
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => handleActionClick(payroll, "approve")}
+              onClick={() => handleActionClick(payroll, "review")}
               className="h-8 w-8 p-0 text-blue-600 hover:text-blue-700 hover:bg-blue-50"
             >
               <Check className="h-4 w-4" />
@@ -393,7 +398,7 @@ const PayrollTable: React.FC = () => {
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => handleActionClick(payroll, "pay")}
+              onClick={() => handleActionClick(payroll, "finalize")}
               className="h-8 w-8 p-0 text-green-600 hover:text-green-700 hover:bg-green-50"
             >
               <DollarSign className="h-4 w-4" />
@@ -528,16 +533,6 @@ const PayrollTable: React.FC = () => {
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         action={actionType}
-        payrollPeriod={
-          selectedPayroll
-            ? formatPeriod(
-                selectedPayroll.pay_period_month,
-                selectedPayroll.pay_period_year
-              )
-            : ""
-        }
-        employeeName={selectedPayroll ? selectedPayroll.employee_full_name : ""}
-        netPay={selectedPayroll ? selectedPayroll.net_pay : 0}
         onConfirm={handleConfirmAction}
         loading={actionLoading}
       />
@@ -545,7 +540,7 @@ const PayrollTable: React.FC = () => {
       <PayrollActionDialog
         open={generateDialogOpen}
         onOpenChange={setGenerateDialogOpen}
-        action="generate"
+        action="review"
         onConfirm={handleGeneratePayroll}
         loading={generateLoading}
       >

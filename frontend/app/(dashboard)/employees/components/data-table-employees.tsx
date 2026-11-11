@@ -294,10 +294,10 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
 
   // Get unique values for filter dropdowns
   const departments = Array.from(
-    new Set(employees.map((emp) => emp.department?.name).filter(Boolean)),
+    new Set(employees.map((emp) => emp.job_title?.title).filter((t): t is string => t != null)),
   );
   const jobTitles = Array.from(
-    new Set(employees.map((emp) => emp.job_title?.title).filter(Boolean)),
+    new Set(employees.map((emp) => emp.job_title?.title).filter((t): t is string => t != null)),
   );
   const statuses = Array.from(
     new Set(employees.map((emp) => emp.status)),
@@ -331,7 +331,7 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
             <p className="font-medium text-gray-900">
               {employee.firstname} {employee.surname}
             </p>
-            <p className="text-xs text-gray-500">{employee.user?.email ?? employee.personalemail}</p>
+            <p className="text-xs text-gray-500">{employee.workemail ?? employee.personal_email}</p>
           </div>
         </div>
       ),
@@ -347,7 +347,7 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
       key: "department",
       header: "Department",
       cell: (employee) => (
-        <span className="text-sm text-gray-700">{employee.department?.name ?? "—"}</span>
+        <span className="text-sm text-gray-700">{employee.job_title?.title ?? "—"} (Dept. {employee.department_id ?? "—"})</span>
       ),
     },
     {
@@ -599,11 +599,13 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
           employee={{
             id: urlEmployee.id.toString(),
             name: `${urlEmployee.firstname} ${urlEmployee.surname}`,
+            email: urlEmployee.workemail || "",
+            p_email: urlEmployee.personal_email || "",
             workemail: urlEmployee.workemail || "",
-            personalemail: urlEmployee.personalemail || "",
+            personalemail: urlEmployee.personal_email || "",
             phone: urlEmployee.phone || "",
             position: urlEmployee.job_title?.title ?? "",
-            department: urlEmployee.department?.name ?? "",
+            department: "",
             status: urlEmployee.status as DrawerEmployeeStatus,
             salary: parseFloat(urlEmployee.base_salary),
             hire_date: urlEmployee.hire_date,
@@ -611,10 +613,7 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
             bank_account_number: urlEmployee.bank_account_number || "",
             work_location: urlEmployee.work_location,
             employment_type: urlEmployee.employment_type,
-            report_to: urlEmployee.report_to
-              ? [urlEmployee.report_to.firstname, urlEmployee.report_to.middlename, urlEmployee.report_to.surname]
-                  .filter(Boolean).join(" ")
-              : "",
+            report_to: urlEmployee.reports_to?.toString() ?? "",
             location: urlEmployee.work_location,
             img: null,
           }}
@@ -629,25 +628,25 @@ const DataTableEmployees: React.FC<DataTableEmployeesProps> = ({
           employee={{
             id: urlEmployee.id.toString(),
             name: `${urlEmployee.firstname} ${urlEmployee.surname}`,
-            email: urlEmployee.email,
+            email: urlEmployee.workemail || "",
             p_email: urlEmployee.personal_email || "",
             personal_email: urlEmployee.personal_email || "",
             phone: urlEmployee.phone || "",
             position: urlEmployee.job_title?.title ?? "",
-            department: urlEmployee.department?.name ?? "",
+            department: "",
             status: urlEmployee.status as DrawerEmployeeStatus,
             salary: parseFloat(urlEmployee.base_salary),
             hire_date: urlEmployee.hire_date,
             bank_account_number: urlEmployee.bank_account_number || "",
             work_location: urlEmployee.work_location,
             employment_type: urlEmployee.employment_type,
-            report_to: urlEmployee.report_to?.firstname || "",
+            report_to: urlEmployee.reports_to?.toString() ?? "",
             location: urlEmployee.work_location,
             img: null,
-            department_id: urlEmployee.department?.id,
-            job_title_id: urlEmployee.job_title?.id,
+            department_id: urlEmployee.department_id,
+            job_title_id: urlEmployee.job_title?.id ?? undefined,
             workemail: urlEmployee.workemail || "",
-            personalemail: urlEmployee.personalemail || "",
+            personalemail: urlEmployee.personal_email || "",
             start_date: urlEmployee.start_date,
           }}
           open={drawerType === "edit"}

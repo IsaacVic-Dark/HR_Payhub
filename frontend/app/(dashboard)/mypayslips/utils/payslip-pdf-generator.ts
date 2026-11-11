@@ -265,7 +265,7 @@ export function generatePayslipPDF(payslip: PayslipType) {
         <div class="slip-meta">
           <div class="slip-number">${payslip.payslip_number}</div>
           <span>Status: <span class="status-badge status-${payslip.status}">${payslip.status}</span></span>
-          <span>Generated: ${fmtDate(payslip.generated_at)}</span>
+          <span>Generated: ${fmtDate(payslip.generated_at ?? new Date().toISOString())}</span>
         </div>
       </div>
 

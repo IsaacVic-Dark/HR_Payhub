@@ -26,6 +26,7 @@ interface PayrollActionDialogProps {
   employeeCount?: number;
   onConfirm: () => void;
   loading?: boolean;
+  children?: React.ReactNode;
 }
 
 

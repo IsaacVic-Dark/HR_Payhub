@@ -92,14 +92,15 @@ const OrganizationTable: React.FC<OrganizationTableProps> = ({ className }) => {
       const response = await organizationAPI.getOrganizations(filters);
 
       if (response.success && response.data) {
-        setOrganizations(response.data);
-        if (response.data.metadata) {
+        const orgs = Array.isArray(response.data) ? response.data : [response.data];
+        setOrganizations(orgs);
+        if (response.metadata) {
           setTotalItems(
-            response.data.metadata.total || response.data.data.length
+            response.metadata.total || orgs.length
           );
           setTotalPages(
-            response.data.metadata.total_pages ||
-              Math.ceil(response.data.data.length / (filters.limit || 10))
+            response.metadata.total_pages ||
+              Math.ceil(orgs.length / (filters.limit || 10))
           );
         }
       } else {

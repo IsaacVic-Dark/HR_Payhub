@@ -113,7 +113,7 @@ const LoanTable: React.FC = () => {
   const createDialogOpen = createModal.open;
   const setCreateDialogOpen = createModal.onOpenChange;
   const [createLoading, setCreateLoading] = useState(false);
-  const [employees, setEmployees] = useState<{ id: number; firstname: string; middlename?: string; surname: string }[]>([]);
+  const [employees, setEmployees] = useState<{ id: number; firstname: string; middlename?: string | null; surname: string }[]>([]);
   const [loadingEmployees, setLoadingEmployees] = useState(false);
   const [formData, setFormData] = useState({
     employee_id: 0,
@@ -385,7 +385,7 @@ const LoanTable: React.FC = () => {
     if (!(canCreateLoan) && createDialogOpen) createModal.close();
   }, [canCreateLoan, createDialogOpen]);
 
-  const empName = (e: { firstname: string; middlename?: string; surname: string }) =>
+  const empName = (e: { firstname: string; middlename?: string | null; surname: string }) =>
     [e.firstname, e.middlename, e.surname].filter(Boolean).join(" ");
 
   if (!user) return <div className="p-8 text-center text-gray-500">Loading…</div>;

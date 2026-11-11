@@ -17,7 +17,7 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
   // Filter and pagination state
   const [filters, setFilters] = useState<PayrunFilters>({
     page: 1,
-    limit: 10
+    per_page: 10
   });
   const [searchTerm, setSearchTerm] = useState('');
   const [totalItems, setTotalItems] = useState(0);
@@ -49,14 +49,14 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
   const fetchPayruns = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await payrunAPI.getPayruns("51", filters);
+      const response = await payrunAPI.getPayruns(51, filters);
       
       if (response.success && response.data) {
-        setPayruns(response.data.data);
+        setPayruns(response.data.payruns);
         // Assuming your API returns pagination metadata
-        if (response.data.metadata) {
-          setTotalItems(response.data.metadata.total || response.data.data.length);
-          setTotalPages(response.data.metadata.totalPages || Math.ceil(response.data.data.length / (filters.limit || 10)));
+        if (response.data.pagination) {
+          setTotalItems(response.data.pagination.total || response.data.payruns.length);
+          setTotalPages(response.data.pagination.total_pages || Math.ceil(response.data.payruns.length / (filters.per_page || 10)));
         }
       } else {
         setError(response.error || 'Failed to fetch payruns');
@@ -72,10 +72,10 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
     const fetchPayruns = async () => {
       try {
         setLoading(true);
-        const response = await payrunAPI.getPayruns(organizationId);
+        const response = await payrunAPI.getPayruns(Number(organizationId));
         
         if (response.success && response.data) {
-          setPayruns(response.data.data);
+          setPayruns(response.data.payruns);
         } else {
           setError(response.error || 'Failed to fetch payruns');
         }
@@ -153,6 +153,14 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
         </span>
       </div>
     );
+  };
+
+  const handlePageChange = (newPage: number) => {
+    setFilters(prev => ({ ...prev, page: newPage }));
+  };
+
+  const handleLimitChange = (newLimit: number) => {
+    setFilters(prev => ({ ...prev, per_page: newLimit, page: 1 }));
   };
 
   if (loading) {
@@ -325,12 +333,12 @@ const PayrunTable: React.FC<PayrunTableProps> = ({ organizationId }) => {
           <div className="flex items-center justify-between mt-6 px-4 py-4 bg-gray-50 rounded-lg">
             <div className="flex items-center gap-4">
               <span className="text-xs text-gray-700">
-                Showing {((filters.page || 1) - 1) * (filters.limit || 10) + 1} to {Math.min((filters.page || 1) * (filters.limit || 10), totalItems)} of {totalItems} results
+                Showing {((filters.page || 1) - 1) * (filters.per_page || 10) + 1} to {Math.min((filters.page || 1) * (filters.per_page || 10), totalItems)} of {totalItems} results
               </span>
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-700">Rows per page:</span>
                 <select
-                  value={filters.limit || 10}
+                  value={filters.per_page || 10}
                   onChange={(e) => handleLimitChange(Number(e.target.value))}
                   className="px-3 py-1 border border-gray-300 rounded-md text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white"
                 >

@@ -320,8 +320,8 @@ class LeaveAPI {
       const apiResponse = await this.handleResponse<any>(response);
 
       if (apiResponse.success && apiResponse.data) {
-        let leaves = [];
-        let metadata = {};
+        let leaves: EmployeeLeaveType[] = [];
+        let metadata = {} as EmployeeLeavesResponseData["metadata"];
 
         if (Array.isArray(apiResponse.data)) {
           leaves = apiResponse.data;

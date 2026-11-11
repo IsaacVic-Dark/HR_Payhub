@@ -196,7 +196,7 @@ const OrganizationDrawer: React.FC<DrawerProps> = ({
         organizationId
       );
       if (response.success && response.data) {
-        const org = response.data;
+        const org = Array.isArray(response.data) ? response.data[0] : response.data;
         setOriginalData(org);
         setFormData({
           tenant_id: org.tenant_id?.toString() || "",

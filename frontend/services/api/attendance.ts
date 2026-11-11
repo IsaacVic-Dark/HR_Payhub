@@ -138,6 +138,7 @@ interface ApiResponse<T = any> {
 }
 
 interface AttendanceFilters {
+  [key: string]: string | number | null | undefined;
   employee_id?: string | number;
   department_id?: string | number;
   status?: string;
@@ -178,6 +179,7 @@ interface HolidayWorkDecisionPayload {
 }
 
 interface OvertimeApprovalFilters {
+  [key: string]: string | undefined;
   status?: ApprovalStatus;
 }
 
@@ -625,7 +627,6 @@ export type {
   AttendanceDashboardMetadata,
   PayrollSummaryRow,
   PayrollSummaryMetadata,
-  PublicHoliday,
   ApiResponse,
   AttendanceFilters,
   CheckPunchPayload,

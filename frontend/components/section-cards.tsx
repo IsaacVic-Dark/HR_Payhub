@@ -17,6 +17,7 @@ interface CardDetail {
   changeIcon: React.ReactNode;
   description: string;
   footerText: React.ReactNode;
+  icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
 }
 
 interface SectionCardsProps {

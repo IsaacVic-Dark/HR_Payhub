@@ -98,7 +98,7 @@ const EmployeeReimbursementTable: React.FC = () => {
     rowsReady: !loading,
     enabled: !!user?.organization_id,
     fetchById: async (id) => {
-      const r = await reimbursementAPI.getReimbursement(user!.organization_id, Number(id)); return r.success ? ((r.data.reimbursement) ?? null) : null;
+      const r = await reimbursementAPI.getReimbursement(user!.organization_id, Number(id)); return r.success && r.data ? (r.data.reimbursement ?? null) : null;
     },
   });
   const drawerOpen = urlDrawer.open;

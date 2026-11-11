@@ -73,8 +73,8 @@ export default function MyLeavePage() {
       {
         title: "Approved",
         value:
-          statistics.approved !== undefined
-            ? statistics.approved.toString()
+          statistics.by_status?.approved !== undefined
+            ? statistics.by_status.approved.toString()
             : "0",
 
         change: "",
@@ -85,7 +85,7 @@ export default function MyLeavePage() {
       },
       {
         title: "Pending",
-        value: (statistics.pending ?? 0).toString(),
+        value: (statistics.by_status?.pending ?? 0).toString(),
         change: "",
         changeIcon: null,
         description: "Leaves awaiting approval",
@@ -94,7 +94,7 @@ export default function MyLeavePage() {
       },
       {
         title: "Rejected",
-        value: (statistics.rejected ?? 0).toString(),
+        value: (statistics.by_status?.rejected ?? 0).toString(),
         change: "",
         changeIcon: null,
         description: "Leaves that were not approved",

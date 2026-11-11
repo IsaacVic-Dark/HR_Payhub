@@ -83,7 +83,7 @@ export function EmployeeLeaveViewDrawer({
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-600">Leave Type</span>
-                <p className="font-medium capitalize">{leave.leave_type}</p>
+                <p className="font-medium capitalize">{leave.leave_type_name}</p>
               </div>
               <div>
                 <span className="text-gray-600">Status</span>
@@ -100,7 +100,7 @@ export function EmployeeLeaveViewDrawer({
               <div>
                 <span className="text-gray-600">Duration</span>
                 <p className="font-medium">
-                  {leave.duration_days} day{leave.duration_days !== 1 ? 's' : ''}
+                  {leave.duration_days} day{Number(leave.duration_days) !== 1 ? 's' : ''}
                 </p>
               </div>
               <div>

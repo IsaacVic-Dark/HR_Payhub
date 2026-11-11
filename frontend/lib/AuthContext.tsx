@@ -22,6 +22,7 @@ interface Employee {
   personalemail: string;
   job_title: JobTitle;
   status: 'active' | 'inactive';
+  department_id?: number;
 }
 
 interface User {

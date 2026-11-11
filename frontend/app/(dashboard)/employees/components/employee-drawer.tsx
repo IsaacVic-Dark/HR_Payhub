@@ -56,17 +56,21 @@ export type Employee = {
   job_title_id?: number;
   // department: number | string;
   department_id?: number;
+  department?: string;
   p_email: string;
   email: string;
   personalemail?: string;
   workemail?: string | null;
   phone?: string;
   hire_date?: string;
+  start_date?: string;
   bank_account_number?: string;
   work_location?: string;
   employment_type?: string;
   reports_to?: string;
+  report_to?: string;
   location?: string;
+  personal_email?: string;
 };
 
 const employeeStatuses: { label: string; value: Employee["status"] }[] = [
@@ -375,12 +379,13 @@ export function EmployeeDrawerAdd({
     try {
       // Build payload with proper types - no null values
       const payload: {
-        firstname: string;
-        middlename?: string;
+        first_name: string;
+        middle_name?: string;
         surname: string;
         email: string;
         employee_number: string;
         personalemail?: string;
+        workemail?: string;
         phone: string;
         hire_date: string;
         start_date: string;
@@ -397,9 +402,10 @@ export function EmployeeDrawerAdd({
         username: string;
         user_id: number;
       } = {
-        firstname: formData.firstname,
+        first_name: formData.firstname,
         surname: formData.surname,
         workemail: formData.workemail,
+        email: formData.workemail,
         employee_number: formData.employee_number,
         phone: formData.phone,
         hire_date: formData.hire_date,
@@ -418,8 +424,8 @@ export function EmployeeDrawerAdd({
       };
 
       // Only add optional fields if they have values
-      if (formData.middlename && formData.middlename.trim()) {
-        payload.middlename = formData.middlename;
+      if (formData.middle_name && formData.middle_name.trim()) {
+        payload.middle_name = formData.middle_name;
       }
 
       if (formData.personalemail && formData.personalemail.trim()) {
@@ -469,8 +475,10 @@ export function EmployeeDrawerAdd({
       surname: "",
       email: "",
       personalemail: "",
+      workemail: "",
       phone: "",
       hire_date: new Date().toISOString().split("T")[0],
+      start_date: new Date().toISOString().split("T")[0],
       job_title_id: "",
       department: "",
       reports_to: "",
@@ -592,9 +600,9 @@ export function EmployeeDrawerAdd({
                       <div>
                         <Input
                           placeholder="Middle Name (Optional)"
-                          value={formData.middlename}
+                          value={formData.middle_name}
                           onChange={(e) =>
-                            handleInputChange("middlename", e.target.value)
+                            handleInputChange("middle_name", e.target.value)
                           }
                         />
                       </div>
@@ -1326,6 +1334,7 @@ export function EmployeeDrawerEdit({
         workemail?: string;
         phone?: string;
         hire_date?: string;
+        start_date?: string;
         job_title_id?: number;
         department_id?: number;
         reports_to?: number;
@@ -1334,7 +1343,9 @@ export function EmployeeDrawerEdit({
         status?: Employee["status"];
         employment_type?: EmploymentType;
         work_location?: WorkLocation;
-      } = {};
+      } = {
+        employee_number: employee.id,
+      };
 
       // Compare with original employee data
       const originalFirstName = employee.name.split(" ")[0] || "";

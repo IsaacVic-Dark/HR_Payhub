@@ -141,6 +141,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   // console.log("User in NotificationModal: ", user);
 
   const fetchNotifications = async () => {
+    if (!user) return;
     setLoading(true);
     setError(null);
     
@@ -163,6 +164,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   }, [open]);
 
   const handleMarkAsRead = async (notificationId: number) => {
+    if (!user) return;
     try {
       await notificationService.markAsRead(user.organization_id, notificationId);
       
@@ -183,6 +185,7 @@ export const NotificationModal: React.FC<NotificationModalProps> = ({
   };
 
   const handleMarkAllAsRead = async () => {
+    if (!user) return;
     try {
       await notificationService.markAllAsRead(user.organization_id);
       

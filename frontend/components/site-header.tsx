@@ -98,11 +98,11 @@ export function SiteHeader() {
 
   // Function to fetch notification count
   const fetchUnreadCount = async () => {
-    if (loading) return;
+    if (loading || !user?.organization_id) return;
 
     setLoading(true);
     try {
-      const response = await notificationService.getNotifications();
+      const response = await notificationService.getNotifications(user.organization_id);
       setUnreadCount(response.unread_count);
     } catch (error) {
       console.error('Error fetching notification count:', error);

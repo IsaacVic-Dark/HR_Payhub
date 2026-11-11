@@ -51,6 +51,23 @@ import {
 } from "@/components/ui/collapsible";
 import { useAuth } from "@/lib/AuthContext";
 
+// ─── Nav item types ────────────────────────────────────────────────────────────
+
+interface NavSubItem {
+  title: string;
+  url: string;
+  roles: string[];
+}
+
+interface NavItem {
+  title: string;
+  url: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  roles: string[];
+  hasDropdown?: boolean;
+  items?: NavSubItem[];
+}
+
 // Mirrors the STEPS array in app/(dashboard)/setup/page.tsx — keep in sync.
 const SETUP_STEPS = [
   "Company Details",
@@ -105,7 +122,18 @@ function SetupStepsSubNav({ pathname }: { pathname: string }) {
   );
 }
 
-const data = {
+const data: {
+  user: { name: string; email: string; avatar: string };
+  coreNav: NavItem[];
+  payrollSection: NavItem[];
+  financeSection: NavItem[];
+  employeeSection: NavItem[];
+  selfServiceSection: NavItem[];
+  configSection: NavItem[];
+  systemSection: NavItem[];
+  platformSection: NavItem[];
+  othersSection: NavItem[];
+} = {
   user: {
     name: "shadcn",
     email: "m@example.com",

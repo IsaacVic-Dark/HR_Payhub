@@ -151,17 +151,17 @@ const PayrollTable = () => {
   const currentEmployees = employees.slice(startIndex, endIndex);
 
   // Pagination handlers - ADD THESE FUNCTIONS
-  const handlePageChange = (page) => {
+  const handlePageChange = (page: number) => {
     setCurrentPage(page);
   };
 
-  const handleItemsPerPageChange = (newItemsPerPage) => {
+  const handleItemsPerPageChange = (newItemsPerPage: number) => {
     setItemsPerPage(newItemsPerPage);
     setCurrentPage(1); // Reset to first page when changing items per page
   };
 
 
-  const formatDate = (dateString) => {
+  const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', { 
       year: 'numeric', 
@@ -170,7 +170,7 @@ const PayrollTable = () => {
     });
   };
 
-  const getStatusBadge = (status) => {
+  const getStatusBadge = (status: string) => {
     if (status === 'Scheduled') {
       return (
         <div className="flex items-center gap-2">
