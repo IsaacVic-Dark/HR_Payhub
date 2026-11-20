@@ -11,6 +11,7 @@ use App\Controllers\AuditLogController;
 use App\Controllers\LeaveController;
 use App\Controllers\NotificationController;
 use App\Controllers\AuthController;
+use App\Controllers\DevController;
 use App\Controllers\PayrollController;
 use App\Controllers\DepartmentController;
 use App\Controllers\JobTitleController;
@@ -42,6 +43,10 @@ Router::post('/api/v1/auth/refresh', AuthController::class . '@refreshToken');
 // Authenticated routes
 Router::post('/api/v1/auth/logout',  [AuthController::getInstance(), 'logout'], ['AuthMiddleware']);
 Router::get('/api/v1/auth/me', [AuthController::getInstance(), 'me'], ['AuthMiddleware']);
+
+// DEV ONLY - real accounts for the login page's "Demo accounts" panel.
+// Answers 404 unless APP_ENVIRONMENT="Development" AND DEV_DEMO_CREDENTIALS="true".
+Router::get('/api/v1/dev/demo-credentials', DevController::class . '@demoCredentials');
 
 // Add this route for getting organization details
 Router::get('api/v1/organizations/{org_id}/details', OrganizationController::class . '@showDetails', [

@@ -70,19 +70,19 @@
   --chart-5: oklch(0.769 0.188 70.08);
 
   /* SideBar Background */
-  --sidebar: oklch(96.284% 0.03161 324.079);
+  --sidebar: #f3f3f5;
   
   /* SideBar Texts */
-  --sidebar-foreground: oklch(0% 0 0);
+  --sidebar-foreground: #65646a;
 
-  --sidebar-primary: oklch(0.208 0.042 265.755);
-  --sidebar-primary-foreground: oklch(0.984 0.003 247.858);
+  --sidebar-primary: #7c4dfe;
+  --sidebar-primary-foreground: #ffffff;
 
   /* Background for sidebar texts */
-  --sidebar-accent: oklch(70.9% 0.00008 271.152);
-  --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
-  --sidebar-border: oklch(0.929 0.013 255.508);
-  --sidebar-ring: oklch(0.704 0.04 256.788);
+  --sidebar-accent: #e4e3e8;
+  --sidebar-accent-foreground: #4b4b53;
+  --sidebar-border: #e4e3e8;
+  --sidebar-ring: #7c4dfe;
 }
 
 .dark {
@@ -122,8 +122,94 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    font-family: var(--font-geist-sans) !important;
   }
   body {
     @apply bg-background text-foreground;
   }
 }
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * Auth screens (/login, /register)
+ *
+ * Tokens become Tailwind colours: text-auth-ink, bg-auth-canvas, border-auth-line…
+ * Purple (auth-accent) is reserved for the wordmark, focus rings, links and
+ * selected states. Everything else stays neutral.
+ *   auth-accent        brand purple, for non-text UI (rings, indicators)
+ *   auth-accent-strong darker purple for link text (passes 4.5:1 on white)
+ * ───────────────────────────────────────────────────────────────────────── */
+@theme {
+  --color-auth-ink: #17161d;
+  --color-auth-ink-hover: #2b2a36;
+  --color-auth-body: #403f4b;
+  --color-auth-muted: #6b6a77;
+  --color-auth-line: #e2e1ea;
+  --color-auth-canvas: #f6f5f9;
+  --color-auth-accent: #895bf5;
+  --color-auth-accent-strong: #6d3fe0;
+  --color-auth-accent-soft: #f2edfe;
+}
+
+/*
+ * The global rule above forces Geist on every element with !important, so a
+ * different typeface has to be applied the same way, scoped to the auth wrapper
+ * (see components/auth/auth-fonts.ts). Nothing outside .auth-font is affected.
+ */
+.auth-font,
+.auth-font * {
+  font-family: var(--font-auth-body), ui-sans-serif, system-ui, sans-serif !important;
+}
+.auth-font .auth-display,
+.auth-font .auth-display * {
+  font-family: var(--font-auth-display), var(--font-auth-body), ui-sans-serif, system-ui, sans-serif !important;
+}
+
+/* Open/close motion for the demo-accounts panel (user-triggered only). */
+@keyframes auth-collapsible-down {
+  from { height: 0; opacity: 0; }
+  to   { height: var(--radix-collapsible-content-height); opacity: 1; }
+}
+@keyframes auth-collapsible-up {
+  from { height: var(--radix-collapsible-content-height); opacity: 1; }
+  to   { height: 0; opacity: 0; }
+}
+.auth-collapsible[data-state="open"]   { animation: auth-collapsible-down 180ms ease-out; }
+.auth-collapsible[data-state="closed"] { animation: auth-collapsible-up 150ms ease-in; }
+@media (prefers-reduced-motion: reduce) {
+  .auth-collapsible[data-state] { animation: none; }
+}
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * App shell palette (sidebar + top nav)
+ *
+ * Exposed as Tailwind colours: bg-brand, text-ink, bg-surface, bg-field, …
+ * New names on purpose: --primary / --background are untouched so the rest of
+ * the app is unaffected until those pages are themed.
+ *
+ *   brand          #7c4dfe  main purple: active states, focus, key accents
+ *   brand-dark     #22162a  dark purple: wordmark, strongest text on light
+ *   brand-blue     #1c60e6  info
+ *   brand-emerald  #239842  success
+ *   brand-burnt    #e14301  danger / alerts
+ *   brand-sunbeam  #feb81a  highlight / upgrade
+ *   surface        #f3f3f5  app background / shell frame
+ *   field          #e4e3e8  inputs and hairlines
+ *   ink            #4b4b53  bold text and icons
+ *   ink-soft       #65646a  regular text and icons (never pure black)
+ * ───────────────────────────────────────────────────────────────────────── */
+@theme {
+  --color-brand: #7c4dfe;
+  --color-brand-dark: #22162a;
+  --color-brand-blue: #1c60e6;
+  --color-brand-emerald: #239842;
+  --color-brand-burnt: #e14301;
+  --color-brand-sunbeam: #feb81a;
+  --color-surface: #f3f3f5;
+  --color-field: #e4e3e8;
+  --color-ink: #4b4b53;
+  --color-ink-soft: #65646a;
+}
+
+/* Hide the scrollbar on the sidebar's nav list (it scrolls, it just isn't shown). */
+.nav-scroll { scrollbar-width: none; }
+.nav-scroll::-webkit-scrollbar { display: none; }

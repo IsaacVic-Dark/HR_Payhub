@@ -64,6 +64,9 @@ export const authService = {
             const response = await authAPI.post('/auth/login', credentials);
             const data = response.data;
 
+
+            setAuthCookies(data.tokens.access_token, data.tokens.refresh_token) 
+
             console.log('Login API response data:', data);
             console.log('Response headers (Set-Cookie):', response.headers['set-cookie']);
 
@@ -107,6 +110,14 @@ export const authService = {
 
     async checkEmail(email) {
         const response = await authAPI.post('/auth/check-email', { email });
+        return response.data;
+    },
+
+    // DEV ONLY. Lists real accounts from the database for the login page's
+    // "Demo accounts" panel (backend: DevController::demoCredentials).
+    // Bare axios on purpose: no Authorization header, no refresh-on-401 retry.
+    async getDemoCredentials() {
+        const response = await axios.get(`${API_BASE_URL}/dev/demo-credentials`);
         return response.data;
     },
 

@@ -1,17 +1,18 @@
 'use client';
 
 import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/button";
-import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
-  Search,
-  BellDot,
-  Bell,
-  ExternalLink,
-  Plus,
+  IconBell,
+  IconBellFilled,
+  IconBoltFilled,
+  IconLayoutSidebarLeftExpand,
+  IconLayoutSidebarLeftExpandFilled,
+  IconPlus,
+  IconPlusFilled,
+} from "@tabler/icons-react";
+import {
   UserPlus,
   CalendarPlus,
   HandCoins,
@@ -19,8 +20,6 @@ import {
   ReceiptText,
   type LucideIcon,
 } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -29,9 +28,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useSidebar } from "@/components/ui/sidebar";
+import { GlobalSearch } from "@/components/nav/global-search";
+import { NavIcon } from "@/components/nav/nav-icon";
+import { UserMenu } from "@/components/nav/user-menu";
 import { NotificationModal } from "@/components/NotificationModal";
 import { notificationService } from "@/services/api/notification";
 import { useAuth } from "@/lib/AuthContext";
+import { getPageTitle } from "@/lib/nav-config";
 
 // Quick-add menu. Roles match who can actually use each create form, so a user
 // is never sent to a page where the form wouldn't open.
@@ -83,14 +87,19 @@ const QUICK_ADD_ITEMS: QuickAdd[] = [
   },
 ];
 
-export function SiteHeader() {
+// Square white button with a hairline border; the icon goes outline → solid on hover.
+const iconButtonClass =
+  "group/nav relative flex size-9 shrink-0 items-center justify-center rounded-lg border border-field bg-white text-ink-soft outline-none transition-colors " +
+  "hover:border-ink-soft/40 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/40 " +
+  "data-[state=open]:border-brand/50 data-[state=open]:text-brand";
 
+export function SiteHeader() {
   const { user } = useAuth();
+  const { state, isMobile, toggleSidebar } = useSidebar();
   const isSuperAdmin = user?.user_type === 'super_admin';
 
   const pathname = usePathname();
-  const endpoint = pathname.split("/").filter(Boolean).pop() || "Dashboard";
-  const path = endpoint.charAt(0).toUpperCase() + endpoint.slice(1);
+  const title = getPageTitle(pathname);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -112,172 +121,151 @@ export function SiteHeader() {
     }
   };
 
-  // Fetch unread count on component mount — skipped for super_admin, since
-  // notifications are organization-scoped and super_admin has no org
-  // context (OrganizationAuthorizationMiddleware rejects it by design).
+  // Fetch unread count on mount — skipped for super_admin, since notifications
+  // are organization-scoped and super_admin has no org context
+  // (OrganizationAuthorizationMiddleware rejects it by design).
+  // Re-runs once the organization id is known, in case the user loads after mount.
   useEffect(() => {
     if (isSuperAdmin) return;
     fetchUnreadCount();
-  }, [isSuperAdmin]);
+  }, [isSuperAdmin, user?.organization_id]);
 
   // Handle notification read event
   const handleNotificationRead = () => {
     fetchUnreadCount();
   };
 
-  // Handle button click
-  const handleButtonClick = () => {
-    setIsModalOpen(true);
-  };
-
-  const hasUnreadNotifications = unreadCount > 0;
-
   const quickAddItems = QUICK_ADD_ITEMS.filter((item) =>
     item.roles.includes(user?.user_type ?? ""),
   );
 
+  // Organizations still on their trial are the ones who can upgrade.
+  const showUpgrade =
+    user?.user_type === 'admin' && user?.subscription_status === 'trialing';
+
+  // The sidebar header carries the collapse button; when the rail is collapsed
+  // (or on mobile, where the sidebar is a drawer) the way back in lives here.
+  const showSidebarTrigger = isMobile || state === 'collapsed';
 
   return (
-    <header className="flex h-(--header-height) shrink-0 items-center gap-2 border-b transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-(--header-height)">
-      <div className="flex w-full items-center gap-1 px-4 lg:gap-2 lg:px-6">
-        <SidebarTrigger className="-ml-1" />
-        <Separator
-          orientation="vertical"
-          className="mx-2 data-[orientation=vertical]:h-4"
-        />
-        <h1 className="text-base font-medium">{path}</h1>
-
-        <div className="ml-auto flex items-center gap-2"></div>
-
-        <div className="flex items-center justify-end w-full">
-          {/* Right Section */}
-          <div className="flex justify-end items-center space-x-4">
-            <div className="relative w-full">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-              <Input
-                type="text"
-                placeholder="Search anything..."
-                className="pl-10 pr-4 py-2 w-full bg-gray-50 border-gray-200 focus:bg-white focus:border-gray-300 focus:ring-1 focus:ring-gray-300"
-              />
-            </div>
-
-            {/* Quick add (+) — hidden when the user's role can't create anything */}
-            {quickAddItems.length > 0 && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Quick add"
-                    className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 data-[state=open]:bg-gray-100"
-                  >
-                    <Plus className="h-5 w-5" />
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-64">
-                  <DropdownMenuLabel className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                    Quick add
-                  </DropdownMenuLabel>
-                  <DropdownMenuSeparator />
-                  {quickAddItems.map(({ label, description, href, icon: Icon }) => (
-                    <DropdownMenuItem key={href} asChild className="cursor-pointer gap-3 py-2">
-                      <Link href={href}>
-                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600">
-                          <Icon className="h-4 w-4" />
-                        </span>
-                        <span className="flex flex-col">
-                          <span className="text-sm font-medium leading-tight">{label}</span>
-                          <span className="text-xs text-muted-foreground">{description}</span>
-                        </span>
-                      </Link>
-                    </DropdownMenuItem>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-
-            {/* Notification bell — hidden for super_admin (no org-scoped notifications to show) */}
-            {!isSuperAdmin && (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="text-gray-500 hover:text-gray-700 hover:bg-gray-100 relative"
-                  onClick={handleButtonClick}
-                >
-                  {hasUnreadNotifications ? (
-                    <BellDot className="h-5 w-5" />
-                  ) : (
-                    <Bell className="h-5 w-5" />
-                  )}
-                </Button>
-
-                <NotificationModal
-                  open={isModalOpen}
-                  onOpenChange={setIsModalOpen}
-                  onNotificationRead={handleNotificationRead}
-                />
-              </>
-            )}
-
-            {/* External Link Icon */}
-            <Button
-              variant="ghost"
-              size="icon"
-              className="text-gray-500 hover:text-gray-700 hover:bg-gray-100"
-            >
-              <ExternalLink className="h-5 w-5" />
-            </Button>
-
-            {/* Avatar Stack */}
-            <div className="flex items-center -space-x-2">
-              <Avatar className="h-8 w-8 border-2 border-white">
-                <AvatarImage
-                  src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=32&h=32&fit=crop&crop=face"
-                  alt="User 1"
-                />
-                <AvatarFallback className="bg-blue-500 text-white text-xs">
-                  JD
-                </AvatarFallback>
-              </Avatar>
-              <Avatar className="h-8 w-8 border-2 border-white">
-                <AvatarImage
-                  src="https://images.unsplash.com/photo-1494790108755-2616b612e0c3?w=32&h=32&fit=crop&crop=face"
-                  alt="User 2"
-                />
-                <AvatarFallback className="bg-purple-500 text-white text-xs">
-                  SM
-                </AvatarFallback>
-              </Avatar>
-              <Avatar className="h-8 w-8 border-2 border-white">
-                <AvatarImage
-                  src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=32&h=32&fit=crop&crop=face"
-                  alt="User 3"
-                />
-                <AvatarFallback className="bg-green-500 text-white text-xs">
-                  MJ
-                </AvatarFallback>
-              </Avatar>
-              <Avatar className="h-8 w-8 border-2 border-white">
-                <AvatarImage
-                  src="https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=32&h=32&fit=crop&crop=face"
-                  alt="User 4"
-                />
-                <AvatarFallback className="bg-pink-500 text-white text-xs">
-                  AL
-                </AvatarFallback>
-              </Avatar>
-              <Avatar className="h-8 w-8 border-2 border-white">
-                <AvatarImage src="#" alt="User 4" />
-                <AvatarFallback className="bg-gray-200 text-white text-xs border-1 border-gray-200">
-                  +10
-                </AvatarFallback>
-              </Avatar>
-            </div>
-
-          </div>
-        </div>
+    <header className="sticky top-0 z-40 flex h-14 shrink-0 items-center gap-3 bg-surface px-4 md:px-6">
+      {/* Left: sidebar toggle (when needed) + page title */}
+      <div className="flex min-w-0 shrink-0 items-center gap-2">
+        {showSidebarTrigger && (
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            aria-label={isMobile ? "Open navigation" : "Expand sidebar"}
+            className="group/nav -ml-1.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-ink-soft outline-none transition-colors hover:bg-field/60 hover:text-ink focus-visible:ring-2 focus-visible:ring-brand/40"
+          >
+            <NavIcon
+              icon={{
+                outline: IconLayoutSidebarLeftExpand,
+                solid: IconLayoutSidebarLeftExpandFilled,
+              }}
+            />
+          </button>
+        )}
+        <h1 className="truncate text-[15px] font-semibold text-ink">{title}</h1>
       </div>
+
+      {/* Centre: page search */}
+      <div className="hidden min-w-0 flex-1 justify-center md:flex">
+        <GlobalSearch className="max-w-md" />
+      </div>
+
+      {/* Right: actions */}
+      <div className="ml-auto flex shrink-0 items-center gap-2 md:ml-0">
+        {showUpgrade && (
+          <Link
+            href="/billing"
+            className="hidden h-9 items-center gap-1.5 rounded-lg bg-brand-sunbeam px-3.5 text-sm font-semibold text-brand-dark outline-none transition-colors hover:bg-brand-sunbeam/85 focus-visible:ring-2 focus-visible:ring-brand-dark/40 sm:inline-flex"
+          >
+            <IconBoltFilled aria-hidden className="size-4" />
+            Upgrade
+          </Link>
+        )}
+
+        {/* Quick add (+) — hidden when the user's role can't create anything */}
+        {quickAddItems.length > 0 && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button type="button" aria-label="Quick add" className={iconButtonClass}>
+                <NavIcon icon={{ outline: IconPlus, solid: IconPlusFilled }} />
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" sideOffset={8} className="w-72 rounded-xl border-field p-1.5">
+              <DropdownMenuLabel className="px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-soft">
+                Quick add
+              </DropdownMenuLabel>
+              <DropdownMenuSeparator className="bg-field" />
+              {quickAddItems.map(({ label, description, href, icon: Icon }) => (
+                <DropdownMenuItem
+                  key={href}
+                  asChild
+                  className="cursor-pointer gap-3 rounded-lg px-2.5 py-2 focus:bg-field/60"
+                >
+                  <Link href={href}>
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand">
+                      <Icon className="size-4 text-current" />
+                    </span>
+                    <span className="flex flex-col">
+                      <span className="text-sm font-medium leading-tight text-ink">{label}</span>
+                      <span className="text-xs text-ink-soft">{description}</span>
+                    </span>
+                  </Link>
+                </DropdownMenuItem>
+              ))}
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+
+        {/* Notification bell — hidden for super_admin (no org-scoped notifications to show) */}
+        {!isSuperAdmin && (
+          <>
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              aria-label={
+                unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"
+              }
+              className={iconButtonClass}
+            >
+              <NavIcon icon={{ outline: IconBell, solid: IconBellFilled }} />
+              {unreadCount > 0 && (
+                <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-brand-burnt px-1 text-[10px] font-semibold leading-none text-white ring-2 ring-surface">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            <NotificationModal
+              open={isModalOpen}
+              onOpenChange={setIsModalOpen}
+              onNotificationRead={handleNotificationRead}
+            />
+          </>
+        )}
+
+        <UserMenu
+          onOpenNotifications={
+            isSuperAdmin
+              ? undefined
+              // Deferred so the menu finishes closing before the dialog takes focus.
+              : () => setTimeout(() => setIsModalOpen(true), 0)
+          }
+        />
+      </div>
+
+      {/*
+        Rounded top-left corner for the white content panel below. The header and
+        sidebar share one grey frame; this quarter-circle of the same grey sits on
+        the panel's corner, so the panel reads as rounded without a wrapper.
+      */}
+      <span
+        aria-hidden
+        className="pointer-events-none absolute left-0 top-full hidden size-4 bg-[radial-gradient(circle_at_100%_100%,transparent_1rem,var(--color-surface)_1rem)] md:block"
+      />
     </header>
   );
 }

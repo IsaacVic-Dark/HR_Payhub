@@ -218,8 +218,8 @@ const PayrollLanding = () => {
 
   return (
     <div
-      className="min-h-screen bg-[#f5f3ef] text-gray-900"
-      style={{ fontFamily: "'Segoe UI', system-ui, sans-serif" }}
+      className="min-h-screen bg-[#f5f3ef] text-gray-900 font-"
+     
     >
       {/* ─── HERO ─── */}
       <section className="relative overflow-hidden bg-[#f5f3ef] pt-6 pb-16">

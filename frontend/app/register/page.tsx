@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
+import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { toast } from 'sonner';
-import { Eye, EyeOff, Building2, CheckIcon } from 'lucide-react';
+import { CheckIcon, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useAuth } from '@/lib/AuthContext';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 import { countryAPI, countyAPI, MinimalCountryType, MinimalCountyType } from '@/services/api/countries-counties';
 import {
   Stepper,
@@ -23,8 +24,17 @@ import {
   StepperTitle,
   StepperTrigger,
 } from '@/components/reui/stepper';
-
-const PURPLE = "#895bf5";
+import { AuthBrand } from '@/components/auth/auth-brand';
+import { PasswordInput } from '@/components/auth/password-input';
+import { authFontClasses } from '@/components/auth/auth-fonts';
+import {
+  authInputClass,
+  authLabelClass,
+  authLinkClass,
+  authPrimaryButtonClass,
+  authSecondaryButtonClass,
+  authSelectTriggerClass,
+} from '@/components/auth/styles';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -194,8 +204,14 @@ function RegisterPageContent() {
     if (!username.trim()) errs.username = 'Username is required';
     if (!password) {
       errs.password = 'Password is required';
-    } else if (password.length < 8 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
-      errs.password = 'Min. 8 chars, with an uppercase letter and a number';
+    } else if (
+      password.length < 8 ||
+      !/[A-Z]/.test(password) ||
+      !/[a-z]/.test(password) ||
+      !/[0-9]/.test(password)
+    ) {
+      // Mirrors ValidationService::validatePassword() on the backend.
+      errs.password = 'Use at least 8 characters, with an uppercase letter, a lowercase letter and a number';
     }
     setErrors(errs);
     return Object.keys(errs).length === 0;
@@ -342,409 +358,365 @@ function RegisterPageContent() {
   // ── Render ──────────────────────────────────────────────────────────────────
 
   return (
-    <>
-      <div className="pt-4 px-6">
-        <a href="#" className="flex items-center gap-1.5 shrink-0">
-          <span className="text-xl font-bold" style={{ color: PURPLE }}>
-            Pay<span className="text-gray-900">Ke</span>
-          </span>
-        </a>
-      </div>
-      <div className="min-h-screen flex items-center justify-center px-4">
-        <Card className="w-full max-w-2xl border-0 shadow-none bg-transparent">
-          <CardHeader className="">
-            <div className="flex justify-center gap-2">
-              <CardTitle className="text-xl">Create your PayHub account</CardTitle>
-            </div>
-          </CardHeader>
+    <div className="min-h-dvh bg-auth-canvas text-auth-ink">
+      <header className="mx-auto flex w-full max-w-5xl items-center justify-between px-6 py-5">
+        <AuthBrand />
+        <p className="text-sm text-auth-muted">
+          Already have an account?{' '}
+          <Link href="/login" className={authLinkClass}>
+            Sign in
+          </Link>
+        </p>
+      </header>
 
-          <CardContent>
-            <Stepper
-              value={step}
-              onValueChange={handleStepNavChange}
-              indicators={{
-                completed: <CheckIcon className="size-3.5" />,
-              }}
-              className="w-full space-y-8"
-            >
-              <StepperNav>
-                {STEPS.map((s, index) => {
-                  const stepNum = index + 1;
-                  const isClickable = stepNum <= maxStepReached;
-                  return (
-                    <StepperItem
-                      key={stepNum}
-                      step={stepNum}
-                      className={`relative flex-1 items-start ${isClickable ? '' : 'pointer-events-none opacity-60'}`}
-                    >
-                      <StepperTrigger className="flex flex-col gap-2.5">
-                        <StepperIndicator>{stepNum}</StepperIndicator>
-                        <StepperTitle>{s.title}</StepperTitle>
-                        <StepperDescription>{s.description}</StepperDescription>
-                      </StepperTrigger>
+      <main className="mx-auto w-full max-w-3xl px-4 pb-16 pt-6 sm:px-6">
+        <div className="mb-8 space-y-2">
+          <h1 className="auth-display text-[28px] font-semibold leading-tight tracking-tight">
+            Create your PayKe account
+          </h1>
+          <p className="text-[15px] text-auth-muted">
+            Three short steps: your account, your company, and a plan.
+          </p>
+        </div>
 
-                      {STEPS.length > stepNum && (
-                        <StepperSeparator className="group-data-[state=completed]/step:bg-primary absolute inset-x-0 top-2.5 left-[calc(50%+0.875rem)] m-0 group-data-[orientation=horizontal]/stepper-nav:w-[calc(100%-2rem+0.225rem)] group-data-[orientation=horizontal]/stepper-nav:flex-none" />
-                      )}
-                    </StepperItem>
-                  );
-                })}
-              </StepperNav>
+        <div className="rounded-xl border border-auth-line bg-white p-5 sm:p-8">
+          <Stepper
+            value={step}
+            onValueChange={handleStepNavChange}
+            indicators={{
+              completed: <CheckIcon className="size-3.5" />,
+            }}
+            className="w-full space-y-8"
+          >
+            <StepperNav>
+              {STEPS.map((s, index) => {
+                const stepNum = index + 1;
+                const isClickable = stepNum <= maxStepReached;
+                return (
+                  <StepperItem
+                    key={stepNum}
+                    step={stepNum}
+                    className={`relative flex-1 items-start ${isClickable ? '' : 'pointer-events-none opacity-60'}`}
+                  >
+                    <StepperTrigger className="flex flex-col gap-2.5 text-left">
+                      <StepperIndicator className="data-[state=active]:bg-auth-accent data-[state=active]:text-white data-[state=completed]:bg-auth-ink data-[state=completed]:text-white">
+                        {stepNum}
+                      </StepperIndicator>
+                      <StepperTitle className="text-sm font-medium text-auth-ink">{s.title}</StepperTitle>
+                      <StepperDescription className="text-xs text-auth-muted">{s.description}</StepperDescription>
+                    </StepperTrigger>
 
-              <form onSubmit={handleSubmit} noValidate>
-                <StepperPanel className="text-sm">
+                    {STEPS.length > stepNum && (
+                      <StepperSeparator className="bg-auth-line group-data-[state=completed]/step:bg-auth-ink absolute inset-x-0 top-2.5 left-[calc(50%+0.875rem)] m-0 group-data-[orientation=horizontal]/stepper-nav:w-[calc(100%-2rem+0.225rem)] group-data-[orientation=horizontal]/stepper-nav:flex-none" />
+                    )}
+                  </StepperItem>
+                );
+              })}
+            </StepperNav>
 
-                  {/* ── Step 1: Account ───────────────────────────────────────── */}
-                  <StepperContent value={1} className="space-y-4">
-                    <div className="space-y-1">
-                      <Label htmlFor="email">Email</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="you@company.com"
-                        value={email}
-                        onChange={e => setEmail(e.target.value)}
-                        aria-invalid={!!errors.email}
-                      />
-                      {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+            <form onSubmit={handleSubmit} noValidate>
+              <StepperPanel className="text-sm">
+
+                {/* ── Step 1: Account ───────────────────────────────────────── */}
+                <StepperContent value={1} className="space-y-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="email" className={authLabelClass}>Work email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      inputMode="email"
+                      autoComplete="email"
+                      placeholder="you@company.com"
+                      value={email}
+                      onChange={e => setEmail(e.target.value)}
+                      aria-invalid={!!errors.email}
+                      className={authInputClass}
+                    />
+                    {errors.email && <p className="text-xs text-destructive">{errors.email}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="username" className={authLabelClass}>Username</Label>
+                    <Input
+                      id="username"
+                      placeholder="johndoe"
+                      value={username}
+                      onChange={e => setUsername(e.target.value)}
+                      aria-invalid={!!errors.username}
+                      className={authInputClass}
+                    />
+                    {errors.username && <p className="text-xs text-destructive">{errors.username}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="password" className={authLabelClass}>Password</Label>
+                    <PasswordInput
+                      id="password"
+                      autoComplete="new-password"
+                      placeholder="Create a password"
+                      value={password}
+                      onChange={e => setPassword(e.target.value)}
+                      aria-invalid={!!errors.password}
+                    />
+                    {errors.password ? (
+                      <p className="text-xs text-destructive">{errors.password}</p>
+                    ) : (
+                      <p className="text-xs text-auth-muted">
+                        At least 8 characters, with an uppercase letter, a lowercase letter and a number.
+                      </p>
+                    )}
+                  </div>
+                </StepperContent>
+
+                {/* ── Step 2: Company ───────────────────────────────────────── */}
+                <StepperContent value={2} className="space-y-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="company_name" className={authLabelClass}>Company name</Label>
+                    <Input
+                      id="company_name"
+                      autoComplete="organization"
+                      placeholder="Acme Ltd"
+                      value={companyName}
+                      onChange={e => setCompanyName(e.target.value)}
+                      aria-invalid={!!errors.company_name}
+                      className={authInputClass}
+                    />
+                    {errors.company_name && <p className="text-xs text-destructive">{errors.company_name}</p>}
+                  </div>
+
+                  <div className="space-y-2">
+                    <Label htmlFor="phone" className={authLabelClass}>Phone number</Label>
+                    <Input
+                      id="phone"
+                      type="tel"
+                      autoComplete="tel"
+                      placeholder="+254 7XX XXX XXX"
+                      value={phone}
+                      onChange={e => setPhone(e.target.value)}
+                      aria-invalid={!!errors.phone}
+                      className={authInputClass}
+                    />
+                    {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
+                  </div>
+
+                  <div className={`grid w-full gap-5 ${showCountyField ? 'sm:grid-cols-2' : 'grid-cols-1'}`}>
+                    <div className="space-y-2">
+                      <Label htmlFor="country" className={authLabelClass}>Country</Label>
+                      <Select
+                        value={countryId ? String(countryId) : ''}
+                        onValueChange={v => setCountryId(Number(v))}
+                        disabled={countriesLoading}
+                      >
+                        <SelectTrigger id="country" className={authSelectTriggerClass} aria-invalid={!!errors.country_id}>
+                          <SelectValue placeholder={countriesLoading ? 'Loading…' : 'Select your country'} />
+                        </SelectTrigger>
+                        <SelectContent className={authFontClasses} searchable searchPlaceholder="Search countries...">
+                          {countries.map(c => (
+                            <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      {errors.country_id && <p className="text-xs text-destructive">{errors.country_id}</p>}
                     </div>
 
-                    <div className="space-y-1">
-                      <Label htmlFor="password">Password</Label>
-                      <div className="relative">
-                        <Input
-                          id="password"
-                          type={showPw ? 'text' : 'password'}
-                          placeholder="Min. 8 chars, uppercase, number"
-                          value={password}
-                          onChange={e => setPassword(e.target.value)}
-                          aria-invalid={!!errors.password}
-                          className="pr-10"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPw(v => !v)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                          aria-label={showPw ? 'Hide password' : 'Show password'}
-                        >
-                          {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                        </button>
-                      </div>
-                      {errors.password && <p className="text-xs text-destructive">{errors.password}</p>}
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label htmlFor="username">Username</Label>
-                      <Input
-                        id="username"
-                        placeholder="johndoe"
-                        value={username}
-                        onChange={e => setUsername(e.target.value)}
-                        aria-invalid={!!errors.username}
-                      />
-                      {errors.username && <p className="text-xs text-destructive">{errors.username}</p>}
-                    </div>
-                  </StepperContent>
-
-                  {/* ── Step 2: Company ───────────────────────────────────────── */}
-                  <StepperContent value={2} className="space-y-4">
-                    <div className="space-y-1">
-                      <Label htmlFor="company_name">Company Name</Label>
-                      <Input
-                        id="company_name"
-                        placeholder="Acme Ltd"
-                        value={companyName}
-                        onChange={e => setCompanyName(e.target.value)}
-                        aria-invalid={!!errors.company_name}
-                      />
-                      {errors.company_name && <p className="text-xs text-destructive">{errors.company_name}</p>}
-                    </div>
-
-                    <div className="space-y-1">
-                      <Label htmlFor="phone">Phone Number</Label>
-                      <Input
-                        id="phone"
-                        type="tel"
-                        placeholder="+254 7XX XXX XXX"
-                        value={phone}
-                        onChange={e => setPhone(e.target.value)}
-                        aria-invalid={!!errors.phone}
-                      />
-                      {errors.phone && <p className="text-xs text-destructive">{errors.phone}</p>}
-                    </div>
-
-                    <div className={`grid w-full gap-4 ${showCountyField ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                      <div className="space-y-1">
-                        <Label htmlFor="country">Country</Label>
+                    {showCountyField && (
+                      <div className="space-y-2">
+                        <Label htmlFor="county" className={authLabelClass}>County</Label>
                         <Select
-                          value={countryId ? String(countryId) : ''}
-                          onValueChange={v => setCountryId(Number(v))}
-                          disabled={countriesLoading}
+                          value={countyId ? String(countyId) : ''}
+                          onValueChange={v => setCountyId(Number(v))}
+                          disabled={countiesLoading}
                         >
-                          <SelectTrigger id="country" className="w-full" aria-invalid={!!errors.country_id}>
-                            <SelectValue placeholder={countriesLoading ? 'Loading…' : 'Select your country'} />
+                          <SelectTrigger id="county" className={authSelectTriggerClass} aria-invalid={!!errors.county_id}>
+                            <SelectValue placeholder={countiesLoading ? 'Loading…' : 'Select your county'} />
                           </SelectTrigger>
-                          <SelectContent searchable searchPlaceholder="Search countries...">
-                            {countries.map(c => (
+                          <SelectContent className={authFontClasses} searchable searchPlaceholder="Search counties...">
+                            {counties.map(c => (
                               <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
                             ))}
                           </SelectContent>
                         </Select>
-                        {errors.country_id && <p className="text-xs text-destructive">{errors.country_id}</p>}
+                        {errors.county_id && <p className="text-xs text-destructive">{errors.county_id}</p>}
                       </div>
+                    )}
+                  </div>
+                </StepperContent>
 
-                      {showCountyField && (
-                        <div className="space-y-1">
-                          <Label htmlFor="county">County</Label>
-                          <Select
-                            value={countyId ? String(countyId) : ''}
-                            onValueChange={v => setCountyId(Number(v))}
-                            disabled={countiesLoading}
+                {/* ── Step 3: Plan ──────────────────────────────────────────── */}
+                <StepperContent value={3} className="space-y-6">
+                  {plans.length === 0 ? (
+                    <p className="flex items-center gap-2 text-sm text-auth-muted">
+                      <Loader2 className="size-4 animate-spin" aria-hidden />
+                      Loading plans…
+                    </p>
+                  ) : (
+                    <>
+                      {/* Billing toggle — only shown if the backend returned more than one cycle */}
+                      {availableCycles.length > 1 && (
+                        <div className="flex justify-center">
+                          <div
+                            role="group"
+                            aria-label="Billing cycle"
+                            className="inline-flex items-center gap-1 rounded-lg border border-auth-line bg-auth-canvas p-1"
                           >
-                            <SelectTrigger id="county" className="w-full" aria-invalid={!!errors.county_id}>
-                              <SelectValue placeholder={countiesLoading ? 'Loading…' : 'Select your county'} />
-                            </SelectTrigger>
-                            <SelectContent searchable searchPlaceholder="Search counties...">
-                              {counties.map(c => (
-                                <SelectItem key={c.id} value={String(c.id)}>{c.name}</SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                          {errors.county_id && <p className="text-xs text-destructive">{errors.county_id}</p>}
+                            {(['monthly', 'annual'] as const).map(cycle => (
+                              <button
+                                key={cycle}
+                                type="button"
+                                aria-pressed={billingCycle === cycle}
+                                onClick={() => handleBillingCycleChange(cycle)}
+                                className={cn(
+                                  'flex items-center gap-2 rounded-md px-4 py-1.5 text-sm font-medium outline-none transition-colors',
+                                  'focus-visible:ring-2 focus-visible:ring-auth-accent/40',
+                                  billingCycle === cycle
+                                    ? 'bg-white text-auth-ink shadow-sm'
+                                    : 'text-auth-muted hover:text-auth-ink',
+                                )}
+                              >
+                                {cycle === 'monthly' ? 'Monthly' : 'Annual'}
+                                {cycle === 'annual' && (
+                                  <span className="rounded-full bg-auth-accent-soft px-1.5 py-0.5 text-xs font-medium text-auth-accent-strong">
+                                    15% off
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
                         </div>
                       )}
-                    </div>
-                  </StepperContent>
 
-                  {/* ── Step 3: Plan ──────────────────────────────────────────── */}
-                  <StepperContent value={3} className="space-y-6">
-                    {plans.length === 0 ? (
-                      <p className="text-sm text-muted-foreground">Loading plans…</p>
-                    ) : (
-                      <>
-                        {/* Billing toggle — only shown if the backend returned more than one cycle */}
-                        {availableCycles.length > 1 && (
-                          <div className="flex justify-center">
-                            <div className="inline-flex items-center bg-gray-100 rounded-full p-1 gap-1">
-                              <button
-                                type="button"
-                                onClick={() => handleBillingCycleChange('monthly')}
-                                className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-all ${billingCycle === 'monthly'
-                                    ? 'bg-white text-gray-900 shadow'
-                                    : 'text-gray-500 hover:text-gray-700'
-                                  }`}
-                              >
-                                Monthly
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => handleBillingCycleChange('annual')}
-                                className={`px-5 py-1.5 rounded-full text-sm font-semibold transition-all flex items-center gap-2 ${billingCycle === 'annual'
-                                    ? 'bg-white text-gray-900 shadow'
-                                    : 'text-gray-500 hover:text-gray-700'
-                                  }`}
-                              >
-                                Annual
-                                <span
-                                  className="text-xs font-bold px-1.5 py-0.5 rounded-full text-white"
-                                  style={{ backgroundColor: PURPLE }}
-                                >
-                                  15% off
-                                </span>
-                              </button>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Cards */}
-                        <div className="grid gap-4 sm:grid-cols-3 items-stretch">
-                          {visiblePlans.map(p => {
-                            const highlight = p.code.startsWith('professional');
-                            const isSelected = selectedPlanCode === p.code;
-                            return (
-                              <button
-                                key={p.code}
-                                type="button"
-                                onClick={() => setSelectedPlanCode(p.code)}
-                                className={`relative text-left rounded-2xl border flex flex-col transition-all ${highlight
-                                    ? 'border-transparent shadow-2xl'
-                                    : 'border-gray-200 shadow-sm'
-                                  } ${isSelected ? 'ring-2 ring-offset-2' : ''}`}
-                                style={{
-                                  ...(highlight
-                                    ? { background: '#1a1a2e', color: 'white' }
-                                    : { background: 'white' }),
-                                  ...(isSelected ? ({ '--tw-ring-color': PURPLE } as React.CSSProperties) : {}),
-                                }}
-                              >
-                                {highlight && (
-                                  <div
-                                    className="absolute -top-3 left-1/2 -translate-x-1/2 text-xs font-bold text-white px-3 py-1 rounded-full shadow"
-                                    style={{ backgroundColor: PURPLE }}
-                                  >
-                                    Most Popular
-                                  </div>
-                                )}
-
-                                {isSelected && (
-                                  <div
-                                    className="absolute top-3 right-3 rounded-full p-1"
-                                    style={{ backgroundColor: PURPLE }}
-                                  >
-                                    <CheckIcon className="h-3.5 w-3.5 text-white" />
-                                  </div>
-                                )}
-
-                                <div className="p-5 flex flex-col flex-1">
-                                  {/* Plan name */}
-                                  <div className="mb-2">
-                                    <span
-                                      className="text-xs font-semibold uppercase tracking-widest"
-                                      style={{ color: highlight ? '#a78bfa' : PURPLE }}
-                                    >
-                                      {p.name}
+                      {/* Plan cards */}
+                      <div role="radiogroup" aria-label="Subscription plan" className="grid items-stretch gap-4 sm:grid-cols-3">
+                        {visiblePlans.map(p => {
+                          const popular = p.code.startsWith('professional');
+                          const isSelected = selectedPlanCode === p.code;
+                          const unit = p.billing_cycle === 'annual' ? 'yr' : 'mo';
+                          return (
+                            <button
+                              key={p.code}
+                              type="button"
+                              role="radio"
+                              aria-checked={isSelected}
+                              onClick={() => setSelectedPlanCode(p.code)}
+                              className={cn(
+                                'relative flex flex-col rounded-xl border bg-white p-5 text-left outline-none transition-colors',
+                                'focus-visible:ring-2 focus-visible:ring-auth-accent/40',
+                                isSelected
+                                  ? 'border-auth-accent ring-1 ring-auth-accent'
+                                  : 'border-auth-line hover:border-auth-ink/30',
+                              )}
+                            >
+                              <div className="flex items-start justify-between gap-2">
+                                <div className="space-y-1.5">
+                                  <span className="auth-display block text-[15px] font-semibold text-auth-ink">{p.name}</span>
+                                  {popular && (
+                                    <span className="inline-block rounded-full bg-auth-accent-soft px-2 py-0.5 text-[11px] font-medium text-auth-accent-strong">
+                                      Most popular
                                     </span>
-                                  </div>
-
-                                  {/* Price */}
-                                  <div className="mb-1 flex items-end gap-1">
-                                    <span className={`text-3xl font-extrabold ${highlight ? 'text-white' : 'text-gray-900'}`}>
-                                      {p.base_price === 0 ? 'Free' : `KES ${p.base_price.toLocaleString()}`}
-                                    </span>
-                                    {p.base_price !== 0 && (
-                                      <span className={`text-sm mb-1.5 ${highlight ? 'text-gray-400' : 'text-gray-500'}`}>
-                                        /{p.billing_cycle === 'annual' ? 'yr' : 'mo'}
-                                      </span>
-                                    )}
-                                  </div>
-
-                                  {/* Per-employee */}
-                                  {p.price_per_employee != null ? (
-                                    <p className={`text-xs mb-1 ${highlight ? 'text-gray-400' : 'text-gray-500'}`}>
-                                      + KES {p.price_per_employee}/employee/{p.billing_cycle === 'annual' ? 'yr' : 'mo'}
-                                    </p>
-                                  ) : (
-                                    <p className="text-xs mb-1 invisible">placeholder</p>
                                   )}
-
-                                  {/* Employee cap */}
-                                  <p className={`text-xs mb-3 ${highlight ? 'text-gray-400' : 'text-gray-400'}`}>
-                                    {p.max_employees ? `Up to ${p.max_employees} employees` : 'Unlimited employees'}
-                                  </p>
-
-                                  {/* Trial badge */}
-                                  {p.trial_days ? (
-                                    <div className="mb-3">
-                                      <span
-                                        className="text-xs font-semibold px-2.5 py-1 rounded-full"
-                                        style={{
-                                          backgroundColor: `${PURPLE}20`,
-                                          color: highlight ? '#c4b5fd' : PURPLE,
-                                        }}
-                                      >
-                                        {p.trial_days}-day free trial
-                                      </span>
-                                    </div>
-                                  ) : null}
-
-                                  {/* Divider */}
-                                  <div className={`border-t mb-3 ${highlight ? 'border-white/10' : 'border-gray-100'}`} />
-
-                                  {/* Features */}
-                                  <ul className="space-y-1.5 flex-1 mb-4">
-                                    {p.features.map(feat => (
-                                      <li key={feat} className="flex items-start gap-2">
-                                        <svg className="w-4 h-4 mt-0.5 shrink-0" viewBox="0 0 20 20" fill="none">
-                                          <circle cx="10" cy="10" r="10" fill={highlight ? '#895bf520' : `${PURPLE}18`} />
-                                          <path
-                                            d="M6 10l3 3 5-5"
-                                            stroke={highlight ? '#a78bfa' : PURPLE}
-                                            strokeWidth="1.8"
-                                            strokeLinecap="round"
-                                            strokeLinejoin="round"
-                                          />
-                                        </svg>
-                                        <span className={`text-xs leading-snug ${highlight ? 'text-gray-300' : 'text-gray-600'}`}>
-                                          {feat}
-                                        </span>
-                                      </li>
-                                    ))}
-                                  </ul>
-
-                                  {/* Select indicator */}
-                                  <div
-                                    className="w-full py-2 rounded-lg text-sm font-semibold text-center transition-all"
-                                    style={
-                                      isSelected
-                                        ? { backgroundColor: PURPLE, color: 'white' }
-                                        : highlight
-                                          ? { backgroundColor: 'rgba(255,255,255,0.08)', color: 'white', border: '1.5px solid rgba(255,255,255,0.2)' }
-                                          : { backgroundColor: 'transparent', color: PURPLE, border: `1.5px solid ${PURPLE}` }
-                                    }
-                                  >
-                                    {isSelected ? 'Selected' : 'Select plan'}
-                                  </div>
                                 </div>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </>
-                    )}
-                  </StepperContent>
-                </StepperPanel>
+                                <span
+                                  aria-hidden
+                                  className={cn(
+                                    'mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors',
+                                    isSelected ? 'border-auth-accent bg-auth-accent text-white' : 'border-auth-line bg-white',
+                                  )}
+                                >
+                                  {isSelected && <CheckIcon className="size-3" />}
+                                </span>
+                              </div>
 
-                {process.env.NODE_ENV === 'development' && step === 1 && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="mt-4 w-full text-muted-foreground"
-                    onClick={fillDummy}
-                  >
-                    Fill dummy data
+                              <div className="mt-4 flex items-baseline gap-1">
+                                <span className="auth-display text-2xl font-semibold text-auth-ink">
+                                  {p.base_price === 0 ? 'Free' : `KES ${p.base_price.toLocaleString()}`}
+                                </span>
+                                {p.base_price !== 0 && (
+                                  <span className="text-sm text-auth-muted">/{unit}</span>
+                                )}
+                              </div>
+
+                              <p className="mt-1 min-h-4 text-xs text-auth-muted">
+                                {p.price_per_employee != null
+                                  ? `+ KES ${p.price_per_employee}/employee/${unit}`
+                                  : ''}
+                              </p>
+                              <p className="text-xs text-auth-muted">
+                                {p.max_employees ? `Up to ${p.max_employees} employees` : 'Unlimited employees'}
+                              </p>
+                              {p.trial_days ? (
+                                <p className="mt-2 text-xs font-medium text-auth-body">
+                                  {p.trial_days}-day free trial
+                                </p>
+                              ) : null}
+
+                              <ul className="mt-4 flex-1 space-y-2 border-t border-auth-line pt-4">
+                                {p.features.map(feat => (
+                                  <li key={feat} className="flex items-start gap-2">
+                                    <CheckIcon className="mt-0.5 size-3.5 shrink-0 text-auth-muted" aria-hidden />
+                                    <span className="text-xs leading-snug text-auth-body">{feat}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </StepperContent>
+              </StepperPanel>
+
+              {process.env.NODE_ENV === 'development' && step === 1 && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="mt-4 w-full border border-dashed border-auth-line text-xs text-auth-muted hover:bg-auth-canvas"
+                  onClick={fillDummy}
+                >
+                  Fill sample data (development only)
+                </Button>
+              )}
+
+              <div className="mt-8 flex items-center justify-between gap-3">
+                {step > 1 ? (
+                  <Button type="button" variant="outline" onClick={handleBack} className={authSecondaryButtonClass}>
+                    Back
                   </Button>
+                ) : (
+                  <span />
                 )}
 
-                <div className="mt-6 flex items-center justify-between gap-3">
-                  {step > 1 ? (
-                    <Button type="button" variant="outline" onClick={handleBack}>
-                      Back
-                    </Button>
-                  ) : (
-                    <span />
-                  )}
-
-                  {step < STEPS.length ? (
-                    <Button key="nav-next" type="button" onClick={handleNext} className="ml-auto">
-                      Next
-                    </Button>
-                  ) : (
-                    <Button key="nav-submit" type="submit" disabled={isLoading} className="ml-auto">
-                      {isLoading
-                        ? 'Creating account…'
-                        : selectedPlanCode.startsWith('starter')
-                          ? 'Start Free Trial'
-                          : 'Continue to Payment — M-Pesa'}
-                    </Button>
-                  )}
-                </div>
-              </form>
-            </Stepper>
-
-            <p className="mt-6 text-center text-sm text-muted-foreground">
-              Already have an account?{' '}
-              <a href="/login" className="text-primary underline underline-offset-2">Sign in</a>
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    </>
+                {step < STEPS.length ? (
+                  <Button key="nav-next" type="button" onClick={handleNext} className={cn(authPrimaryButtonClass, 'ml-auto w-auto px-6')}>
+                    Continue
+                  </Button>
+                ) : (
+                  <Button key="nav-submit" type="submit" disabled={isLoading} className={cn(authPrimaryButtonClass, 'ml-auto w-auto px-6')}>
+                    {isLoading ? (
+                      <>
+                        <Loader2 className="animate-spin" aria-hidden />
+                        Creating account…
+                      </>
+                    ) : selectedPlanCode.startsWith('starter') ? (
+                      'Start free trial'
+                    ) : (
+                      'Continue to payment (M-Pesa)'
+                    )}
+                  </Button>
+                )}
+              </div>
+            </form>
+          </Stepper>
+        </div>
+      </main>
+    </div>
   );
 }
 
 export default function RegisterPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<div className="flex min-h-dvh items-center justify-center bg-auth-canvas text-sm text-auth-muted">Loading…</div>}>
       <RegisterPageContent />
     </Suspense>
   );
