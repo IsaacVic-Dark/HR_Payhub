@@ -151,7 +151,7 @@ CREATE TABLE IF NOT EXISTS `employees` (
   CONSTRAINT `employees_ibfk_2` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL,
   CONSTRAINT `employees_ibfk_3` FOREIGN KEY (`reports_to`) REFERENCES `employees` (`id`) ON DELETE SET NULL,
   CONSTRAINT `employees_ibfk_4` FOREIGN KEY (`department_id`) REFERENCES `departments` (`id`) ON DELETE SET NULL,
-  CONSTRAINT `employees_jt_fk`  FOREIGN KEY (`job_title_id`)    REFERENCES `job_titles`    (`id`) ON DELETE SET NULL\
+  CONSTRAINT `employees_jt_fk`  FOREIGN KEY (`job_title_id`)    REFERENCES `job_titles`    (`id`) ON DELETE SET NULL
   
 ) ENGINE=InnoDB AUTO_INCREMENT=128 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -1463,7 +1463,7 @@ CREATE TABLE organization_subscriptions (
   organization_id INT NOT NULL,
   plan_id INT NOT NULL,
   status ENUM('trialing','pending_payment','active','past_due','suspended','cancelled','expired') DEFAULT 'trialing',
-  starts_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP
+  starts_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   trial_ends_at TIMESTAMP NULL,
   current_period_starts_at TIMESTAMP NULL,
   current_period_ends_at TIMESTAMP NULL,
@@ -1903,7 +1903,7 @@ CREATE TABLE `reimbursements` (
   CONSTRAINT `reimbpayrunfk` FOREIGN KEY (`payrun_id`) REFERENCES `payruns` (`id`) ON DELETE SET NULL,
   CONSTRAINT `reimbpolicyfk` FOREIGN KEY (`policy_config_id`) REFERENCES `organization_configs` (`id`) ON DELETE SET NULL,
   CONSTRAINT `reimbupdatedbyfk` FOREIGN KEY (`updated_by`) REFERENCES `users` (`id`) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE `reimbursementitems` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -1924,7 +1924,7 @@ CREATE TABLE `reimbursementitems` (
   PRIMARY KEY (`id`),
   KEY `idxreimbitemreimb` (`reimbursement_id`),
   CONSTRAINT `reimbitemreimbfk` FOREIGN KEY (`reimbursement_id`) REFERENCES `reimbursements` (`id`) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 -- =============================================================================
 -- ALLOWANCE MODULE MIGRATION
@@ -2252,7 +2252,7 @@ VALUES
 -- Send a notification to the employee when their request is approved or rejected: true | false.
 (221, 'leave', 'Notify Employee on Approval/Rejection',
   NULL, NULL, 'true', NULL,
-  'approved', 1);\-- ============================================================
+  'approved', 1);-- ============================================================
 -- Lateness / Early-Leave Deduction Policy
 -- organization_id : 221
 -- config_type     : attendance

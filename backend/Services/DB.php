@@ -301,7 +301,7 @@ final class DB
      * Insert a new record
      *
      * @param array $parameters Key-value pairs to insert
-     * @return void
+     * @return bool
      */
     public function insert(array $parameters)
     {
@@ -311,7 +311,7 @@ final class DB
         $this->bindings = $parameters;
         try {
             $statement = $this->pdo->prepare($this->sql);
-            $statement->execute($this->bindings);
+            return $statement->execute($this->bindings);
         } catch (\Exception $e) {
             throw new \Exception("Insert error: " . $e->getMessage()
                 . " :QUERY:" . $this->getDebugFullQuery($this->sql, $this->bindings));
