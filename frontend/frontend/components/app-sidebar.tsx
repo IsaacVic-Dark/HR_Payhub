@@ -1,0 +1,916 @@
+"use client";
+
+import Link from "next/link";
+import { usePathname, useSearchParams } from "next/navigation";
+
+import * as React from "react";
+import {
+  IconChartBar,
+  IconDashboard,
+  IconUsers,
+  IconBuilding,
+  IconCash,
+  IconCalendar,
+  IconInnerShadowTop,
+  IconSettings,
+  IconHelp,
+  IconFileText,
+  IconReceipt,
+  IconWorld,
+  IconChevronDown,
+  IconChevronRight,
+  IconClipboardList,
+  IconBriefcase,
+  IconShieldCheck,
+  IconReportMoney,
+  IconUsersGroup,
+  IconTemplate,
+} from "@tabler/icons-react";
+
+import { NavUser } from "@/components/nav-user";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarGroupContent,
+  SidebarMenuSub,
+  SidebarMenuSubItem,
+  SidebarMenuSubButton,
+} from "@/components/ui/sidebar";
+import { usePermissions } from "@/hooks/usePermissions";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { useAuth } from "@/lib/AuthContext";
+
+// ─── Nav item types ────────────────────────────────────────────────────────────
+
+interface NavSubItem {
+  title: string;
+  url: string;
+  roles: string[];
+}
+
+interface NavItem {
+  title: string;
+  url: string;
+  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  roles: string[];
+  hasDropdown?: boolean;
+  items?: NavSubItem[];
+}
+
+// Mirrors the STEPS array in app/(dashboard)/setup/page.tsx — keep in sync.
+const SETUP_STEPS = [
+  "Company Details",
+  "Location",
+  "Payroll Settings",
+  "Banking",
+  "Admin Profile",
+  "Review & Submit",
+];
+
+// Reads ?step= from the URL. Isolated in its own component + Suspense
+// boundary so useSearchParams() doesn't force dynamic rendering on every
+// route that mounts the sidebar — only this small subtree opts in.
+function SetupStepsSubNav({ pathname }: { pathname: string }) {
+  const searchParams = useSearchParams();
+  const isSetupActive = pathname === "/setup" || pathname.startsWith("/setup/");
+  const raw = parseInt(searchParams.get("step") || "0", 10);
+  const activeStep = isNaN(raw) || raw < 0 || raw > SETUP_STEPS.length - 1 ? 0 : raw;
+
+  return (
+    <SidebarMenuSub>
+      {SETUP_STEPS.map((label, idx) => {
+        const isCurrent = isSetupActive && idx === activeStep;
+        const isPast = isSetupActive && idx < activeStep;
+        return (
+          <SidebarMenuSubItem key={label}>
+            <SidebarMenuSubButton
+              asChild
+              isActive={isCurrent}
+              className="hover:bg-[#be2ed6] hover:text-[#feedff] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff]"
+            >
+              <Link href={`/setup?step=${idx}`} className="flex items-center gap-2">
+                <span
+                  className={[
+                    "flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-semibold",
+                    isCurrent
+                      ? "bg-white text-[#be2ed6]"
+                      : isPast
+                        ? "bg-[#be2ed6] text-white"
+                        : "border border-muted-foreground/40 text-muted-foreground",
+                  ].join(" ")}
+                >
+                  {isPast ? "✓" : idx + 1}
+                </span>
+                <span>{label}</span>
+              </Link>
+            </SidebarMenuSubButton>
+          </SidebarMenuSubItem>
+        );
+      })}
+    </SidebarMenuSub>
+  );
+}
+
+const data: {
+  user: { name: string; email: string; avatar: string };
+  coreNav: NavItem[];
+  payrollSection: NavItem[];
+  financeSection: NavItem[];
+  employeeSection: NavItem[];
+  selfServiceSection: NavItem[];
+  configSection: NavItem[];
+  systemSection: NavItem[];
+  platformSection: NavItem[];
+  othersSection: NavItem[];
+} = {
+  user: {
+    name: "shadcn",
+    email: "m@example.com",
+    avatar: "/../../../images/profile.jpg",
+  },
+
+  // Core navigation items
+  coreNav: [
+    {
+      title: "Dashboard",
+      url: "/dashboard",
+      icon: IconDashboard,
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "payroll_manager",
+        "payroll_officer",
+        "department_manager",
+        "finance_manager",
+        "auditor",
+        "employee",
+      ],
+    },
+  ],
+
+  // Payroll Management section
+  payrollSection: [
+    {
+      title: "Payrun",
+      url: "/payrun",
+      icon: IconChartBar,
+      roles: ["super_admin", "admin", "payroll_manager", "payroll_officer"],
+      hasDropdown: true,
+      items: [
+        {
+          title: "History",
+          url: "/payrun/history",
+          roles: ["super_admin", "admin", "payroll_manager"],
+        },
+        {
+          title: "Process",
+          url: "/payrun/process",
+          roles: ["super_admin", "admin", "payroll_manager"],
+        },
+        {
+          title: "Employees Payrun",
+          url: "/payrun/employees",
+          roles: ["super_admin", "admin", "payroll_manager"],
+        },
+      ],
+    },
+    {
+      title: "Payslips",
+      url: "/payslips",
+      icon: IconReceipt,
+      roles: ["super_admin", "admin", "payroll_manager"],
+    },
+    {
+      title: "Templates",
+      url: "/templates",
+      icon: IconTemplate,
+      roles: ["admin", "payroll_manager", "payroll_officer"],
+    },
+    {
+      title: "P9 Forms",
+      url: "/p9-forms",
+      icon: IconFileText,
+      roles: ["super_admin", "admin", "payroll_manager"],
+    },
+    // {
+    //   title: "Tax Reports",
+    //   url: "/tax-reports",
+    //   icon: IconFileText,
+    //   roles: ["super_admin", "admin", "payroll_manager"],
+    // },
+  ],
+
+  // Finances section
+  financeSection: [
+    {
+      title: "Loans",
+      url: "/loans",
+      icon: IconBriefcase,
+      roles: ["super_admin", "admin", "hr_manager", "department_manager"],
+    },
+    {
+      title: "Advances",
+      url: "/advances",
+      icon: IconCash,
+      roles: ["super_admin", "admin"],
+    },
+    {
+      title: "Overtime Approvals",
+      url: "/payrun/overtime-approvals",
+      icon: IconClipboardList,
+      roles: ["super_admin", "admin", "hr_manager", "payroll_manager"],
+    },
+    {
+      title: "Reimbursements",
+      url: "/reimbursements",
+      icon: IconReportMoney,
+      roles: ["super_admin", "admin", "hr_manager", "finance_manager"],
+    },
+    {
+      title: "Allowance",
+      url: "/allowance",
+      icon: IconReportMoney,
+      roles: ["super_admin", "admin", "hr_manager", "finance_manager"],
+    },
+  ],
+
+  // Employee Management section
+  employeeSection: [
+    {
+      title: "Employees",
+      url: "/employees",
+      icon: IconUsers,
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "payroll_manager",
+        "department_manager",
+      ]
+    },
+    {
+      title: "Leaves",
+      url: "/leaves",
+      icon: IconCalendar,
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "department_manager"
+      ]
+    },
+    {
+      title: "Departments",
+      url: "/employees/departments",
+      icon: IconBuilding,
+      roles: ["super_admin", "admin", "hr_manager"],
+    },
+    {
+      title: "My Leaves",
+      url: "/myleave",
+      icon: IconCalendar,
+      roles: [
+        "employee"
+      ]
+    },
+    {
+      title: "My Overtime",
+      url: "/myovertime",
+      icon: IconClipboardList,
+      roles: ["employee"],
+    },
+    {
+      title: "My Reimbursement",
+      url: "/myreimbursements",
+      icon: IconCalendar,
+      roles: [
+        "employee"
+      ]
+    },
+    {
+      title: "Attendance",
+      url: "/attendance",
+      icon: IconClipboardList,
+      roles: ["super_admin", "admin", "hr_manager", "department_manager"],
+    },
+    {
+      title: "My Team",
+      url: "/team",
+      icon: IconUsersGroup,
+      roles: ["department_manager"],
+      hasDropdown: true,
+      items: [
+        {
+          title: "Team Members",
+          url: "/team/members",
+          roles: ["department_manager"],
+        },
+        {
+          title: "Leave Approvals",
+          url: "/team/leave-approvals",
+          roles: ["department_manager"],
+        },
+        {
+          title: "Overtime Approvals",
+          url: "/team/overtime-approvals",
+          roles: ["department_manager"],
+        },
+        {
+          title: "Expense Claims",
+          url: "/team/expense-claims",
+          roles: ["department_manager"],
+        },
+      ],
+    },
+  ],
+
+  // Self-Service section (for employees)
+  selfServiceSection: [
+    {
+      title: "My Payslips",
+      url: "/mypayslips",
+      icon: IconReceipt,
+      roles: ["employee"],
+    },
+    {
+      title: "My P9Form",
+      url: "/myp9",
+      icon: IconReceipt,
+      roles: ["employee"],
+    },
+    // {
+    //   title: "My Profile",
+    //   url: "/my-profile",
+    //   icon: IconUsers,
+    //   roles: ["employee"],
+    // },
+    // {
+    //   title: "My Documents",
+    //   url: "/my-documents",
+    //   icon: IconFileText,
+    //   roles: ["employee"],
+    // },
+    // {
+    //   title: "My Requests",
+    //   url: "/my-requests",
+    //   icon: IconClipboardList,
+    //   roles: ["employee"],
+    // },
+    {
+      title: "My Loans",
+      url: "/myloans",
+      icon: IconBriefcase,
+      roles: ["employee"],
+    },
+    {
+      title: "My Advances",
+      url: "/myadvances",
+      icon: IconCash,
+      roles: ["employee"],
+    },
+  ],
+
+  // Configuration section
+  configSection: [
+    {
+      title: "Settings",
+      url: "/company-settings",
+      icon: IconSettings,
+      roles: ["super_admin", "admin"],
+    },
+    {
+      title: "User Management",
+      url: "/users",
+      icon: IconUsers,
+      roles: ["super_admin", "admin"],
+    },
+    {
+      title: "Audit Logs",
+      url: "/audit-logs",
+      icon: IconShieldCheck,
+      roles: ["admin"],
+    },
+  ],
+
+  // System section
+  systemSection: [
+    // {
+    //   title: "Organizations",
+    //   url: "/organizations",
+    //   icon: IconBuilding,
+    //   roles: ["super_admin"],
+    // },
+    {
+      title: "System Settings",
+      url: "/system-settings",
+      icon: IconSettings,
+      roles: ["super_admin"],
+    },
+    {
+      title: "Analytics",
+      url: "/analytics",
+      icon: IconChartBar,
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "payroll_manager",
+        "finance_manager",
+      ],
+    },
+    {
+      title: "Reports",
+      url: "/reports",
+      icon: IconFileText,
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "payroll_manager",
+        "finance_manager",
+        "auditor",
+      ],
+      hasDropdown: true,
+      items: [
+        {
+          title: "Payroll Reports",
+          url: "/payroll-reports",
+          roles: ["super_admin", "admin", "payroll_manager"],
+        },
+        {
+          title: "HR Reports",
+          url: "/hr-reports",
+          roles: ["super_admin", "admin", "hr_manager"],
+        },
+        {
+          title: "Financial Reports",
+          url: "/financial-reports",
+          roles: ["super_admin", "admin", "finance_manager"],
+        },
+        {
+          title: "Audit Reports",
+          url: "/audit/reports",
+          roles: ["super_admin", "auditor"],
+        },
+      ],
+    },
+    {
+      title: "Audit",
+      url: "/audit/payroll-records",
+      icon: IconShieldCheck,
+      roles: ["super_admin", "auditor"],
+      hasDropdown: true,
+      items: [
+        {
+          title: "Payroll Records",
+          url: "/audit/payroll-records",
+          roles: ["super_admin", "auditor"],
+        },
+        {
+          title: "User Activity",
+          url: "/audit/user-activity",
+          roles: ["super_admin", "auditor"],
+        },
+        {
+          title: "Audit Trails",
+          url: "/audit/audit-trails",
+          roles: ["super_admin", "auditor"],
+        },
+        {
+          title: "Compliance",
+          url: "/audit/statutory-compliance",
+          roles: ["super_admin", "auditor"],
+        },
+      ],
+    },
+  ],
+
+  // Platform Administration — cross-tenant, super_admin only
+  platformSection: [
+    {
+      title: "Organizations",
+      url: "/platform/organizations",
+      icon: IconBuilding,
+      roles: ["super_admin"],
+    },
+    {
+      title: "Subscriptions",
+      url: "/platform/subscriptions",
+      icon: IconCash, // imported already, currently unused
+      roles: ["super_admin"],
+    },
+    {
+      title: "Subscription Plans",
+      url: "/subscription-plans",
+      icon: IconReportMoney,
+      roles: ["super_admin"],
+    },
+    {
+      title: "Countries",
+      url: "/platform/countries",
+      icon: IconWorld,
+      roles: ["super_admin"],
+    },
+    {
+      title: "Public Holidays",
+      url: "/public-holidays",
+      icon: IconCalendar,
+      roles: ["super_admin"],
+    },
+  ],
+
+  // Others section
+  othersSection: [
+    {
+      title: "Get Help",
+      url: "/help",
+      icon: IconHelp,
+      roles: [
+        "super_admin",
+        "admin",
+        "hr_manager",
+        "payroll_manager",
+        "payroll_officer",
+        "department_manager",
+        "finance_manager",
+        "auditor",
+        "employee",
+      ],
+    },
+  ],
+};
+
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const pathname = usePathname();
+  const { canAccessPage, userRole, currentUser } = usePermissions();
+  const [openDropdowns, setOpenDropdowns] = React.useState<string[]>(() => {
+    const allSections = [
+      ...data.payrollSection,
+      ...data.financeSection,
+      ...data.employeeSection,
+      ...data.configSection,
+      ...data.systemSection,
+    ];
+    return allSections
+      .filter(
+        (item) =>
+          item.hasDropdown &&
+          item.items?.some((sub: any) => pathname.startsWith(sub.url))
+      )
+      .map((item) => item.title);
+  });
+  const { isLoading, user } = useAuth();
+
+  // Show minimal sidebar while loading
+  if (isLoading) {
+    return (
+      <Sidebar collapsible="icon" {...props}>
+        <SidebarHeader>
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                className="data-[slot=sidebar-menu-button]:!p-1.5"
+              >
+                <a href="#">
+                  <IconInnerShadowTop className="!size-5" />
+                  <span className="text-base font-semibold">Pay hub.</span>
+                </a>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </SidebarHeader>
+        <SidebarFooter>
+          <div className="p-4 text-center text-sm text-gray-500">
+            Loading...
+          </div>
+        </SidebarFooter>
+      </Sidebar>
+    );
+  }
+
+  // If no user, don't show sidebar
+  if (!currentUser) {
+    return null;
+  }
+
+  const toggleDropdown = (title: string) => {
+    setOpenDropdowns((prev) =>
+      prev.includes(title)
+        ? prev.filter((item) => item !== title)
+        : [...prev, title]
+    );
+  };
+
+  // Filter function to check if user has access based on roles OR page path
+  const hasAccess = (item: any) => {
+    if (!userRole) return false;
+
+    // Check if user role is in the allowed roles list
+    if (item.roles && item.roles.includes(userRole)) {
+      return true;
+    }
+
+    // Additionally check if user can access the page path
+    return canAccessPage(item.url);
+  };
+
+  // Filter navigation items based on user role and permissions
+  const filterNavItems = (items: any[]) => {
+    return items.filter((item) => {
+      if (!hasAccess(item)) return false;
+
+      // If item has dropdown, filter sub-items
+      if (item.hasDropdown && item.items) {
+        item.items = item.items.filter((subItem: any) => {
+          // Check sub-item roles
+          if (subItem.roles && userRole) {
+            return subItem.roles.includes(userRole);
+          }
+          // Check sub-item path access
+          return canAccessPage(subItem.url);
+        });
+
+        // Only show parent if it has accessible sub-items
+        return item.items.length > 0;
+      }
+
+      return true;
+    });
+  };
+
+  const setupComplete = user?.setup_completed === 1;
+
+  const coreNavItems = setupComplete
+    ? filterNavItems(data.coreNav)
+    : [
+      {
+        title: 'Complete Setup',
+        url: '/setup',
+        icon: IconSettings,
+        roles: ['admin', 'super_admin'],
+      },
+    ].filter(item => hasAccess(item));
+
+  const filteredCoreNav = coreNavItems;
+  const filteredPayrollSection = filterNavItems(data.payrollSection);
+  const filteredFinanceSection = filterNavItems(data.financeSection);
+  const filteredEmployeeSection = filterNavItems(data.employeeSection);
+  const filteredSelfServiceSection = filterNavItems(data.selfServiceSection);
+  const filteredConfigSection = filterNavItems(data.configSection);
+  const filteredSystemSection = filterNavItems(data.systemSection);
+  const filteredOthersSection = filterNavItems(data.othersSection);
+  const filteredPlatformSection = filterNavItems(data.platformSection);
+
+  const renderNavItem = (item: any) => {
+    const isActive =
+      pathname === item.url || pathname.startsWith(item.url + "/");
+    const isOpen = openDropdowns.includes(item.title);
+
+    // Setup wizard: show the step list under "Complete Setup", always expanded.
+    if (item.title === "Complete Setup" && !setupComplete) {
+      return (
+        <SidebarMenuItem key={item.title}>
+          <SidebarMenuButton
+            asChild
+            isActive={isActive}
+            className="hover:bg-[#be2ed6] hover:text-[#feedff] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff]"
+          >
+            <Link href={item.url}>
+              <item.icon className="h-4 w-4" />
+              <span>{item.title}</span>
+            </Link>
+          </SidebarMenuButton>
+          <div className="ml-4 pl-2 mt-1">
+            <React.Suspense fallback={null}>
+              <SetupStepsSubNav pathname={pathname} />
+            </React.Suspense>
+          </div>
+        </SidebarMenuItem>
+      );
+    }
+
+    if (item.hasDropdown && item.items) {
+      return (
+        <Collapsible
+          key={item.title}
+          open={isOpen}
+          onOpenChange={() => toggleDropdown(item.title)}
+        >
+          <SidebarMenuItem>
+            <CollapsibleTrigger asChild>
+              <SidebarMenuButton
+                isActive={isActive}
+                className="hover:bg-[#be2ed6] hover:text-[#feedff] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff] data-[state=open]:bg-[#be2ed6] data-[state=open]:text-[#feedff] data-[state=open]:hover:bg-[#be2ed6]"
+              >
+                <item.icon className="h-4 w-4" />
+                <span>{item.title}</span>
+                {isOpen ? (
+                  <IconChevronDown className="ml-auto h-4 w-4" />
+                ) : (
+                  <IconChevronRight className="ml-auto h-4 w-4" />
+                )}
+              </SidebarMenuButton>
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <div className="ml-4 pl-2 mt-1">
+                <SidebarMenuSub>
+                  {item.items.map((subItem: any) => {
+                    const isSubActive = pathname === subItem.url;
+                    return (
+                      <SidebarMenuSubItem key={subItem.title}>
+                        <SidebarMenuSubButton
+                          asChild
+                          isActive={isSubActive}
+                          className="hover:bg-[#be2ed6] hover:text-[#feedff] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff] data-[state=open]:bg-[#be2ed6] data-[state=open]:text-[#feedff] data-[state=open]:hover:bg-[#be2ed6]"
+                        >
+                          <Link href={subItem.url}>{subItem.title}</Link>
+                        </SidebarMenuSubButton>
+                      </SidebarMenuSubItem>
+                    );
+                  })}
+                </SidebarMenuSub>
+              </div>
+            </CollapsibleContent>
+          </SidebarMenuItem>
+        </Collapsible>
+      );
+    }
+
+    return (
+      <SidebarMenuItem key={item.title}>
+        <SidebarMenuButton
+          asChild
+          isActive={isActive}
+          className="hover:bg-[#be2ed6] hover:text-[#feedff] data-[active=true]:bg-[#be2ed6] data-[active=true]:text-[#ffffff] data-[state=open]:bg-[#be2ed6] data-[state=open]:text-[#feedff] data-[state=open]:hover:bg-[#be2ed6]"
+        >
+          <Link href={item.url}>
+            <item.icon className="h-4 w-4" />
+            <span>{item.title}</span>
+          </Link>
+        </SidebarMenuButton>
+      </SidebarMenuItem>
+    );
+  };
+
+  return (
+    <Sidebar collapsible="icon" {...props}>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              className="data-[slot=sidebar-menu-button]:!p-1.5"
+            >
+              <a href="#">
+                <IconInnerShadowTop className="!size-5" />
+                <span className="text-base font-semibold">Pay hub.</span>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarHeader>
+
+      <SidebarContent className="overflow-y-auto overflow-x-hidden scrollbar-hide">
+        {/* Core Navigation */}
+        {filteredCoreNav.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredCoreNav.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Payroll Management */}
+        {filteredPayrollSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Payroll Management
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredPayrollSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Finances */}
+        {filteredFinanceSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Finances
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredFinanceSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Employee Management */}
+        {filteredEmployeeSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Employee Management
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredEmployeeSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Self-Service (for employees) */}
+        {filteredSelfServiceSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Self Service
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredSelfServiceSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Configuration */}
+        {filteredConfigSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Configuration
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredConfigSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* System */}
+        {filteredSystemSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              System
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredSystemSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Platform Administration */}
+        {filteredPlatformSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Platform Administration
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredPlatformSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
+        {/* Others */}
+        {filteredOthersSection.length > 0 && (
+          <SidebarGroup>
+            <SidebarGroupLabel className="text-xs uppercase text-gray-500 px-2 mb-1">
+              Others
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {filteredOthersSection.map((item) => renderNavItem(item))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+      </SidebarContent>
+
+      <SidebarFooter>
+        <NavUser />
+      </SidebarFooter>
+    </Sidebar>
+  );
+}

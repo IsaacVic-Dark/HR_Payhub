@@ -1687,6 +1687,10 @@ CREATE TABLE IF NOT EXISTS `overtime_approvals` (
   `attendance_day_id`  INT NOT NULL,
   `employee_id`        INT NOT NULL,
   `overtime_minutes`  INT NOT NULL DEFAULT 0,
+  `source`            ENUM('auto','manual') NOT NULL DEFAULT 'auto' COMMENT 'auto = detected from attendance punches; manual = requested through the Overtime Request modal',
+  `reason`            TEXT DEFAULT NULL COMMENT 'Requester''s reason (manual requests)',
+  `overtime_start`    DATETIME DEFAULT NULL COMMENT 'Start of the overtime window (manual requests)',
+  `overtime_end`      DATETIME DEFAULT NULL COMMENT 'End of the overtime window (manual requests)',
   `overtime_rate`     DECIMAL(10,2) DEFAULT NULL,
   `overtime_amount`   DECIMAL(15,2) DEFAULT NULL,
   `requested_by`      INT DEFAULT NULL,
@@ -1711,6 +1715,7 @@ CREATE TABLE IF NOT EXISTS `overtime_approvals` (
   UNIQUE KEY `unique_overtime_per_day` (`organization_id`, `employee_id`, `attendance_day_id`),
   KEY `idx_overtime_approvals_emp_status` (`employee_id`, `status`),
   KEY `idx_overtime_approvals_day` (`attendance_day_id`),
+  KEY `idx_overtime_source_status` (`organization_id`, `source`, `status`),
   KEY `idx_overtime_finalized_period` (`finalized_period_payrun_id`),
   KEY `idx_overtime_resolved_payrun` (`resolved_payrun_id`),
  

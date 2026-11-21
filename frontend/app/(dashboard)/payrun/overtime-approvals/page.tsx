@@ -13,7 +13,10 @@ import {
   ArrowRightCircle,
   Clock,
   AlertTriangle,
+  Plus,
 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { OvertimeRequestDialog } from "@/components/overtime-request-dialog";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -77,12 +80,19 @@ function formatHours(minutes: number) {
 
 export default function OvertimeApprovalsPage() {
   const { user } = useAuth();
-  const { canManageOvertimeApprovals } = usePermissions();
+  const {
+    canManageOvertimeApprovals,
+    canRequestOvertimeForOthers,
+    canApproveManualOvertime,
+  } = usePermissions();
 
   const [statusFilter, setStatusFilter] = useState<OvertimeApprovalStatus>("pending");
   const [items, setItems] = useState<OvertimeApprovalType[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // New manual overtime request (admin / hr_manager)
+  const [requestDialogOpen, setRequestDialogOpen] = useState(false);
 
   // Approve dialog
   const [approveTarget, setApproveTarget] = useState<OvertimeApprovalType | null>(null);
@@ -307,6 +317,40 @@ export default function OvertimeApprovalsPage() {
       ),
     },
     {
+      key: "request",
+      header: "Request",
+      cell: (item) =>
+        item.source === "manual" ? (
+          <div className="max-w-[260px]">
+            <span className="px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700 text-xs">
+              Manual
+            </span>
+            {item.overtime_start && item.overtime_end && (
+              <p className="text-xs text-gray-600 mt-1">
+                {item.overtime_start.slice(11, 16)} – {item.overtime_end.slice(11, 16)}
+              </p>
+            )}
+            {item.requested_by_name && (
+              <p className="text-xs text-gray-500">
+                Requested by {item.requested_by_name}
+                {item.requested_by_email && (
+                  <span className="text-gray-400"> ({item.requested_by_email})</span>
+                )}
+              </p>
+            )}
+            {item.reason && (
+              <p className="text-xs text-gray-700 truncate" title={item.reason}>
+                {item.reason}
+              </p>
+            )}
+          </div>
+        ) : (
+          <span className="px-2 py-0.5 rounded-full border border-gray-200 bg-gray-50 text-gray-600 text-xs">
+            Auto
+          </span>
+        ),
+    },
+    {
       key: "status",
       header: "Status",
       cell: (item) => (
@@ -342,6 +386,10 @@ export default function OvertimeApprovalsPage() {
         if (!canManageOvertimeApprovals) return <span className="text-xs text-gray-400">—</span>;
 
         if (item.status === "pending") {
+          // Manually requested overtime is single-step and admin-only.
+          if (item.source === "manual" && !canApproveManualOvertime) {
+            return <span className="text-xs text-gray-500">Awaiting admin</span>;
+          }
           return (
             <div className="flex items-center gap-1">
               <button
@@ -407,6 +455,18 @@ export default function OvertimeApprovalsPage() {
                   data={items}
                   columns={columns}
                   tableTitle="Overtime Requests"
+                  button={
+                    canRequestOvertimeForOthers ? (
+                      <Button
+                        size="sm"
+                        onClick={() => setRequestDialogOpen(true)}
+                        className="flex items-center gap-1.5"
+                      >
+                        <Plus className="w-4 h-4" />
+                        New Request
+                      </Button>
+                    ) : undefined
+                  }
                   filters={
                     <div className="flex items-center gap-1">
                       {STATUS_TABS.map((s) => (
@@ -414,8 +474,8 @@ export default function OvertimeApprovalsPage() {
                           key={s}
                           onClick={() => setStatusFilter(s)}
                           className={`px-3 py-1.5 rounded-md text-xs border capitalize transition-colors ${statusFilter === s
-                              ? "bg-blue-600 text-white border-blue-600"
-                              : "text-gray-600 border-gray-300 hover:bg-gray-50"
+                            ? "bg-blue-600 text-white border-blue-600"
+                            : "text-gray-600 border-gray-300 hover:bg-gray-50"
                             }`}
                         >
                           {s}
@@ -432,6 +492,20 @@ export default function OvertimeApprovalsPage() {
           </div>
         </div>
       </div>
+
+      {/* New manual overtime request (admin / hr_manager) */}
+      <OvertimeRequestDialog
+        open={requestDialogOpen}
+        onOpenChange={setRequestDialogOpen}
+        organizationId={user.organization_id}
+        mode="admin"
+        currentEmployeeId={user.employee?.id ?? null}
+        onSuccess={() => {
+          // New requests are always pending.
+          if (statusFilter === "pending") fetchApprovals("pending");
+          else setStatusFilter("pending");
+        }}
+      />
 
       {/* Approve dialog */}
       <AlertDialog open={approveDialogOpen} onOpenChange={setApproveDialogOpen}>
@@ -585,8 +659,8 @@ export default function OvertimeApprovalsPage() {
                 disabled={!offCycleAvailable}
                 onClick={() => setSelectedResolution("off_cycle")}
                 className={`w-full text-left rounded-md border p-3 text-sm transition-colors ${selectedResolution === "off_cycle"
-                    ? "border-blue-600 bg-blue-50"
-                    : "border-gray-200 hover:bg-gray-50"
+                  ? "border-blue-600 bg-blue-50"
+                  : "border-gray-200 hover:bg-gray-50"
                   } ${!offCycleAvailable ? "opacity-50 cursor-not-allowed" : ""}`}
               >
                 <p className="font-medium text-gray-900">Off-cycle adjustment</p>
@@ -601,8 +675,8 @@ export default function OvertimeApprovalsPage() {
                 type="button"
                 onClick={() => setSelectedResolution("carry_forward")}
                 className={`w-full text-left rounded-md border p-3 text-sm transition-colors ${selectedResolution === "carry_forward"
-                    ? "border-blue-600 bg-blue-50"
-                    : "border-gray-200 hover:bg-gray-50"
+                  ? "border-blue-600 bg-blue-50"
+                  : "border-gray-200 hover:bg-gray-50"
                   }`}
               >
                 <p className="font-medium text-gray-900">Carry forward to next payrun</p>

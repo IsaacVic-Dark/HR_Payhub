@@ -38,6 +38,10 @@ export function usePermissions() {
     canReopenPayrun: ['admin', 'payroll_manager', 'payroll_officer', 'hr_manager'].includes(userRole || ''),
     // Matches OvertimeApprovalController approve/reject/resolve routes' allowed roles
     canManageOvertimeApprovals: ['admin', 'hr_manager', 'payroll_manager'].includes(userRole || ''),
+    // Manual overtime requests: admin/HR can raise them for any employee (incl. themselves)...
+    canRequestOvertimeForOthers: ['admin', 'hr_manager'].includes(userRole || ''),
+    // ...but only an admin can approve/reject them (matches OvertimeApprovalController).
+    canApproveManualOvertime: userRole === 'admin',
 
     // Settings & Configuration
     canManageSettings: ['super_admin', 'admin'].includes(userRole || ''),

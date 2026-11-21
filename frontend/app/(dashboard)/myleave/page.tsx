@@ -57,6 +57,7 @@ export default function MyLeavePage() {
   }, [user?.organization_id, user?.employee?.id]);
 
   console.log("Leave Statistics:", statistics);
+  console.log("Leave user data:", user);
 
   // Statistics cards for employee
   const cardDetails: CardDetail[] = statistics

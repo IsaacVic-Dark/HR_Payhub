@@ -1,0 +1,560 @@
+// Employee Types
+type EmployeeStatus = "active" | "inactive" | "on_leave" | "terminated" | "resigned" | "suspended" | "probation";
+type EmploymentType = "full_time" | "part_time" | "contract" | "intern";
+type WorkLocation = "on-site" | "remote" | "hybrid";
+
+type EmployeeType = {
+  id: number;
+  organization_id: number;
+  user_id: number;
+  // email: string;
+  phone: string;
+  hire_date: string;
+  start_date: string;
+  // GET /employees and GET /employees/{id} return job_title as a nested
+  // object (joined from job_titles) — see EmployeeController::mapEmployee().
+  job_title: {
+    id: number | null;
+    title: string | null;
+    grade: string | null;
+  };
+  department_id?: number;
+  reports_to: number | null;
+  base_salary: string;
+  bank_account_number: string | null;
+  tax_id: string | null;
+  created_at: string;
+  updated_at: string;
+  status: EmployeeStatus;
+  employment_type: EmploymentType;
+  work_location: WorkLocation;
+  username: string;
+  personal_email?: string;
+  firstname: string;
+  middlename: string | null;
+  surname: string;
+  workemail?: string | null;
+};
+
+// Shape returned when the `with_minimal=1` query param is used —
+// e.g. for employee-picker dropdowns (manual attendance entry, etc.)
+type MinimalEmployeeType = {
+  id: number;
+  firstname: string;
+  middlename: string | null;
+  surname: string;
+  personalemail: string;
+};
+
+/** with_salary=1 — minimal shape + salary and the maximum salary advance the employee may request. */
+type MinimalEmployeeWithSalaryType = MinimalEmployeeType & {
+  workemail: string | null;
+  base_salary: number;
+  /** Lower of the policy's maximum_amount and max_percentage_of_basic (etc). null = no advance policy configured. */
+  max_advance: number | null;
+};
+
+interface ApiResponse<T = any> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  error?: string;
+  metadata?: any;
+}
+
+interface EmployeesResponseData {
+  employees: EmployeeType[];
+  metadata?: {
+    dev_mode?: boolean;
+    filters?: any;
+    total?: number;
+    duration?: number;
+  };
+}
+
+interface EmployeeFilters {
+  department_id?: number;
+  job_title_id?: number;
+  status?: string;
+  employment_type?: string;
+  work_location?: string;
+  sort_by?: string;
+  sort_order?: "asc" | "desc";
+  // Returns a lightweight { id, firstname, middlename, surname, personalemail }
+  // shape instead of the full EmployeeType — use getEmployeesMinimal() below
+  // rather than passing this directly to getEmployees().
+  with_minimal?: 0 | 1;
+  // Like with_minimal, plus base_salary + max_advance. Admin / HR / payroll roles only —
+  // use getEmployeesWithSalary() below.
+  with_salary?: 0 | 1;
+}
+
+interface CreateEmployeeData {
+  employee_number: string;
+  user_id: number;
+  email: string;
+  phone: string;
+  hire_date: string;
+  start_date: string;
+  role: string; 
+  job_title_id: number;
+  department_id: number;
+  reports_to?: number;
+  base_salary: string;
+  bank_account_number?: string;
+  tax_id?: string;
+  status?: EmployeeStatus;
+  employment_type: EmploymentType;
+  work_location: WorkLocation;
+  username: string;
+  personal_email?: string;
+  first_name: string;
+  middle_name?: string;
+  surname: string;
+  workemail?: string;
+}
+
+interface UpdateEmployeeData {
+  email?: string;
+  phone?: string;
+  hire_date?: string;
+  start_date?: string;
+  role?: string; 
+  job_title_id?: number;
+  department_id?: number;
+  reports_to?: number;
+  base_salary?: string;
+  bank_account_number?: string;
+  tax_id?: string;
+  status?: EmployeeStatus;
+  employment_type?: EmploymentType;
+  work_location?: WorkLocation;
+  username?: string;
+  personal_email?: string;
+  first_name?: string;
+  middle_name?: string;
+  surname?: string;
+  workemail?: string;
+}
+
+// ── Bulk import/export types ──────────────────────────────────────────────
+// Mirrors ImportExportButtons.tsx's types — kept as plain local types here
+// (rather than importing from that component) so this API module has no
+// dependency on any particular UI component.
+
+interface ImportField {
+  name: string;
+  required: boolean;
+  validation: string[];
+}
+
+interface ImportFieldsResponse {
+  module: string;
+  fields: ImportField[];
+}
+
+interface ImportResult {
+  imported: number;
+  updated?: number;
+  skipped?: number;
+  duplicates?: Array<{ row: number; employee_number: string }>;
+  errors?: string[];
+}
+
+class EmployeeAPI {
+  private async handleResponse<T>(response: Response): Promise<ApiResponse<T>> {
+    try {
+      const data = await response.json();
+
+      if (!response.ok) {
+        return {
+          success: false,
+          error: data.message || `HTTP error! status: ${response.status}`,
+        };
+      }
+
+      // Return the entire response data structure
+      return {
+        success: true,
+        data: data.data,
+        message: data.message,
+        metadata: data.metadata,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Unknown error occurred",
+      };
+    }
+  }
+
+  private getCookie(name: string): string | null {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop()?.split(";").shift() || null;
+    return null;
+  }
+
+  private buildQueryParams(filters: EmployeeFilters): string {
+    const params = new URLSearchParams();
+
+    if (filters.department_id) {
+      params.append("department_id", filters.department_id.toString());
+    }
+    if (filters.job_title_id) {
+      params.append("job_title_id", filters.job_title_id.toString());
+    }
+    if (filters.status) {
+      params.append("status", filters.status);
+    }
+    if (filters.employment_type) {
+      params.append("employment_type", filters.employment_type);
+    }
+    if (filters.work_location) {
+      params.append("work_location", filters.work_location);
+    }
+    if (filters.sort_by) {
+      params.append("sort_by", filters.sort_by);
+    }
+    if (filters.sort_order) {
+      params.append("sort_order", filters.sort_order);
+    }
+    if (filters.with_minimal) {
+      params.append("with_minimal", "1");
+    }
+
+    return params.toString();
+  }
+
+  private getAuthHeaders(): HeadersInit {
+    // Get token from cookie
+    const token = this.getCookie("access_token");
+
+    const headers: HeadersInit = {
+      "Content-Type": "application/json",
+    };
+
+    // Add Authorization header if token exists
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+
+    return headers;
+  }
+
+  async getEmployees(
+    organizationId: number,
+    filters: EmployeeFilters = {}
+  ): Promise<ApiResponse<EmployeeType[]>> {
+    try {
+      const queryParams = this.buildQueryParams(filters);
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees${queryParams ? `?${queryParams}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<EmployeeType[]>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch employees",
+      };
+    }
+  }
+
+  // Picker list including salary — { ...minimal, workemail, base_salary, max_advance }
+  // GET /organizations/{org_id}/employees?with_salary=1  (admin / HR / payroll only)
+  async getEmployeesWithSalary(
+    organizationId: number,
+    filters: Omit<EmployeeFilters, "with_minimal" | "with_salary"> = {}
+  ): Promise<ApiResponse<MinimalEmployeeWithSalaryType[]>> {
+    try {
+      const queryParams = this.buildQueryParams({ ...filters, with_salary: 1 });
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees${queryParams ? `?${queryParams}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<MinimalEmployeeWithSalaryType[]>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch employees",
+      };
+    }
+  }
+
+  // Lightweight employee list for pickers/dropdowns — { id, firstname, middlename, surname, personalemail }
+  // GET /organizations/{org_id}/employees?with_minimal=1
+  async getEmployeesMinimal(
+    organizationId: number,
+    filters: Omit<EmployeeFilters, "with_minimal"> = {}
+  ): Promise<ApiResponse<MinimalEmployeeType[]>> {
+    try {
+      const queryParams = this.buildQueryParams({ ...filters, with_minimal: 1 });
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees${queryParams ? `?${queryParams}` : ""}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<MinimalEmployeeType[]>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch employees",
+      };
+    }
+  }
+
+  async getEmployeeById(
+    organizationId: number,
+    employeeId: number
+  ): Promise<ApiResponse<EmployeeType>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees/${employeeId}`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<EmployeeType>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch employee",
+      };
+    }
+  }
+
+  async createEmployee(
+    organizationId: number,
+    employeeData: CreateEmployeeData
+  ): Promise<ApiResponse<EmployeeType>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(employeeData),
+      });
+
+      return this.handleResponse<EmployeeType>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to create employee",
+      };
+    }
+  }
+
+  async updateEmployee(
+    organizationId: number,
+    employeeId: number,
+    employeeData: UpdateEmployeeData
+  ): Promise<ApiResponse<EmployeeType>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees/${employeeId}`;
+
+      const response = await fetch(url, {
+        method: "PUT",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify(employeeData),
+      });
+
+      return this.handleResponse<EmployeeType>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to update employee",
+      };
+    }
+  }
+
+  async deleteEmployee(
+    organizationId: number,
+    employeeId: number
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees/${employeeId}`;
+
+      const response = await fetch(url, {
+        method: "DELETE",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to delete employee",
+      };
+    }
+  }
+
+  async updateEmployeeStatus(
+    organizationId: number,
+    employeeId: number,
+    status: EmployeeStatus
+  ): Promise<ApiResponse> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees/${employeeId}/status`;
+
+      const response = await fetch(url, {
+        method: "PUT",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+        body: JSON.stringify({ status }),
+      });
+
+      return this.handleResponse(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error
+            ? error.message
+            : "Failed to update employee status",
+      };
+    }
+  }
+  // GET /organizations/{org_id}/employees/import/fields
+  async getImportFields(
+    organizationId: number
+  ): Promise<ApiResponse<ImportFieldsResponse>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees/import/fields`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      return this.handleResponse<ImportFieldsResponse>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to fetch import fields",
+      };
+    }
+  }
+
+  // POST /organizations/{org_id}/employees/import (multipart/form-data)
+  async importEmployees(
+    organizationId: number,
+    file: File,
+    replaceExisting: boolean = false
+  ): Promise<ApiResponse<ImportResult>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees/import`;
+
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("replace_existing", String(replaceExisting));
+
+      // NOTE: deliberately not using getAuthHeaders() here — it sets
+      // "Content-Type: application/json", which would break the multipart
+      // boundary the browser needs to set itself for FormData. We still
+      // attach the Authorization header manually.
+      const token = this.getCookie("access_token");
+      const headers: HeadersInit = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers,
+        body: formData,
+      });
+
+      return this.handleResponse<ImportResult>(response);
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to import employees",
+      };
+    }
+  }
+
+  // GET /organizations/{org_id}/employees/export?format=csv
+  // Triggers a browser download directly rather than returning parsed JSON.
+  async exportEmployees(organizationId: number): Promise<ApiResponse<void>> {
+    try {
+      const url = `${process.env.NEXT_PUBLIC_BACKEND_API_URL}/organizations/${organizationId}/employees/export?format=csv`;
+
+      const response = await fetch(url, {
+        method: "GET",
+        credentials: "include",
+        headers: this.getAuthHeaders(),
+      });
+
+      if (!response.ok) {
+        // Error responses are JSON, not CSV — safe to parse here.
+        const data = await response.json().catch(() => null);
+        return {
+          success: false,
+          error: data?.message || `HTTP error! status: ${response.status}`,
+        };
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = `employees-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
+      URL.revokeObjectURL(objectUrl);
+
+      return { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error:
+          error instanceof Error ? error.message : "Failed to export employees",
+      };
+    }
+  }
+}
+
+export const employeeAPI = new EmployeeAPI();
+export type {
+  EmployeeType,
+  MinimalEmployeeType,
+  MinimalEmployeeWithSalaryType,
+  EmployeeFilters,
+  ApiResponse,
+  EmployeesResponseData,
+  CreateEmployeeData,
+  UpdateEmployeeData,
+  EmployeeStatus,
+  EmploymentType,
+  WorkLocation,
+  ImportField,
+  ImportFieldsResponse,
+  ImportResult,
+};

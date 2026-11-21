@@ -19,13 +19,20 @@ class OvertimeApprovalController
             $status = $_GET['status'] ?? 'pending';
 
             $rows = DB::raw(
-                "SELECT oa.*, e.employee_number, e.firstname, e.middlename, e.surname,
-                        ad.attendance_date, ad.check_in_time, ad.check_out_time, ad.scheduled_minutes
-                 FROM overtime_approvals oa
-                 JOIN employees e ON oa.employee_id = e.id
-                 JOIN employee_attendance_days ad ON oa.attendance_day_id = ad.id
-                 WHERE oa.organization_id = :org_id AND oa.status = :status AND oa.is_active = 1
-                 ORDER BY ad.attendance_date DESC",
+            "SELECT oa.*, e.employee_number, e.firstname, e.middlename, e.surname,
+            ad.attendance_date, ad.check_in_time, ad.check_out_time, ad.scheduled_minutes,
+            COALESCE(
+                NULLIF(TRIM(CONCAT_WS(' ', re.firstname, re.middlename, re.surname)), ''),
+                ru.username
+            ) AS requested_by_name,
+            ru.email AS requested_by_email
+            FROM overtime_approvals oa
+            JOIN employees e ON oa.employee_id = e.id
+            JOIN employee_attendance_days ad ON oa.attendance_day_id = ad.id
+            LEFT JOIN users ru ON oa.requested_by = ru.id
+            LEFT JOIN employees re ON re.user_id = ru.id
+            WHERE oa.organization_id = :org_id AND oa.status = :status AND oa.is_active = 1
+            ORDER BY ad.attendance_date DESC",
                 [':org_id' => $orgId, ':status' => $status]
             );
 
@@ -65,6 +72,12 @@ class OvertimeApprovalController
                 return responseJson(success: false, message: "Pending overtime request not found", code: 404);
             }
 
+            // Manually requested overtime is single-step and admin-only.
+            $isManual = ($existing->source ?? 'auto') === 'manual';
+            if ($isManual && ($user['user_type'] ?? '') !== 'admin') {
+                return responseJson(success: false, message: "Only an administrator can approve manually requested overtime", code: 403);
+            }
+
             $overtimeAmount = null;
             if (!empty($data['overtime_rate'])) {
                 // overtime_rate expressed as an hourly rate multiplier's currency value
@@ -87,6 +100,10 @@ class OvertimeApprovalController
                     ':id'          => $id,
                 ]
             );
+
+            if ($isManual) {
+                OvertimeRequestController::notifyDecision((int) $orgId, $existing, 'approved', (int) $user['id'], $data['approval_notes'] ?? null);
+            }
 
             $updated = DB::raw("SELECT * FROM overtime_approvals WHERE id = :id", [':id' => $id]);
             $approvedRow = $updated[0] ?? null;
@@ -195,6 +212,12 @@ class OvertimeApprovalController
                 return responseJson(success: false, message: "Pending overtime request not found", code: 404);
             }
 
+            // Manually requested overtime is single-step and admin-only.
+            $isManual = ($existing->source ?? 'auto') === 'manual';
+            if ($isManual && ($user['user_type'] ?? '') !== 'admin') {
+                return responseJson(success: false, message: "Only an administrator can reject manually requested overtime", code: 403);
+            }
+
             DB::raw(
                 "UPDATE overtime_approvals
                  SET status = 'rejected', rejected_by = :rejected_by, rejected_at = NOW(),
@@ -202,6 +225,10 @@ class OvertimeApprovalController
                  WHERE id = :id",
                 [':rejected_by' => $user['id'], ':reason' => $data['rejection_reason'], ':id' => $id]
             );
+
+            if ($isManual) {
+                OvertimeRequestController::notifyDecision((int) $orgId, $existing, 'rejected', (int) $user['id'], $data['rejection_reason']);
+            }
 
             $updated = DB::raw("SELECT * FROM overtime_approvals WHERE id = :id", [':id' => $id]);
 
@@ -453,10 +480,15 @@ class OvertimeApprovalController
                  updated_at = NOW()
              WHERE id = :id",
             [
-                ':nssf' => $calc['nssf'], ':shif' => $calc['shif'], ':housing_levy' => $calc['housing_levy'],
-                ':taxable_income' => $calc['taxable_income'], ':tax_before_relief' => $calc['tax_before_relief'],
-                ':personal_relief' => $calc['personal_relief'], ':paye' => $calc['paye'],
-                ':total_deductions' => $calc['total_deductions'], ':net_pay' => $calc['net_pay'],
+                ':nssf' => $calc['nssf'],
+                ':shif' => $calc['shif'],
+                ':housing_levy' => $calc['housing_levy'],
+                ':taxable_income' => $calc['taxable_income'],
+                ':tax_before_relief' => $calc['tax_before_relief'],
+                ':personal_relief' => $calc['personal_relief'],
+                ':paye' => $calc['paye'],
+                ':total_deductions' => $calc['total_deductions'],
+                ':net_pay' => $calc['net_pay'],
                 ':id' => $detailId,
             ]
         );
@@ -558,9 +590,20 @@ class OvertimeApprovalController
         $now = date('Y-m-d H:i:s');
 
         $transactionResult = DB::transaction(function () use (
-            $orgId, $userId, $originalPayrun, $overtime, $overtimeAmount,
-            $deltaNssf, $deltaShif, $deltaHousingLevy, $deltaTaxable, $deltaTaxBefore,
-            $deltaPaye, $deltaTotalDeduct, $deltaNetPay, $now
+            $orgId,
+            $userId,
+            $originalPayrun,
+            $overtime,
+            $overtimeAmount,
+            $deltaNssf,
+            $deltaShif,
+            $deltaHousingLevy,
+            $deltaTaxable,
+            $deltaTaxBefore,
+            $deltaPaye,
+            $deltaTotalDeduct,
+            $deltaNetPay,
+            $now
         ) {
             // Reuse an open (draft) adjustment run for this original payrun if one
             // exists, so several late-overtime employees can be batched into the
@@ -636,10 +679,15 @@ class OvertimeApprovalController
                          updated_at        = NOW()
                      WHERE id = :id",
                     [
-                        ':ot' => $overtimeAmount, ':nssf' => $deltaNssf, ':shif' => $deltaShif,
-                        ':housing' => $deltaHousingLevy, ':taxable' => $deltaTaxable,
-                        ':taxbefore' => $deltaTaxBefore, ':paye' => $deltaPaye,
-                        ':totaldeduct' => $deltaTotalDeduct, ':netpay' => $deltaNetPay,
+                        ':ot' => $overtimeAmount,
+                        ':nssf' => $deltaNssf,
+                        ':shif' => $deltaShif,
+                        ':housing' => $deltaHousingLevy,
+                        ':taxable' => $deltaTaxable,
+                        ':taxbefore' => $deltaTaxBefore,
+                        ':paye' => $deltaPaye,
+                        ':totaldeduct' => $deltaTotalDeduct,
+                        ':netpay' => $deltaNetPay,
                         ':id' => $detailId,
                     ]
                 );

@@ -626,14 +626,16 @@ class AttendanceService
     private static function ensureOvertimeApprovalRequest($orgId, $attendanceDayId, $employeeId, $overtimeMinutes, $requestedBy)
     {
         $existing = DB::raw(
-            "SELECT id, status FROM overtime_approvals
+            "SELECT id, status, source FROM overtime_approvals
              WHERE organization_id = :org_id AND attendance_day_id = :day_id AND employee_id = :employee_id
              LIMIT 1",
             [':org_id' => $orgId, ':day_id' => $attendanceDayId, ':employee_id' => $employeeId]
         );
 
         if (!empty($existing)) {
-            if ($existing[0]->status === 'pending') {
+            // A manual request carries the minutes the requester entered; a later
+            // punch recompute must not overwrite them.
+            if ($existing[0]->status === 'pending' && ($existing[0]->source ?? 'auto') !== 'manual') {
                 DB::raw(
                     "UPDATE overtime_approvals SET overtime_minutes = :minutes, updated_at = NOW()
                      WHERE id = :id",

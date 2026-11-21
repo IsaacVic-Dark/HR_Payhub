@@ -25,6 +25,7 @@ use App\Controllers\AttendanceController;
 use App\Controllers\AttendanceDeductionController;
 use App\Controllers\PublicHolidayController;
 use App\Controllers\OvertimeApprovalController;
+use App\Controllers\OvertimeRequestController;
 use App\Controllers\CountryController;
 use App\Controllers\CountyController;
 use App\Controllers\AllowanceTypeController;
@@ -1604,6 +1605,35 @@ Router::post('api/v1/organizations/{org_id}/overtime-approvals/{id}/approve', Ov
 Router::post('api/v1/organizations/{org_id}/overtime-approvals/{id}/reject', OvertimeApprovalController::class . '@reject', [
     ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager']],
     ['AttendanceAuthorizationMiddleware', 'write'],
+]);
+
+// ---------------------------------------------------------------------------
+// Manual overtime requests (employee portal + admin/HR "New Request" modal)
+// A request is a pending overtime_approvals row (source = 'manual'), so it appears
+// in the Overtime Approvals page. Self-requests: any role with an employee profile.
+// Requests for other employees: admin, hr_manager (checked in the controller).
+// Approve/reject of manual requests: admin only (checked in OvertimeApprovalController).
+// ---------------------------------------------------------------------------
+
+// GET /api/v1/organizations/{org_id}/overtime-requests/meta  -> { today, min_date, period_label, ... }
+Router::get('api/v1/organizations/{org_id}/overtime-requests/meta', OvertimeRequestController::class . '@meta', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager', 'payroll_officer', 'finance_manager', 'department_manager', 'employee']],
+]);
+
+// GET /api/v1/organizations/{org_id}/my-overtime-requests  -> the logged-in employee's own overtime
+Router::get('api/v1/organizations/{org_id}/my-overtime-requests', OvertimeRequestController::class . '@mine', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager', 'payroll_officer', 'finance_manager', 'department_manager', 'employee']],
+]);
+
+// POST /api/v1/organizations/{org_id}/overtime-requests
+// Body: { employee_id?, date, start_time, end_time, reason }
+Router::post('api/v1/organizations/{org_id}/overtime-requests', OvertimeRequestController::class . '@store', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager', 'payroll_officer', 'finance_manager', 'department_manager', 'employee']],
+]);
+
+// DELETE /api/v1/organizations/{org_id}/overtime-requests/{id}  -> withdraw a pending manual request
+Router::delete('api/v1/organizations/{org_id}/overtime-requests/{id}', OvertimeRequestController::class . '@withdraw', [
+    ['AuthMiddleware', ['admin', 'hr_manager', 'payroll_manager', 'payroll_officer', 'finance_manager', 'department_manager', 'employee']],
 ]);
 
 // POST /api/v1/organizations/{org_id}/overtime-approvals/{id}/resolve

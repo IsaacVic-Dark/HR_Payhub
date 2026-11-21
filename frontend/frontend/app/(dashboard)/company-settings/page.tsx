@@ -1,0 +1,2278 @@
+"use client";
+
+import { AmountInput } from "@/components/ui/amount-input";
+import { formatCurrency, setOrgCurrency } from "@/utils/currency";
+import { useUrlModal } from "@/hooks/use-url-modal";
+import { useState, useEffect } from "react";
+import {
+  IconReceipt,
+  IconGift,
+  IconPlane,
+  IconArrowForward,
+  IconRefresh,
+  IconPlus,
+  IconEdit,
+  IconTrash,
+  IconPercentage,
+  IconCurrencyDollar,
+  IconBuilding,
+  IconBell,
+  IconCreditCard,
+  IconDownload,
+  IconCalendarTime,
+  IconClock,
+} from "@tabler/icons-react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Separator } from "@/components/ui/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  UIConfigItem,
+  OfficeHoursSettings,
+  organizationConfigAPI,
+} from "@/services/api/organization-config";
+import { toast } from "sonner";
+import { useOrganization } from "./components/organization-actions";
+import { useOrganizationConfig } from "@/hooks/useOrganizationConfig";
+import { type OrganizationType } from "@/services/api/organization";
+import { useAuth } from "@/lib/AuthContext";
+import { AdvancePolicyForm } from "@/app/(dashboard)/advances/policy/components/advance-policy-form";
+
+const sidebarItems = [
+  { key: "profile", label: "My Profile", icon: IconBuilding },
+  { key: "tax", label: "Tax Configuration", icon: IconReceipt },
+  { key: "deduction", label: "Deductions", icon: IconPercentage },
+  { key: "loan", label: "Loans", icon: IconCurrencyDollar },
+  // { key: "benefit", label: "Benefits", icon: IconGift },
+  // { key: "per_diem", label: "Per Diem", icon: IconPlane },
+  { key: "leave", label: "Leave Settings", icon: IconCalendarTime },
+  { key: "attendance", label: "Attendance", icon: IconClock },
+  { key: "advance", label: "Advances", icon: IconArrowForward }, // admin only (filtered below)
+  // { key: "refund", label: "Refunds", icon: IconCreditCard },
+  { key: "notifications", label: "Notifications", icon: IconBell },
+  { key: "billing", label: "Billing", icon: IconCreditCard },
+  // { key: "export", label: "Data Export", icon: IconDownload },
+];
+
+// Loading Skeleton Component
+const ConfigSkeleton = () => (
+  <div className="p-6 space-y-6">
+    <div className="mb-6">
+      <div className="h-8 w-48 bg-muted rounded animate-pulse mb-4"></div>
+      <Separator />
+    </div>
+    {[1, 2, 3].map((i) => (
+      <div key={i}>
+        <div className="flex items-start justify-between">
+          <div className="flex-1">
+            <div className="flex items-center gap-3 mb-1">
+              <div className="h-6 w-32 bg-muted rounded animate-pulse"></div>
+              <div className="h-5 w-12 bg-muted rounded animate-pulse"></div>
+            </div>
+            <div className="h-4 w-64 bg-muted rounded animate-pulse mb-3"></div>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="h-8 w-16 bg-muted rounded animate-pulse"></div>
+            <div className="h-8 w-8 bg-muted rounded animate-pulse"></div>
+          </div>
+        </div>
+        <Separator className="mt-4" />
+      </div>
+    ))}
+  </div>
+);
+
+// Currencies selectable for the organization profile (organizations.currency
+// stores the 3-letter ISO 4217 code).
+const CURRENCY_OPTIONS = [
+  { value: "KES", label: "KES — Kenyan Shilling" },
+  { value: "UGX", label: "UGX — Ugandan Shilling" },
+  { value: "TZS", label: "TZS — Tanzanian Shilling" },
+  { value: "RWF", label: "RWF — Rwandan Franc" },
+  { value: "ETB", label: "ETB — Ethiopian Birr" },
+  { value: "ZAR", label: "ZAR — South African Rand" },
+  { value: "NGN", label: "NGN — Nigerian Naira" },
+  { value: "GHS", label: "GHS — Ghanaian Cedi" },
+  { value: "USD", label: "USD — US Dollar" },
+  { value: "EUR", label: "EUR — Euro" },
+  { value: "GBP", label: "GBP — British Pound" },
+  { value: "AED", label: "AED — UAE Dirham" },
+] as const;
+
+// Profile Section Component
+interface ProfileSectionProps {
+  organization: OrganizationType | null;
+  isLoading: boolean;
+  onEditClick: (field: string, value: string) => void;
+}
+
+function ProfileSection({
+  organization,
+  isLoading,
+  onEditClick,
+}: ProfileSectionProps) {
+  if (isLoading) {
+    return (
+      <div className="p-6">
+        <h2 className="text-lg font-semibold mb-4">Profile</h2>
+        <Separator className="mb-6" />
+        <div className="space-y-6">
+          {[1, 2, 3].map((i) => (
+            <div key={i}>
+              <div className="flex items-center justify-between">
+                <div className="flex-1">
+                  <div className="h-4 w-32 bg-muted rounded animate-pulse mb-2"></div>
+                  <div className="h-3 w-48 bg-muted rounded animate-pulse mb-3"></div>
+                  <div className="h-5 w-24 bg-muted rounded animate-pulse"></div>
+                </div>
+                <div className="h-8 w-16 bg-muted rounded animate-pulse"></div>
+              </div>
+              <Separator className="mt-6" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  if (!organization) {
+    return (
+      <div className="p-6">
+        <h2 className="text-lg font-semibold mb-4">Profile</h2>
+        <Separator className="mb-6" />
+        <div className="text-center py-12">
+          <p className="text-muted-foreground">No organization data found</p>
+        </div>
+      </div>
+    );
+  }
+
+  const profileFields = [
+    {
+      key: "name",
+      label: "Organization Name",
+      description: "The name of your organization",
+    },
+    {
+      key: "kra_pin",
+      label: "KRA PIN",
+      description: "Your organization's tax identification number",
+    },
+    {
+      key: "nssf_number",
+      label: "NSSF Number",
+      description: "National Social Security Fund number",
+    },
+    {
+      key: "nhif_number",
+      label: "NHIF Number",
+      description: "National Hospital Insurance Fund number",
+    },
+    {
+      key: "payroll_schedule",
+      label: "Payroll Schedule",
+      description: "Default payroll processing frequency",
+    },
+    {
+      key: "currency",
+      label: "Currency",
+      description: "Currency your organization pays and reports in",
+    },
+    {
+      key: "primary_phone",
+      label: "Primary Phone",
+      description: "Main contact phone number",
+    },
+    {
+      key: "official_email",
+      label: "Official Email",
+      description: "Official organization email",
+    },
+    {
+      key: "physical_address",
+      label: "Physical Address",
+      description: "Physical location address",
+    },
+    {
+      key: "postal_address",
+      label: "Postal Address",
+      description: "Mailing address",
+    },
+  ];
+
+  return (
+    <div className="p-6">
+      <h2 className="text-lg font-semibold mb-4">Profile</h2>
+      <Separator className="mb-6" />
+      <div className="space-y-6">
+        {profileFields.map((field) => (
+          <div key={field.key}>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h3 className="font-medium mb-1">{field.label}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {field.description}
+                </p>
+                <p className="mt-2">
+                  {organization
+                    ? String(
+                        organization[field.key as keyof typeof organization] ??
+                          "",
+                      ) || "Not set"
+                    : "Not set"}
+                </p>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  onEditClick(
+                    field.key,
+                    organization
+                      ? String(
+                          organization[
+                            field.key as keyof typeof organization
+                          ] ?? "",
+                        )
+                      : "",
+                  )
+                }
+              >
+                <IconEdit size={14} className="mr-1" />
+                Edit
+              </Button>
+            </div>
+            <Separator className="mt-6" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Notifications Section Component
+function NotificationsSection() {
+  return (
+    <div className="p-6">
+      <h2 className="text-lg font-semibold mb-4">Notifications</h2>
+      <Separator className="mb-6" />
+      <div className="space-y-6">
+        {[
+          {
+            title: "Email Notifications",
+            description: "Send email notifications for payroll processing",
+            defaultChecked: true,
+          },
+          {
+            title: "Leave Approvals",
+            description: "Notify when employees request leave",
+            defaultChecked: true,
+          },
+          {
+            title: "Payroll Reminders",
+            description: "Get reminded before payroll processing dates",
+            defaultChecked: false,
+          },
+        ].map((item, index) => (
+          <div key={index}>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h3 className="font-medium mb-1">{item.title}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {item.description}
+                </p>
+              </div>
+              <Switch defaultChecked={item.defaultChecked} />
+            </div>
+            <Separator className="mt-6" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Leave Settings Section Component
+// AFTER
+interface LeaveSettingsSectionProps {
+  configs: UIConfigItem[]; // the 15 leave rows from organization_configs
+  isLoading: boolean;
+}
+
+function LeaveSettingsSection({
+  configs,
+  isLoading,
+}: LeaveSettingsSectionProps) {
+  // Helper: find a config value by name
+  const getConfigValue = (name: string) =>
+    (configs ?? []).find((c) => c.name === name);
+
+  // Derive general settings from live API data, fall back to defaults
+  const [generalSettings, setGeneralSettings] = useState({
+    leaveYearStart:
+      getConfigValue("Leave Year Start")?.fixed_amount?.toString() ?? "01-01",
+    allowNegativeBalance:
+      getConfigValue("Allow Negative Balance")?.name !== undefined
+        ? getConfigValue("Allow Negative Balance")!.is_active
+        : false,
+    weekendsExcluded: getConfigValue("Exclude Weekends")?.is_active ?? true,
+    allowHalfDayLeave:
+      getConfigValue("Allow Half-Day Leave")?.is_active ?? true,
+    notifyManagerOnRequest:
+      getConfigValue("Notify Manager on Request")?.is_active ?? true,
+    notifyEmployeeOnApproval:
+      getConfigValue("Notify Employee on Approval/Rejection")?.is_active ??
+      true,
+    publicHolidaysExcluded: true,
+  });
+  const [leaveTypes, setLeaveTypes] = useState([
+    {
+      id: 1,
+      name: "Annual Leave",
+      days: 21,
+      carryOver: true,
+      maxCarryOver: 10,
+      paid: true,
+      accrual: "monthly",
+      requiresApproval: true,
+      minNoticeDays: 7,
+      enabled: true,
+    },
+    {
+      id: 2,
+      name: "Sick Leave",
+      days: 14,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: true,
+      accrual: "upfront",
+      requiresApproval: false,
+      minNoticeDays: 0,
+      enabled: true,
+    },
+    {
+      id: 3,
+      name: "Maternity Leave",
+      days: 90,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: true,
+      accrual: "upfront",
+      requiresApproval: true,
+      minNoticeDays: 30,
+      enabled: true,
+    },
+    {
+      id: 4,
+      name: "Paternity Leave",
+      days: 14,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: true,
+      accrual: "upfront",
+      requiresApproval: true,
+      minNoticeDays: 14,
+      enabled: true,
+    },
+    {
+      id: 5,
+      name: "Compassionate Leave",
+      days: 3,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: true,
+      accrual: "upfront",
+      requiresApproval: false,
+      minNoticeDays: 0,
+      enabled: true,
+    },
+    {
+      id: 6,
+      name: "Study Leave",
+      days: 10,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: false,
+      accrual: "upfront",
+      requiresApproval: true,
+      minNoticeDays: 14,
+      enabled: false,
+    },
+    {
+      id: 7,
+      name: "Unpaid Leave",
+      days: 30,
+      carryOver: false,
+      maxCarryOver: 0,
+      paid: false,
+      accrual: "upfront",
+      requiresApproval: true,
+      minNoticeDays: 7,
+      enabled: true,
+    },
+  ]);
+
+  return (
+    <div className="p-6 space-y-10">
+      {/* ── General Leave Policy ──────────────────────────────────── */}
+      <div>
+        <h2 className="text-lg font-semibold mb-1">Leave Settings</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Configure leave policies, accrual rules, and approval workflows for
+          your organisation.
+        </p>
+        <Separator className="mb-6" />
+
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          General Policy
+        </h3>
+        <div className="space-y-5">
+          {/* Leave year start */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Leave Year Start</p>
+              <p className="text-xs text-muted-foreground">
+                The date each leave year resets (affects carry-over and accrual)
+              </p>
+            </div>
+            <Select
+              value={generalSettings.leaveYearStart}
+              onValueChange={(v) =>
+                setGeneralSettings({ ...generalSettings, leaveYearStart: v })
+              }
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="01-01">1 January</SelectItem>
+                <SelectItem value="04-01">1 April</SelectItem>
+                <SelectItem value="07-01">1 July</SelectItem>
+                <SelectItem value="10-01">1 October</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Separator />
+
+          {/* Weekends excluded */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Exclude Weekends</p>
+              <p className="text-xs text-muted-foreground">
+                Weekends do not count as leave days when calculating duration
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.weekendsExcluded}
+              onCheckedChange={(v) =>
+                setGeneralSettings({ ...generalSettings, weekendsExcluded: v })
+              }
+            />
+          </div>
+          <Separator />
+
+          {/* Public holidays excluded */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Exclude Public Holidays</p>
+              <p className="text-xs text-muted-foreground">
+                Public holidays do not count as leave days
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.publicHolidaysExcluded}
+              onCheckedChange={(v) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  publicHolidaysExcluded: v,
+                })
+              }
+            />
+          </div>
+          <Separator />
+
+          {/* Half-day leave */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Allow Half-Day Leave</p>
+              <p className="text-xs text-muted-foreground">
+                Employees can request morning or afternoon half-days
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.allowHalfDayLeave}
+              onCheckedChange={(v) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  allowHalfDayLeave: v,
+                })
+              }
+            />
+          </div>
+          <Separator />
+
+          {/* Negative balance */}
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Allow Negative Balance</p>
+              <p className="text-xs text-muted-foreground">
+                Employees can take leave even when their balance is zero
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.allowNegativeBalance}
+              onCheckedChange={(v) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  allowNegativeBalance: v,
+                })
+              }
+            />
+          </div>
+          <Separator />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          Notifications
+        </h3>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Notify Manager on Request</p>
+              <p className="text-xs text-muted-foreground">
+                Send an email/notification to the line manager when a leave
+                request is submitted
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.notifyManagerOnRequest}
+              onCheckedChange={(v) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  notifyManagerOnRequest: v,
+                })
+              }
+            />
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">
+                Notify Employee on Approval / Rejection
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Send an email/notification to the employee when their request is
+                approved or rejected
+              </p>
+            </div>
+            <Switch
+              checked={generalSettings.notifyEmployeeOnApproval}
+              onCheckedChange={(v) =>
+                setGeneralSettings({
+                  ...generalSettings,
+                  notifyEmployeeOnApproval: v,
+                })
+              }
+            />
+          </div>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Leave Types
+          </h3>
+          <Button size="sm" variant="outline">
+            <IconPlus size={14} className="mr-1" />
+            Add Leave Type
+          </Button>
+        </div>
+
+        <div className="space-y-4">
+          {leaveTypes.map((lt) => (
+            <div
+              key={lt.id}
+              className="rounded-lg border border-border p-4 space-y-3"
+            >
+              {/* Row 1 — name + toggles */}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Switch
+                    checked={lt.enabled}
+                    onCheckedChange={(v) =>
+                      setLeaveTypes((prev) =>
+                        prev.map((x) =>
+                          x.id === lt.id ? { ...x, enabled: v } : x,
+                        ),
+                      )
+                    }
+                  />
+                  <div>
+                    <p className="font-medium text-sm">{lt.name}</p>
+                    <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                      <Badge
+                        variant={lt.paid ? "default" : "secondary"}
+                        className="text-xs"
+                      >
+                        {lt.paid ? "Paid" : "Unpaid"}
+                      </Badge>
+                      {lt.carryOver && (
+                        <Badge variant="outline" className="text-xs">
+                          Carry-over: {lt.maxCarryOver}d
+                        </Badge>
+                      )}
+                      {lt.requiresApproval && (
+                        <Badge variant="outline" className="text-xs">
+                          Approval required
+                        </Badge>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button variant="outline" size="sm" disabled={!lt.enabled}>
+                    <IconEdit size={13} className="mr-1" />
+                    Edit
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <IconTrash size={13} />
+                  </Button>
+                </div>
+              </div>
+
+              {/* Row 2 — quick stats */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-1">
+                <div className="text-xs">
+                  <span className="text-muted-foreground block">
+                    Days per year
+                  </span>
+                  <span className="font-medium">{lt.days}</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-muted-foreground block">Accrual</span>
+                  <span className="font-medium capitalize">{lt.accrual}</span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-muted-foreground block">
+                    Min. notice
+                  </span>
+                  <span className="font-medium">
+                    {lt.minNoticeDays === 0 ? "None" : `${lt.minNoticeDays}d`}
+                  </span>
+                </div>
+                <div className="text-xs">
+                  <span className="text-muted-foreground block">
+                    Carry-over
+                  </span>
+                  <span className="font-medium">
+                    {lt.carryOver ? `Up to ${lt.maxCarryOver}d` : "None"}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-2">
+        <Button onClick={() => toast.success("Leave settings saved")}>
+          Save Settings
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Attendance Settings Section Component
+interface AttendanceSettingsSectionProps {
+  configs: UIConfigItem[]; // attendance rows from organization_configs
+  isLoading: boolean;
+  fetchConfigs: () => Promise<void>;
+}
+
+// value_text-based fields that are NOT part of Office Hours.
+// "Overtime Rate" is handled separately since it's fixed_amount.
+const ATTENDANCE_TEXT_FIELDS = [
+  "overtime_policy",
+  "overtime_after_minutes",
+  "public_holiday_handling",
+] as const;
+type AttendanceTextField = (typeof ATTENDANCE_TEXT_FIELDS)[number];
+
+// Work Start Time, Work End Time, and Grace Period are consolidated into a
+// single organization_configs row: config_type="attendance", name="Office Hours",
+// with everything stored in the JSON `settings` column, e.g.
+// {"start_time":"08:00:00","end_time":"17:00:00","grace_minutes":15,"workdays":[1,2,3,4,5]}
+const OFFICE_HOURS_CONFIG_NAME = "Office Hours";
+
+// Lateness / Early-Leave Deduction Policy — three related organization_configs
+// rows (config_type="attendance"), matching the seed data:
+//   - "Lateness Deduction Policy"        value_text: no_deduction | per_minute | daily_rate | leave_balance
+//   - "Lateness Deduction Leave Type"    value_text: leave_types.code, only meaningful when policy = leave_balance
+//   - "Lateness Leave Conversion Tiers"  settings: JSON array of {min_minutes, leave_days}, only meaningful when policy = leave_balance
+const LATENESS_POLICY_CONFIG_NAME = "Lateness Deduction Policy";
+const LATENESS_LEAVE_TYPE_CONFIG_NAME = "Lateness Deduction Leave Type";
+const LATENESS_TIERS_CONFIG_NAME = "Lateness Leave Conversion Tiers";
+
+const LATENESS_POLICY_OPTIONS = [
+  { value: "no_deduction", label: "No Deduction" },
+  { value: "per_minute", label: "Per Minute" },
+  { value: "daily_rate", label: "Daily Rate" },
+  { value: "leave_balance", label: "Leave Balance" },
+] as const;
+
+// TODO: replace with a real leave-types fetch once a leave-types endpoint is
+// wired into this page — the Leave Settings section currently only has local
+// mock data with no `code` field to reuse here.
+const LATENESS_LEAVE_TYPE_OPTIONS = [
+  { value: "ANNUAL", label: "Annual Leave" },
+  { value: "SICK", label: "Sick Leave" },
+  { value: "MATERNITY", label: "Maternity Leave" },
+  { value: "PATERNITY", label: "Paternity Leave" },
+  { value: "COMPASSIONATE", label: "Compassionate Leave" },
+  { value: "STUDY", label: "Study Leave" },
+];
+
+interface ConversionTier {
+  min_minutes: number;
+  leave_days: number;
+}
+
+const DEFAULT_CONVERSION_TIERS: ConversionTier[] = [
+  { min_minutes: 60, leave_days: 0.5 },
+  { min_minutes: 120, leave_days: 1 },
+];
+
+interface AttendanceValues {
+  work_start_time: string; // "HH:MM" for <input type="time">
+  work_end_time: string;
+  grace_minutes: string;
+  overtime_policy: string;
+  overtime_after_minutes: string;
+  public_holiday_handling: string;
+  overtime_rate: string; // KES per hour
+  lateness_deduction_policy: string;
+  lateness_deduction_leave_type: string;
+  lateness_leave_conversion_tiers: ConversionTier[];
+}
+
+const DEFAULT_ATTENDANCE_VALUES: AttendanceValues = {
+  work_start_time: "08:00",
+  work_end_time: "17:00",
+  grace_minutes: "15",
+  overtime_policy: "approval_required",
+  overtime_after_minutes: "30",
+  public_holiday_handling: "paid",
+  overtime_rate: "",
+  lateness_deduction_policy: "no_deduction",
+  lateness_deduction_leave_type: "ANNUAL",
+  lateness_leave_conversion_tiers: DEFAULT_CONVERSION_TIERS,
+};
+
+// "08:00:00" (DB) <-> "08:00" (<input type="time">)
+const toTimeInputValue = (dbTime: string | null | undefined) =>
+  dbTime ? dbTime.slice(0, 5) : null;
+const toDbTimeValue = (inputTime: string) =>
+  inputTime.length === 5 ? `${inputTime}:00` : inputTime;
+
+const buildAttendanceValues = (configs: UIConfigItem[]): AttendanceValues => {
+  const getByName = (name: string) =>
+    (configs ?? []).find((c) => c.name === name);
+
+  const officeHoursSettings = getByName(OFFICE_HOURS_CONFIG_NAME)
+    ?.settings as OfficeHoursSettings | null | undefined;
+
+  return {
+    work_start_time:
+      toTimeInputValue(officeHoursSettings?.start_time) ??
+      DEFAULT_ATTENDANCE_VALUES.work_start_time,
+    work_end_time:
+      toTimeInputValue(officeHoursSettings?.end_time) ??
+      DEFAULT_ATTENDANCE_VALUES.work_end_time,
+    grace_minutes:
+      officeHoursSettings?.grace_minutes !== undefined &&
+      officeHoursSettings?.grace_minutes !== null
+        ? String(officeHoursSettings.grace_minutes)
+        : DEFAULT_ATTENDANCE_VALUES.grace_minutes,
+    overtime_policy:
+      getByName("overtime_policy")?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.overtime_policy,
+    overtime_after_minutes:
+      getByName("overtime_after_minutes")?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.overtime_after_minutes,
+    public_holiday_handling:
+      getByName("public_holiday_handling")?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.public_holiday_handling,
+    overtime_rate:
+      getByName("Overtime Rate")?.fixed_amount?.toString() ??
+      DEFAULT_ATTENDANCE_VALUES.overtime_rate,
+    lateness_deduction_policy:
+      getByName(LATENESS_POLICY_CONFIG_NAME)?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.lateness_deduction_policy,
+    lateness_deduction_leave_type:
+      getByName(LATENESS_LEAVE_TYPE_CONFIG_NAME)?.value_text ??
+      DEFAULT_ATTENDANCE_VALUES.lateness_deduction_leave_type,
+    lateness_leave_conversion_tiers: (() => {
+      // settings is a JSON *array* for this row (not an object like Office
+      // Hours), so it doesn't match the OfficeHoursSettings/Record shape the
+      // UIConfigItem type expects — cast defensively and fall back safely.
+      const raw = getByName(LATENESS_TIERS_CONFIG_NAME)?.settings;
+      return Array.isArray(raw) && raw.length > 0
+        ? (raw as unknown as ConversionTier[])
+        : DEFAULT_ATTENDANCE_VALUES.lateness_leave_conversion_tiers;
+    })(),
+  };
+};
+
+function AttendanceSettingsSection({
+  configs,
+  isLoading,
+  fetchConfigs,
+}: AttendanceSettingsSectionProps) {
+  const { user } = useAuth();
+  const [values, setValues] = useState<AttendanceValues>(
+    DEFAULT_ATTENDANCE_VALUES,
+  );
+  const [initialized, setInitialized] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  // Sync local editable state from live data once it arrives (avoids clobbering
+  // in-progress edits on background refetches after this component has loaded).
+  useEffect(() => {
+    if (!isLoading && !initialized) {
+      setValues(buildAttendanceValues(configs));
+      setInitialized(true);
+    }
+  }, [isLoading, initialized, configs]);
+
+  const getByName = (name: string) =>
+    (configs ?? []).find((c) => c.name === name);
+
+  const addTier = () => {
+    setValues({
+      ...values,
+      lateness_leave_conversion_tiers: [
+        ...values.lateness_leave_conversion_tiers,
+        { min_minutes: 0, leave_days: 0 },
+      ],
+    });
+  };
+
+  const updateTier = (
+    index: number,
+    field: keyof ConversionTier,
+    rawValue: string,
+  ) => {
+    const numValue = Number(rawValue);
+    setValues({
+      ...values,
+      lateness_leave_conversion_tiers: values.lateness_leave_conversion_tiers.map(
+        (tier, i) =>
+          i === index
+            ? { ...tier, [field]: Number.isNaN(numValue) ? 0 : numValue }
+            : tier,
+      ),
+    });
+  };
+
+  const removeTier = (index: number) => {
+    setValues({
+      ...values,
+      lateness_leave_conversion_tiers:
+        values.lateness_leave_conversion_tiers.filter((_, i) => i !== index),
+    });
+  };
+
+  const handleSave = async () => {
+    if (!user?.organization_id) {
+      toast.error("No organization ID found");
+      return;
+    }
+
+    setSaving(true);
+    const orgId = user.organization_id;
+    const failures: string[] = [];
+
+    try {
+      // Save Office Hours (Work Start Time, Work End Time, Grace Period) as
+      // a single row, merging on top of whatever else is already in its
+      // settings JSON (e.g. workdays) so this form never clobbers keys it
+      // doesn't expose.
+      const existingOfficeHours = getByName(OFFICE_HOURS_CONFIG_NAME);
+      const existingSettings =
+        (existingOfficeHours?.settings as OfficeHoursSettings | null) ?? {};
+
+      const graceMinutesNum = Number(values.grace_minutes);
+      if (values.grace_minutes.trim() === "" || Number.isNaN(graceMinutesNum) || graceMinutesNum < 0) {
+        failures.push("Grace Period (must be a non-negative number)");
+      } else {
+        const mergedSettings: OfficeHoursSettings = {
+          ...existingSettings,
+          start_time: toDbTimeValue(values.work_start_time),
+          end_time: toDbTimeValue(values.work_end_time),
+          grace_minutes: graceMinutesNum,
+        };
+
+        const officeHoursResponse = existingOfficeHours
+          ? await organizationConfigAPI.updateConfig(orgId, existingOfficeHours.id, {
+              settings: mergedSettings,
+            })
+          : await organizationConfigAPI.createConfig(orgId, {
+              config_type: "attendance",
+              name: OFFICE_HOURS_CONFIG_NAME,
+              settings: mergedSettings,
+              is_active: 1,
+            });
+
+        if (!officeHoursResponse.success) {
+          failures.push("Office Hours");
+        }
+      }
+
+      // Save the remaining value_text-based settings
+      for (const field of ATTENDANCE_TEXT_FIELDS) {
+        const value_text = values[field as AttendanceTextField];
+
+        const existing = getByName(field);
+        const response = existing
+          ? await organizationConfigAPI.updateConfig(orgId, existing.id, {
+              value_text,
+            })
+          : await organizationConfigAPI.createConfig(orgId, {
+              config_type: "attendance",
+              name: field,
+              value_text,
+              is_active: 1,
+            });
+
+        if (!response.success) {
+          failures.push(field);
+        }
+      }
+
+      // Save Overtime Rate (fixed_amount, not value_text)
+      if (values.overtime_rate.trim() !== "") {
+        const rateValue = parseFloat(values.overtime_rate);
+        if (!Number.isNaN(rateValue) && rateValue > 0) {
+          const existingRate = getByName("Overtime Rate");
+          const response = existingRate
+            ? await organizationConfigAPI.updateConfig(
+                orgId,
+                existingRate.id,
+                { fixed_amount: rateValue },
+              )
+            : await organizationConfigAPI.createConfig(orgId, {
+                config_type: "attendance",
+                name: "Overtime Rate",
+                fixed_amount: rateValue,
+                is_active: 1,
+              });
+
+          if (!response.success) {
+            failures.push("Overtime Rate");
+          }
+        } else {
+          failures.push("Overtime Rate (invalid amount)");
+        }
+      }
+
+      // Save Lateness Deduction Policy (always saved, regardless of which
+      // option is selected — no_deduction is a valid, explicit choice).
+      const existingPolicy = getByName(LATENESS_POLICY_CONFIG_NAME);
+      const policyResponse = existingPolicy
+        ? await organizationConfigAPI.updateConfig(orgId, existingPolicy.id, {
+            value_text: values.lateness_deduction_policy,
+          })
+        : await organizationConfigAPI.createConfig(orgId, {
+            config_type: "attendance",
+            name: LATENESS_POLICY_CONFIG_NAME,
+            value_text: values.lateness_deduction_policy,
+            is_active: 1,
+          });
+
+      if (!policyResponse.success) {
+        failures.push("Lateness Deduction Policy");
+      }
+
+      // Leave Type + Conversion Tiers only matter when policy = leave_balance,
+      // but we still persist whatever was last selected so switching back to
+      // leave_balance later doesn't lose the previous configuration.
+      const existingLeaveType = getByName(LATENESS_LEAVE_TYPE_CONFIG_NAME);
+      const leaveTypeResponse = existingLeaveType
+        ? await organizationConfigAPI.updateConfig(
+            orgId,
+            existingLeaveType.id,
+            { value_text: values.lateness_deduction_leave_type },
+          )
+        : await organizationConfigAPI.createConfig(orgId, {
+            config_type: "attendance",
+            name: LATENESS_LEAVE_TYPE_CONFIG_NAME,
+            value_text: values.lateness_deduction_leave_type,
+            is_active: 1,
+          });
+
+      if (!leaveTypeResponse.success) {
+        failures.push("Lateness Deduction Leave Type");
+      }
+
+      if (values.lateness_deduction_policy === "leave_balance") {
+        const invalidTier = values.lateness_leave_conversion_tiers.some(
+          (t) => t.min_minutes < 0 || t.leave_days <= 0,
+        );
+        if (
+          values.lateness_leave_conversion_tiers.length === 0 ||
+          invalidTier
+        ) {
+          failures.push(
+            "Lateness Leave Conversion Tiers (each tier needs a non-negative minute threshold and a positive leave-day value)",
+          );
+        } else {
+          const existingTiers = getByName(LATENESS_TIERS_CONFIG_NAME);
+          // settings column stores a JSON array here, not an object — cast
+          // past the OfficeHoursSettings/Record<string, unknown> type used
+          // for every other settings row.
+          const tiersSettings = values.lateness_leave_conversion_tiers as unknown as Record<
+            string,
+            unknown
+          >;
+
+          const tiersResponse = existingTiers
+            ? await organizationConfigAPI.updateConfig(
+                orgId,
+                existingTiers.id,
+                { settings: tiersSettings },
+              )
+            : await organizationConfigAPI.createConfig(orgId, {
+                config_type: "attendance",
+                name: LATENESS_TIERS_CONFIG_NAME,
+                settings: tiersSettings,
+                is_active: 1,
+              });
+
+          if (!tiersResponse.success) {
+            failures.push("Lateness Leave Conversion Tiers");
+          }
+        }
+      }
+
+      await fetchConfigs();
+
+      if (failures.length > 0) {
+        toast.error(`Failed to save: ${failures.join(", ")}`);
+      } else {
+        toast.success("Attendance settings saved");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (isLoading && !initialized) {
+    return <ConfigSkeleton />;
+  }
+
+  return (
+    <div className="p-6 space-y-10">
+      <div>
+        <h2 className="text-lg font-semibold mb-1">Attendance</h2>
+        <p className="text-sm text-muted-foreground mb-4">
+          Configure working hours, overtime rules, and public holiday
+          handling for your organisation.
+        </p>
+        <Separator className="mb-6" />
+
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          Working Hours
+        </h3>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Work Start Time</p>
+              <p className="text-xs text-muted-foreground">
+                The official start of the working day
+              </p>
+            </div>
+            <Input
+              type="time"
+              className="w-36"
+              value={values.work_start_time}
+              onChange={(e) =>
+                setValues({ ...values, work_start_time: e.target.value })
+              }
+            />
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Work End Time</p>
+              <p className="text-xs text-muted-foreground">
+                The official end of the working day
+              </p>
+            </div>
+            <Input
+              type="time"
+              className="w-36"
+              value={values.work_end_time}
+              onChange={(e) =>
+                setValues({ ...values, work_end_time: e.target.value })
+              }
+            />
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Grace Period</p>
+              <p className="text-xs text-muted-foreground">
+                Minutes an employee may clock in late without being marked
+                late
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min="0"
+                className="w-24"
+                value={values.grace_minutes}
+                onChange={(e) =>
+                  setValues({ ...values, grace_minutes: e.target.value })
+                }
+              />
+              <span className="text-sm text-muted-foreground">min</span>
+            </div>
+          </div>
+          <Separator />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          Overtime
+        </h3>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Overtime Policy</p>
+              <p className="text-xs text-muted-foreground">
+                How overtime hours are handled for this organisation
+              </p>
+            </div>
+            <Select
+              value={values.overtime_policy}
+              onValueChange={(v) =>
+                setValues({ ...values, overtime_policy: v })
+              }
+            >
+              <SelectTrigger className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="approval_required">
+                  Approval Required
+                </SelectItem>
+                <SelectItem value="automatic">
+                  Automatic (No Approval)
+                </SelectItem>
+                <SelectItem value="disabled">Disabled</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Overtime After</p>
+              <p className="text-xs text-muted-foreground">
+                Minutes past end time before overtime starts accruing
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                type="number"
+                min="0"
+                className="w-24"
+                value={values.overtime_after_minutes}
+                onChange={(e) =>
+                  setValues({
+                    ...values,
+                    overtime_after_minutes: e.target.value,
+                  })
+                }
+              />
+              <span className="text-sm text-muted-foreground">min</span>
+            </div>
+          </div>
+          <Separator />
+
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Overtime Rate</p>
+              <p className="text-xs text-muted-foreground">
+                Flat hourly rate paid for approved overtime
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <AmountInput
+                min={0}
+                wrapperClassName="w-44"
+                placeholder="0.00"
+                value={values.overtime_rate}
+                onChange={(e) =>
+                  setValues({ ...values, overtime_rate: e.target.value })
+                }
+              />
+              <span className="text-sm text-muted-foreground">/ hr</span>
+            </div>
+          </div>
+          <Separator />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          Lateness Deduction
+        </h3>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Lateness Deduction Policy</p>
+              <p className="text-xs text-muted-foreground">
+                How late arrivals and early leaves are penalised
+              </p>
+            </div>
+            <Select
+              value={values.lateness_deduction_policy}
+              onValueChange={(v) =>
+                setValues({ ...values, lateness_deduction_policy: v })
+              }
+            >
+              <SelectTrigger className="w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {LATENESS_POLICY_OPTIONS.map((opt) => (
+                  <SelectItem key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {values.lateness_deduction_policy === "leave_balance" && (
+            <>
+              <Separator />
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-sm">Leave Type to Debit</p>
+                  <p className="text-xs text-muted-foreground">
+                    Which leave balance is reduced when lateness is converted
+                    to leave
+                  </p>
+                </div>
+                <Select
+                  value={values.lateness_deduction_leave_type}
+                  onValueChange={(v) =>
+                    setValues({ ...values, lateness_deduction_leave_type: v })
+                  }
+                >
+                  <SelectTrigger className="w-52">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LATENESS_LEAVE_TYPE_OPTIONS.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <Separator />
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <p className="font-medium text-sm">
+                      Minute-to-Leave-Day Conversion Tiers
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Read top-down; the employee's billable late minutes get
+                      the highest threshold they clear
+                    </p>
+                  </div>
+                  <Button variant="outline" size="sm" onClick={addTier}>
+                    <IconPlus size={14} className="mr-1" />
+                    Add Tier
+                  </Button>
+                </div>
+                <div className="space-y-3">
+                  {values.lateness_leave_conversion_tiers.map((tier, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Input
+                        type="number"
+                        min="0"
+                        className="w-28"
+                        value={tier.min_minutes}
+                        onChange={(e) =>
+                          updateTier(i, "min_minutes", e.target.value)
+                        }
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        min →
+                      </span>
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.5"
+                        className="w-24"
+                        value={tier.leave_days}
+                        onChange={(e) =>
+                          updateTier(i, "leave_days", e.target.value)
+                        }
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        leave day(s)
+                      </span>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeTier(i)}
+                        disabled={
+                          values.lateness_leave_conversion_tiers.length === 1
+                        }
+                      >
+                        <IconTrash size={14} />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          Public Holidays
+        </h3>
+        <div className="space-y-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="font-medium text-sm">Public Holiday Handling</p>
+              <p className="text-xs text-muted-foreground">
+                How attendance is treated on public holidays
+              </p>
+            </div>
+            <Select
+              value={values.public_holiday_handling}
+              onValueChange={(v) =>
+                setValues({ ...values, public_holiday_handling: v })
+              }
+            >
+              <SelectTrigger className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="paid">Paid</SelectItem>
+                <SelectItem value="unpaid">Unpaid</SelectItem>
+                <SelectItem value="off">Day Off</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-2">
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Save Attendance Settings"}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Billing Section Component
+function BillingSection() {
+  return (
+    <div className="p-6">
+      <h2 className="text-lg font-semibold mb-4">Billing</h2>
+      <Separator className="mb-6" />
+      <div className="space-y-6">
+        <div>
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <h3 className="font-medium mb-1">Current Plan</h3>
+              <p className="text-sm text-muted-foreground">
+                Your subscription details
+              </p>
+              <div className="mt-2">
+                <p className="font-medium">Professional Plan</p>
+                <p className="text-sm text-muted-foreground">
+                  KES 15,000/month
+                </p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm">
+              Upgrade
+            </Button>
+          </div>
+          <Separator className="mt-6" />
+        </div>
+        <div>
+          <div className="flex items-center justify-between">
+            <div className="flex-1">
+              <h3 className="font-medium mb-1">Payment Method</h3>
+              <p className="text-sm text-muted-foreground">
+                Manage your payment methods
+              </p>
+              <p className="mt-2">M-Pesa: +254 712 345 678</p>
+            </div>
+            <Button variant="outline" size="sm">
+              <IconEdit size={14} className="mr-1" />
+              Change
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Data Export Section Component
+function DataExportSection() {
+  return (
+    <div className="p-6">
+      <h2 className="text-lg font-semibold mb-4">Data Export</h2>
+      <Separator className="mb-6" />
+      <div className="space-y-6">
+        {[
+          {
+            title: "Export Payroll Data",
+            description: "Download all payroll records in CSV format",
+          },
+          {
+            title: "Export Employee Records",
+            description: "Download all employee data in Excel format",
+          },
+          {
+            title: "Export Leave Records",
+            description: "Download leave history in PDF format",
+          },
+        ].map((item, index) => (
+          <div key={index}>
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <h3 className="font-medium mb-1">{item.title}</h3>
+                <p className="text-sm text-muted-foreground">
+                  {item.description}
+                </p>
+              </div>
+              <Button variant="outline" size="sm">
+                <IconDownload size={14} className="mr-1" />
+                Export
+              </Button>
+            </div>
+            {index < 2 && <Separator className="mt-6" />}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Main Component
+export default function OrganizationConfigPage() {
+  const { user: currentUser } = useAuth();
+  const isOrgAdmin = currentUser?.user_type === "admin";
+  const [activeSection, setActiveSection] = useState("profile");
+
+  // Deep link, e.g. /company-settings?section=advance — kept in sync both ways
+  // so the URL always reflects the section being viewed.
+  useEffect(() => {
+    const wanted = new URLSearchParams(window.location.search).get("section");
+    if (wanted && sidebarItems.some((i) => i.key === wanted)) setActiveSection(wanted);
+  }, []);
+  const selectSection = (key: string) => {
+    setActiveSection(key);
+    const params = new URLSearchParams(window.location.search);
+    params.set("section", key);
+    params.delete("modal");
+    window.history.replaceState(null, "", `${window.location.pathname}?${params.toString()}`);
+  };
+  // "Add" modal is URL-driven (?modal=create) so it can be shared.
+  const createModal = useUrlModal("create");
+  const showAddModal = createModal.open;
+  const setShowAddModal = createModal.onOpenChange;
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingField, setEditingField] = useState<string>("");
+  const [editValue, setEditValue] = useState<string>("");
+  const [showEditConfigModal, setShowEditConfigModal] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [editingConfig, setEditingConfig] = useState<{
+    id: number | null;
+    name: string;
+    calculationType: "percentage" | "fixed";
+    value: string;
+  }>({
+    id: null,
+    name: "",
+    calculationType: "percentage",
+    value: "",
+  });
+
+  // State for add modal
+  const [newConfig, setNewConfig] = useState({
+    name: "",
+    calculationType: "percentage" as "percentage" | "fixed",
+    value: "",
+  });
+
+  const { organization, isLoading, updateOrganization } = useOrganization();
+  const {
+    configs,
+    loading: configsLoading,
+    error,
+    createConfig,
+    deleteConfig,
+    toggleActive,
+    fetchConfigs,
+    updateConfig,
+  } = useOrganizationConfig();
+
+
+  const handleAddConfig = async () => {
+    if (!newConfig.name.trim()) {
+      toast.error("Please enter a name");
+      return;
+    }
+
+    if (!newConfig.value.trim()) {
+      toast.error("Please enter a value");
+      return;
+    }
+
+    // Build config data based on calculation type
+    type ConfigType =
+      | "tax"
+      | "deduction"
+      | "loan"
+      | "benefit"
+      | "per_diem"
+      | "advance"
+      | "refund";
+
+    const configData: {
+      config_type: ConfigType;
+      name: string;
+      is_active: number;
+      percentage?: number | null;
+      fixed_amount?: number | null;
+    } = {
+      config_type: activeSection as ConfigType,
+      name: newConfig.name,
+      is_active: 1,
+    };
+
+    if (newConfig.calculationType === "percentage") {
+      configData.percentage = parseFloat(newConfig.value);
+      configData.fixed_amount = null; // Explicitly set to null
+    } else {
+      configData.fixed_amount = parseFloat(newConfig.value);
+      configData.percentage = null; // Explicitly set to null
+    }
+
+    const response = await createConfig(configData);
+
+    if (response.success) {
+      setShowAddModal(false);
+      setNewConfig({
+        name: "",
+        calculationType: "percentage",
+        value: "",
+      });
+    }
+  };
+
+  const handleDeleteConfig = async (id: number) => {
+    const response = await deleteConfig(id);
+    if (response.success) {
+      toast.success("Configuration deleted successfully");
+    }
+  };
+
+  const handleToggleActive = async (id: number, currentIsActive: boolean) => {
+    await toggleActive(id, currentIsActive, activeSection);
+  };
+
+  const handleEditClick = (field: string, currentValue: string) => {
+    setEditingField(field);
+    setEditValue(currentValue);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingField) return;
+
+    setLoading(true);
+    try {
+      const success = await updateOrganization(editingField, editValue || null);
+      if (success) {
+        // formatCurrency() reads a module-level currency that AuthContext only
+        // sets at login, so refresh it now or amounts keep the old code until re-login.
+        if (editingField === "currency") setOrgCurrency(editValue);
+        setShowEditModal(false);
+        setEditingField("");
+        setEditValue("");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditConfigClick = (config: UIConfigItem) => {
+    // Only allow editing active configs
+    if (!config.is_active) {
+      toast.error("Cannot edit inactive configurations");
+      return;
+    }
+
+    setEditingConfig({
+      id: config.id,
+      name: config.name,
+      calculationType: config.percentage !== null ? "percentage" : "fixed",
+      value:
+        config.percentage !== null
+          ? config.percentage.toString()
+          : (config.fixed_amount || 0).toString(),
+    });
+    setShowEditConfigModal(true);
+  };
+
+  const handleSaveEditConfig = async () => {
+    console.log("handleSaveEditConfig called");
+
+    if (!editingConfig.name.trim()) {
+      toast.error("Please enter a name");
+      return;
+    }
+
+    if (!editingConfig.value.trim()) {
+      toast.error("Please enter a value");
+      return;
+    }
+
+    if (!editingConfig.id) {
+      toast.error("Configuration ID not found");
+      return;
+    }
+
+    // Build config data based on calculation type
+    const configData: {
+      name?: string;
+      is_active: number;
+      percentage?: number | null;
+      fixed_amount?: number | null;
+    } = {
+      name: editingConfig.name,
+      is_active: 1, // Keep it active
+    };
+
+    if (editingConfig.calculationType === "percentage") {
+      configData.percentage = parseFloat(editingConfig.value);
+      configData.fixed_amount = null; // Explicitly set to null
+    } else {
+      configData.fixed_amount = parseFloat(editingConfig.value);
+      configData.percentage = null; // Explicitly set to null
+    }
+
+    console.log("Sending update with data:", configData); // Debug log
+
+    try {
+      // Use the updateConfig function from your hook
+      const response = await updateConfig(editingConfig.id, configData);
+
+      console.log("Update response:", response); // Debug log
+
+      if (response.success) {
+        toast.success("Configuration updated successfully!");
+        setShowEditConfigModal(false);
+        setEditingConfig({
+          id: null,
+          name: "",
+          calculationType: "percentage",
+          value: "",
+        });
+      } else {
+        toast.error(response.error || "Failed to update configuration");
+      }
+    } catch (error) {
+      console.error("Update error:", error); // Debug log
+      toast.error("An unexpected error occurred");
+    }
+  };
+
+  const getFieldLabel = (field: string): string => {
+    const fieldLabels: Record<string, string> = {
+      name: "Organization Name",
+      kra_pin: "KRA PIN",
+      nssf_number: "NSSF Number",
+      nhif_number: "NHIF Number",
+      payroll_schedule: "Payroll Schedule",
+      currency: "Currency",
+      primary_phone: "Primary Phone",
+      official_email: "Official Email",
+      physical_address: "Physical Address",
+      postal_address: "Postal Address",
+    };
+    return fieldLabels[field] || field.replace(/_/g, " ");
+  };
+
+  const getFieldDescription = (field: string): string => {
+    const descriptions: Record<string, string> = {
+      name: "The name of your organization",
+      kra_pin: "Your organization's tax identification number",
+      nssf_number: "National Social Security Fund number",
+      nhif_number: "National Hospital Insurance Fund number",
+      payroll_schedule: "Default payroll processing frequency",
+      currency: "Currency your organization pays and reports in",
+      primary_phone: "Main contact phone number",
+      official_email: "Official organization email",
+      physical_address: "Physical location address",
+      postal_address: "Mailing address",
+    };
+    return descriptions[field] || `Edit ${field.replace(/_/g, " ")}`;
+  };
+
+  // Get active configs based on section
+  const getActiveConfigs = () => {
+    const configTypeMap: Record<string, keyof typeof configs> = {
+      tax: "tax",
+      deduction: "deduction",
+      loan: "loan",
+      benefit: "benefit",
+      per_diem: "per_diem",
+      advance: "advance",
+      refund: "refund",
+      leave: "leave",
+      attendance: "attendance",
+    };
+
+    const configType = configTypeMap[activeSection];
+    return configType ? (configs[configType] ?? []) : [];
+  };
+
+  const activeConfigs = getActiveConfigs();
+
+  return (
+    <>
+        <div className="flex flex-1 flex-col">
+          <div className="@container/main flex flex-1 flex-col">
+            <div className="">
+              <div className="mt-4 mx-6 space-y-2">
+                <h1 className="text-2xl font-medium">Settings</h1>
+                <p className="text-base text-muted-foreground">
+                  This page has all configurations related to your company:
+                </p>
+              </div>
+
+              <div className="relative flex gap-6 mx-6 my-6">
+                {/* Left Sidebar Navigation */}
+                <div className="w-64 flex-shrink-0">
+                  <div className="p-4">
+                    <div className="space-y-1">
+                      {sidebarItems
+                        .filter((item) => item.key !== "advance" || isOrgAdmin)
+                        .map((item) => {
+                        const IconComponent = item.icon;
+                        return (
+                          <button
+                            key={item.key}
+                            onClick={() => selectSection(item.key)}
+                            className={`w-full flex items-center text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                              activeSection === item.key
+                                ? "bg-primary/10 text-primary font-medium"
+                                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                            }`}
+                          >
+                            <IconComponent size={16} className="mr-2" />
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    <Separator className="my-4" />
+
+                    <button className="w-full text-left px-3 py-2 text-sm text-destructive hover:bg-destructive/10 rounded-md transition-colors">
+                      Delete Organization
+                    </button>
+                  </div>
+                </div>
+
+                {/* Vertical Divider */}
+                <div className="absolute left-[16rem] top-6 bottom-6 w-px bg-border" />
+
+                {/* Right Content Area */}
+                <div className="flex-1">
+                  <div className="pl-6">
+                    {activeSection === "profile" ? (
+                      <ProfileSection
+                        organization={organization}
+                        isLoading={isLoading}
+                        onEditClick={handleEditClick}
+                      />
+                    ) : activeSection === "notifications" ? (
+                      <NotificationsSection />
+                    ) : activeSection === "billing" ? (
+                      <BillingSection />
+                    ) : activeSection === "export" ? (
+                      <DataExportSection />
+                    ) : // AFTER — add this branch just before the configsLoading check, after the existing special cases
+                    activeSection === "leave" ? (
+                      <LeaveSettingsSection
+                        configs={activeConfigs}
+                        isLoading={configsLoading}
+                      />
+                    ) : activeSection === "advance" ? (
+                      isOrgAdmin ? (
+                        <div className="p-6 max-w-4xl">
+                          <div className="mb-6">
+                            <h2 className="text-lg font-semibold">Advances</h2>
+                            <p className="text-sm text-muted-foreground">
+                              Limits, repayment rules and payout methods that every salary advance request is checked against.
+                            </p>
+                          </div>
+                          <AdvancePolicyForm />
+                        </div>
+                      ) : (
+                        <div className="p-6 text-sm text-muted-foreground">Only organization admins can change the advance policy.</div>
+                      )
+                    ) : activeSection === "attendance" ? (
+                      <AttendanceSettingsSection
+                        configs={activeConfigs}
+                        isLoading={configsLoading}
+                        fetchConfigs={fetchConfigs}
+                      />
+                    ) : configsLoading ? (
+                      // ) : configsLoading ? (
+                      <ConfigSkeleton />
+                    ) : error ? (
+                      <div className="p-6">
+                        <div className="mb-6">
+                          <h2 className="text-lg font-semibold mb-4">
+                            {
+                              sidebarItems.find(
+                                (item) => item.key === activeSection,
+                              )?.label
+                            }
+                          </h2>
+                          <Separator />
+                        </div>
+                        <div className="py-12 text-center">
+                          <p className="text-sm text-destructive mb-4">
+                            {error}
+                          </p>
+                          <Button onClick={fetchConfigs}>
+                            <IconRefresh size={16} className="mr-2" />
+                            Retry
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-6">
+                        {/* Header */}
+                        <div className="mb-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <h2 className="text-lg font-semibold">
+                              {
+                                sidebarItems.find(
+                                  (item) => item.key === activeSection,
+                                )?.label
+                              }
+                            </h2>
+                            <Button
+                              onClick={() => setShowAddModal(true)}
+                              size="sm"
+                            >
+                              <IconPlus size={16} className="mr-2" />
+                              Add Configuration
+                            </Button>
+                          </div>
+                          <Separator />
+                        </div>
+
+                        {/* Config List */}
+                        <div className="space-y-6">
+                          {activeConfigs.length > 0 ? (
+                            activeConfigs.map((config) => (
+                              <div key={config.id}>
+                                <div className="flex items-start justify-between">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-1">
+                                      <h3 className="font-medium">
+                                        {config.name}
+                                      </h3>
+                                      <Switch
+                                        checked={config.is_active}
+                                        onCheckedChange={() =>
+                                          handleToggleActive(
+                                            config.id,
+                                            config.is_active,
+                                          )
+                                        }
+                                      />
+                                      {!config.is_active && (
+                                        <Badge
+                                          variant="outline"
+                                          className="text-xs"
+                                        >
+                                          Inactive
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mb-3">
+                                      {config.percentage !== null
+                                        ? `This configuration applies ${config.percentage}% calculation`
+                                        : `This configuration uses a fixed amount of ${formatCurrency(
+                                            config.fixed_amount || 0,
+                                          )}`}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() =>
+                                        handleEditConfigClick(config)
+                                      }
+                                      disabled={!config.is_active} // Disable for inactive configs
+                                    >
+                                      <IconEdit size={14} className="mr-1" />
+                                      Edit
+                                    </Button>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      onClick={() =>
+                                        handleDeleteConfig(config.id)
+                                      }
+                                    >
+                                      <IconTrash size={14} />
+                                    </Button>
+                                  </div>
+                                </div>
+                                <Separator className="mt-4" />
+                              </div>
+                            ))
+                          ) : (
+                            <div className="py-12 text-center">
+                              <div className="mb-4">
+                                <IconReceipt
+                                  size={48}
+                                  className="mx-auto text-muted-foreground mb-4"
+                                />
+                                <p className="text-sm text-muted-foreground mb-4">
+                                  No {activeSection} configurations found
+                                </p>
+                              </div>
+                              <Button onClick={() => setShowAddModal(true)}>
+                                <IconPlus size={16} className="mr-2" />
+                                Add Configuration
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      {/* Add Configuration Modal */}
+      <Dialog open={showAddModal} onOpenChange={setShowAddModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Add New Configuration</DialogTitle>
+            <DialogDescription>
+              Create a new {activeSection} configuration for your organization
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Configuration Name</Label>
+              <Input
+                id="name"
+                placeholder="e.g., PAYE, NSSF, etc."
+                value={newConfig.name}
+                onChange={(e) =>
+                  setNewConfig({ ...newConfig, name: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="type">Calculation Type</Label>
+              <Select
+                value={newConfig.calculationType}
+                onValueChange={(value: "percentage" | "fixed") =>
+                  setNewConfig({
+                    ...newConfig,
+                    calculationType: value,
+                    value: "",
+                  })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select calculation type" />
+                </SelectTrigger>
+                <SelectContent className="w-full">
+                  <SelectItem value="percentage">
+                    <div className="flex items-center">
+                      <IconPercentage size={14} className="mr-2" />
+                      Percentage
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="fixed">
+                    <div className="flex items-center">
+                      <IconCurrencyDollar size={14} className="mr-2" />
+                      Fixed Amount
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="value">
+                {newConfig.calculationType === "percentage"
+                  ? "Percentage Value (%)"
+                  : "Fixed Amount"}
+              </Label>
+              <AmountInput
+                id="value"
+                showCurrency={newConfig.calculationType !== "percentage"}
+                placeholder={
+                  newConfig.calculationType === "percentage"
+                    ? "Enter percentage"
+                    : "Enter amount"
+                }
+                value={newConfig.value}
+                onChange={(e) =>
+                  setNewConfig({ ...newConfig, value: e.target.value })
+                }
+              />
+              {newConfig.calculationType === "percentage" && (
+                <p className="text-xs text-muted-foreground">
+                  Enter percentage value (e.g., 30 for 30%)
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAddModal(false);
+                setNewConfig({
+                  name: "",
+                  calculationType: "percentage",
+                  value: "",
+                });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleAddConfig}>Save Configuration</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Profile Modal */}
+      <Dialog open={showEditModal} onOpenChange={setShowEditModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit {getFieldLabel(editingField)}</DialogTitle>
+            <DialogDescription>
+              {getFieldDescription(editingField)}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-value">{getFieldLabel(editingField)}</Label>
+              {editingField === "currency" ? (
+                <Select value={editValue} onValueChange={setEditValue}>
+                  <SelectTrigger id="edit-value" className="w-full">
+                    <SelectValue placeholder="Select currency" />
+                  </SelectTrigger>
+                  <SelectContent className="w-full">
+                    {/* Keep a legacy/unlisted saved code selectable instead of blank */}
+                    {editValue &&
+                      !CURRENCY_OPTIONS.some((c) => c.value === editValue) && (
+                        <SelectItem value={editValue}>{editValue}</SelectItem>
+                      )}
+                    {CURRENCY_OPTIONS.map((c) => (
+                      <SelectItem key={c.value} value={c.value}>
+                        {c.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  id="edit-value"
+                  value={editValue}
+                  onChange={(e) => setEditValue(e.target.value)}
+                  placeholder={`Enter ${getFieldLabel(editingField).toLowerCase()}`}
+                />
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEditModal(false);
+                setEditingField("");
+                setEditValue("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={loading}>
+              {loading ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Configuration Modal */}
+      <Dialog open={showEditConfigModal} onOpenChange={setShowEditConfigModal}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Configuration</DialogTitle>
+            <DialogDescription>
+              Update the {activeSection} configuration
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Configuration Name</Label>
+              <Input
+                id="edit-name"
+                placeholder="e.g., PAYE, NSSF, etc."
+                value={editingConfig.name}
+                onChange={(e) =>
+                  setEditingConfig({ ...editingConfig, name: e.target.value })
+                }
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-type">Calculation Type</Label>
+              <Select
+                value={editingConfig.calculationType}
+                onValueChange={(value: "percentage" | "fixed") =>
+                  setEditingConfig({
+                    ...editingConfig,
+                    calculationType: value,
+                    value: "",
+                  })
+                }
+              >
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select calculation type" />
+                </SelectTrigger>
+                <SelectContent className="w-full">
+                  <SelectItem value="percentage">
+                    <div className="flex items-center">
+                      <IconPercentage size={14} className="mr-2" />
+                      Percentage
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="fixed">
+                    <div className="flex items-center">
+                      <IconCurrencyDollar size={14} className="mr-2" />
+                      Fixed Amount
+                    </div>
+                  </SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="edit-value">
+                {editingConfig.calculationType === "percentage"
+                  ? "Percentage Value (%)"
+                  : "Fixed Amount"}
+              </Label>
+              <AmountInput
+                id="edit-value"
+                showCurrency={editingConfig.calculationType !== "percentage"}
+                placeholder={
+                  editingConfig.calculationType === "percentage"
+                    ? "Enter percentage"
+                    : "Enter amount"
+                }
+                value={editingConfig.value}
+                onChange={(e) =>
+                  setEditingConfig({ ...editingConfig, value: e.target.value })
+                }
+              />
+              {editingConfig.calculationType === "percentage" && (
+                <p className="text-xs text-muted-foreground">
+                  Enter percentage value (e.g., 30 for 30%)
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowEditConfigModal(false);
+                setEditingConfig({
+                  id: null,
+                  name: "",
+                  calculationType: "percentage",
+                  value: "",
+                });
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEditConfig}>Save Changes</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

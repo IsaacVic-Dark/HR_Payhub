@@ -69,6 +69,7 @@
       "id": 3,
       "name": "hr_manager",
       "pages": [
+        "/payrun/overtime-approvals",
         "/dashboard",
         "/employees",
         "/employees/create",
@@ -288,6 +289,7 @@
         "/my-attendance",
         "/my-shifts",
         "/overtime-request",
+        "/myovertime",
         "/clock-in-out",
         "/my-requests",
         "/allowance-request",

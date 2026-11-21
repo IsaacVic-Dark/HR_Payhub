@@ -230,7 +230,7 @@ const data: {
       title: "Overtime Approvals",
       url: "/payrun/overtime-approvals",
       icon: IconClipboardList,
-      roles: ["super_admin", "admin", "payroll_manager"],
+      roles: ["super_admin", "admin", "hr_manager", "payroll_manager"],
     },
     {
       title: "Reimbursements",
@@ -284,6 +284,12 @@ const data: {
       roles: [
         "employee"
       ]
+    },
+    {
+      title: "My Overtime",
+      url: "/myovertime",
+      icon: IconClipboardList,
+      roles: ["employee"],
     },
     {
       title: "My Reimbursement",
@@ -344,24 +350,24 @@ const data: {
       icon: IconReceipt,
       roles: ["employee"],
     },
-    {
-      title: "My Profile",
-      url: "/my-profile",
-      icon: IconUsers,
-      roles: ["employee"],
-    },
-    {
-      title: "My Documents",
-      url: "/my-documents",
-      icon: IconFileText,
-      roles: ["employee"],
-    },
-    {
-      title: "My Requests",
-      url: "/my-requests",
-      icon: IconClipboardList,
-      roles: ["employee"],
-    },
+    // {
+    //   title: "My Profile",
+    //   url: "/my-profile",
+    //   icon: IconUsers,
+    //   roles: ["employee"],
+    // },
+    // {
+    //   title: "My Documents",
+    //   url: "/my-documents",
+    //   icon: IconFileText,
+    //   roles: ["employee"],
+    // },
+    // {
+    //   title: "My Requests",
+    //   url: "/my-requests",
+    //   icon: IconClipboardList,
+    //   roles: ["employee"],
+    // },
     {
       title: "My Loans",
       url: "/myloans",

@@ -7,6 +7,11 @@ type OvertimeApprovalType = {
   attendance_day_id: number;
   employee_id: number;
   overtime_minutes: number;
+  // 'auto' = detected from attendance punches, 'manual' = raised through the Request Overtime modal
+  source: "auto" | "manual";
+  reason: string | null;
+  overtime_start: string | null; // "YYYY-MM-DD HH:mm:ss" (manual requests)
+  overtime_end: string | null;
   overtime_rate: number | null;
   overtime_amount: number | null;
   requested_by: number | null;
@@ -28,6 +33,8 @@ type OvertimeApprovalType = {
   created_at: string;
   updated_at: string;
   // Joined fields from index()
+  requested_by_name?: string | null;
+  requested_by_email?: string | null;
   employee_number: string;
   firstname: string;
   middlename: string | null;
